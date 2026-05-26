@@ -1,0 +1,6 @@
+{
+  "name": "E-Commerce Store with CMS",
+  "description": "A modern responsive e-commerce web application with a complete products catalog, WhatsApp contact system, shopping cart, and a custom administrative content dashboard powered by Firestore",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

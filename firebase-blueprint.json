@@ -1,0 +1,94 @@
+{
+  "entities": {
+    "Settings": {
+      "title": "Settings",
+      "description": "Global application configuration, design, and settings",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The title or name of the store" },
+        "description": { "type": "string", "description": "Short description of the e-commerce" },
+        "whatsappNumber": { "type": "string", "description": "WhatsApp phone number for purchasing" },
+        "themeColor": { "type": "string", "description": "Primary theme color hex code (e.g., #000000)" },
+        "heroTitle": { "type": "string", "description": "Hero section title" },
+        "heroSubtitle": { "type": "string", "description": "Hero section subtitle" },
+        "heroBannerUrl": { "type": "string", "description": "URL of the main hero banner image" },
+        "promoBannerText": { "type": "string", "description": "Promo announcement text displayed in the header banner" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp or server timestamp of last update" }
+      },
+      "required": ["title", "whatsappNumber", "heroTitle"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "An item for sale in the online store",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the product" },
+        "description": { "type": "string", "description": "Detailed description of the product" },
+        "price": { "type": "number", "description": "Current selling price" },
+        "originalPrice": { "type": "number", "description": "Original price for comparative sale display (optional)" },
+        "categories": { "type": "array", "description": "Array of category IDs this product belongs to" },
+        "images": { "type": "array", "description": "Array of image URLs of the product" },
+        "stock": { "type": "number", "description": "Quantity in stock" },
+        "featured": { "type": "boolean", "description": "Whether the product is displayed in featured sections" },
+        "createdAt": { "type": "string", "description": "Server timestamp of creation" },
+        "updatedAt": { "type": "string", "description": "Server timestamp of last update" }
+      },
+      "required": ["name", "description", "price", "categories", "images", "stock"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Product categories",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the category" },
+        "imageUrl": { "type": "string", "description": "Optional illustration or cover photo for the category" }
+      },
+      "required": ["name"]
+    },
+    "Promotion": {
+      "title": "Promotion",
+      "description": "Discount codes, sales campaigns, or banners",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Title of the promotion" },
+        "description": { "type": "string", "description": "Description of the offer" },
+        "code": { "type": "string", "description": "Promo code the customer can use" },
+        "discountPercent": { "type": "number", "description": "Percentage discount value (e.g., 15 for 15% off)" },
+        "active": { "type": "boolean", "description": "Status of the promotion" }
+      },
+      "required": ["title", "code", "discountPercent", "active"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "User with administrator access rights to edit CMS data",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "description": "Email address of the administrator" },
+        "role": { "type": "string", "description": "Role level (e.g., 'superadmin' or 'editor')" }
+      },
+      "required": ["email", "role"]
+    }
+  },
+  "firestore": {
+    "/settings/{settingsId}": {
+      "schema": "Settings",
+      "description": "Stores site customization settings, banners, and general details"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "List of all products in the storefront"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Available product categories"
+    },
+    "/promotions/{promoId}": {
+      "schema": "Promotion",
+      "description": "Storewide promotional offers and coupons"
+    },
+    "/admins/{adminId}": {
+      "schema": "Admin",
+      "description": "Administrators with database write permissions"
+    }
+  }
+}

@@ -377,10 +377,17 @@ export default function App() {
 
       // Verify session token integrity on every URL change
       const token = localStorage.getItem("apex_admin_token");
-      if (token) {
+      const loginTime = localStorage.getItem("apex_admin_login_time");
+      const isExpired = loginTime && (Date.now() - Number(loginTime) > 3600000);
+      
+      if (token && !isExpired) {
         verifyAdminToken(token);
       } else {
-        setAuthToken(null);
+        if (token || isExpired) {
+          handleLogout();
+        } else {
+          setAuthToken(null);
+        }
       }
       return;
     }
@@ -443,7 +450,23 @@ export default function App() {
 
   // Authentication
   const [authToken, setAuthToken] = useState<string | null>(() => {
-    return localStorage.getItem("apex_admin_token");
+    const token = localStorage.getItem("apex_admin_token");
+    if (!token) return null;
+    
+    let loginTime = localStorage.getItem("apex_admin_login_time");
+    if (!loginTime) {
+      loginTime = Date.now().toString();
+      localStorage.setItem("apex_admin_login_time", loginTime);
+    }
+    
+    const isExpired = Date.now() - Number(loginTime) > 3600000;
+    if (isExpired) {
+      localStorage.removeItem("apex_admin_token");
+      localStorage.removeItem("apex_admin_login_time");
+      return null;
+    }
+    
+    return token;
   });
   const [usernameInput, setUsernameInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
@@ -548,10 +571,15 @@ export default function App() {
       }
     }
 
-    // Dynamic Server Token verification on program startup
+    // Dynamic Server Token verification on program startup with 1 hour limit check
     const initialToken = localStorage.getItem("apex_admin_token");
-    if (initialToken) {
+    const loginTime = localStorage.getItem("apex_admin_login_time");
+    const isExpired = loginTime && (Date.now() - Number(loginTime) > 3600000);
+    
+    if (initialToken && !isExpired) {
       verifyAdminToken(initialToken);
+    } else if (initialToken || isExpired) {
+      handleLogout();
     }
 
     const handlePopState = () => {
@@ -562,6 +590,21 @@ export default function App() {
       window.removeEventListener("popstate", handlePopState);
     };
   }, []);
+
+  // Active session expiration checker (forces redirect/logout after exactly 1 hour of session time)
+  useEffect(() => {
+    if (!authToken) return;
+
+    const interval = setInterval(() => {
+      const loginTime = localStorage.getItem("apex_admin_login_time");
+      if (loginTime && Date.now() - Number(loginTime) > 3600000) {
+        handleLogout();
+        showAdminToast("Sesión de administrador expirada (límite de 1 hora excedido).", "error");
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [authToken]);
 
   // Click outside detector to close active dropdown menus cleanly
   useEffect(() => {
@@ -676,6 +719,7 @@ export default function App() {
       if (res.ok && data.success) {
         setAuthToken(data.token);
         localStorage.setItem("apex_admin_token", data.token);
+        localStorage.setItem("apex_admin_login_time", Date.now().toString());
         setIsLoginModalOpen(false);
         setActiveTab("admin");
         setUsernameInput("");
@@ -694,6 +738,7 @@ export default function App() {
   const handleLogout = () => {
     setAuthToken(null);
     localStorage.removeItem("apex_admin_token");
+    localStorage.removeItem("apex_admin_login_time");
     setActiveTab("storefront");
     window.history.pushState(null, "", "/");
   };

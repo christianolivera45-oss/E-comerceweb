@@ -49,6 +49,7 @@ import ProductDetails from "./components/ProductDetails";
 import CartDrawer from "./components/CartDrawer";
 import HeroSlider from "./components/HeroSlider";
 import SecurityPanel from "./components/SecurityPanel";
+import WhatsAppWidget from "./components/WhatsAppWidget";
 
 const DEFAULT_SETTINGS: SiteSettings = {
   siteTitle: "Apex Outlet",
@@ -3955,25 +3956,10 @@ export default function App() {
 
       {/* Botón Flotante de WhatsApp - Siempre Visible en Storefront */}
       {activeTab === "storefront" && (
-        <div className="fixed bottom-6 right-6 z-[999] group select-none">
-          <a
-            href={`https://wa.me/${(store.settings.whatsappNumber || "5491123456789").replace(/[^0-9]/g, "")}?text=${encodeURIComponent(`¡Hola! Quisiera realizar una consulta sobre sus productos.`)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Consultas por WhatsApp"
-            className="flex items-center gap-2.5 bg-[#25D366] hover:bg-[#128C7E] text-white p-3.5 sm:p-4 rounded-full shadow-2xl shadow-emerald-500/20 cursor-pointer transform hover:scale-110 active:scale-95 transition-all duration-300 relative border border-emerald-400/25"
-          >
-            {/* Animación de pulso concéntrico */}
-            <span className="absolute inset-0 rounded-full bg-[#25D366] opacity-30 animate-ping -z-10 group-hover:opacity-0 transition-opacity"></span>
-            
-            <MessageCircle className="h-6 w-6 sm:h-6.5 sm:w-6.5 fill-current text-white shrink-0" />
-            
-            {/* Texto expandible en hover */}
-            <span className="max-w-0 overflow-hidden text-[11px] font-extrabold uppercase tracking-wider whitespace-nowrap group-hover:max-w-[200px] transition-all duration-300 ease-in-out font-sans">
-              Consultar por WhatsApp
-            </span>
-          </a>
-        </div>
+        <WhatsAppWidget
+          whatsappNumber={store.settings.whatsappNumber}
+          siteTitle={store.settings.siteTitle}
+        />
       )}
 
       <AnimatePresence>

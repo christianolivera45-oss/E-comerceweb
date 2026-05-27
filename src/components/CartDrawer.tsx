@@ -1,280 +1,364 @@
-import React, { useState } from 'react';
-import { useStore } from '../context/StoreContext';
-import { X, Trash2, Send, ShoppingBag, Percent, ArrowRight, ShieldCheck } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { useState, FormEvent } from "react";
+import { X, ShoppingBag, Trash2, Plus, Minus, ArrowRight } from "lucide-react";
+import { CartItem, SiteSettings } from "../types";
+import { motion, AnimatePresence } from "motion/react";
 
 interface CartDrawerProps {
+  isOpen: boolean;
   onClose: () => void;
+  cartItems: CartItem[];
+  onUpdateQuantity: (productId: string, quantity: number, size?: string, color?: string) => void;
+  onRemoveItem: (productId: string, size?: string, color?: string) => void;
+  settings: SiteSettings;
+  onClearCart: () => void;
 }
 
-export const CartDrawer: React.FC<CartDrawerProps> = ({ onClose }) => {
-  const { 
-    cart, 
-    updateQuantity, 
-    removeFromCart, 
-    clearCart,
-    applyPromoCode, 
-    appliedPromo,
-    cartSubtotal, 
-    cartDiscount, 
-    cartTotal,
-    settings
-  } = useStore();
+export default function CartDrawer({
+  isOpen,
+  onClose,
+  cartItems,
+  onUpdateQuantity,
+  onRemoveItem,
+  settings,
+  onClearCart
+}: CartDrawerProps) {
+  const [userName, setUserName] = useState("");
+  const [address, setAddress] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("Transferencia");
+  const [promoCode, setPromoCode] = useState("");
+  const [appliedDiscount, setAppliedDiscount] = useState(0); // in percentage
+  const [promoStatus, setPromoStatus] = useState<"none" | "success" | "invalid">("none");
 
-  const [promoInput, setPromoInput] = useState('');
-  const [promoError, setPromoError] = useState(false);
-  const [promoSuccess, setPromoSuccess] = useState(false);
+  // Calculate prices
+  const subtotal = cartItems.reduce(
+    (sum, item) => sum + item.product.price * item.quantity,
+    0
+  );
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS',
-      minimumFractionDigits: 0
-    }).format(value);
-  };
+  const discountAmount = (subtotal * appliedDiscount) / 100;
+  const total = Math.max(0, subtotal - discountAmount);
 
-  const handleApplyPromo = (e: React.FormEvent) => {
-    e.preventDefault();
-    setPromoError(false);
-    setPromoSuccess(false);
-
-    if (!promoInput.trim()) return;
-
-    const accepted = applyPromoCode(promoInput);
-    if (accepted) {
-      setPromoSuccess(true);
-      setPromoInput('');
+  const handleApplyPromo = () => {
+    if (!promoCode) {
+      setPromoStatus("none");
+      setAppliedDiscount(0);
+      return;
+    }
+    // Match common keywords or configuration values
+    const cleanPromo = promoCode.trim().toUpperCase();
+    if (cleanPromo === "APEX50" || cleanPromo === "DESCUENTO10" || cleanPromo === "PROMO" || cleanPromo === "OFFER") {
+      setAppliedDiscount(10); // 10%
+      setPromoStatus("success");
     } else {
-      setPromoError(true);
+      setAppliedDiscount(0);
+      setPromoStatus("invalid");
     }
   };
 
-  const handleWhatsAppCheckout = () => {
-    let orderDetails = `*🛒 ¡Hola! Quiero realizar un pedido desde la tienda web:*\n\n`;
-    
-    cart.forEach((item, index) => {
-      const linePrice = item.product.price * item.quantity;
-      orderDetails += `*${index + 1}. ${item.product.name}*\n` +
-                      `   • Cantidad: ${item.quantity}\n` +
-                      `   • Precio: ${formatCurrency(item.product.price)}\n` +
-                      `   • Subtotal: ${formatCurrency(linePrice)}\n\n`;
+  const handleWhatsAppCheckout = (e: FormEvent) => {
+    e.preventDefault();
+    if (cartItems.length === 0) return;
+    if (!userName.trim() || !address.trim()) {
+      alert("Por favor completa tu nombre y dirección de envío.");
+      return;
+    }
+
+    // Generate messaging text formatted nicely for WhatsApp
+    let message = `🛒 *NUEVO PEDIDO - ${settings.siteTitle}*\n\n`;
+    message += `👤 *Cliente:* ${userName.trim()}\n`;
+    message += `📍 *Dirección:* ${address.trim()}\n`;
+    message += `💳 *Método de Pago:* ${paymentMethod}\n`;
+    if (appliedDiscount > 0) {
+      message += `🎟️ *Cupón Aplicado:* ${promoCode.toUpperCase()} (${appliedDiscount}% desc.)\n`;
+    }
+    message += `┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n`;
+
+    cartItems.forEach((item, index) => {
+      const options = [];
+      if (item.selectedSize) options.push(`Talle: ${item.selectedSize}`);
+      if (item.selectedColor) options.push(`Color: ${item.selectedColor}`);
+      const optionsStr = options.length > 0 ? ` (${options.join(", ")})` : "";
+      
+      message += `${index + 1}. *${item.product.name}*${optionsStr}\n`;
+      message += `   👉 ${item.quantity} x $${item.product.price.toFixed(2)} = *$${(
+        item.product.price * item.quantity
+      ).toFixed(2)}*\n\n`;
     });
 
-    orderDetails += `------------------------------------\n`;
-    orderDetails += `*Subtotal:* ${formatCurrency(cartSubtotal)}\n`;
-    
-    if (appliedPromo) {
-      orderDetails += `*Cupón aplicado:* ${appliedPromo.code} (-${appliedPromo.discountPercent}%)\n`;
-      orderDetails += `*Descuento:* -${formatCurrency(cartDiscount)}\n`;
+    message += `┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n`;
+    message += `🔹 *Subtotal:* $${subtotal.toFixed(2)}\n`;
+    if (appliedDiscount > 0) {
+      message += `🔹 *Descuento (${appliedDiscount}%):* -$${discountAmount.toFixed(2)}\n`;
     }
-    
-    orderDetails += `*💰 TOTAL ESTIMADO:* ${formatCurrency(cartTotal)}\n\n`;
-    orderDetails += `_Por favor, confírmenme el stock y los datos para realizar la transferencia/envío._`;
+    message += `🔥 *TOTAL NETO:* *$${total.toFixed(2)}*\n\n`;
+    message += `🙌 _Quiero coordinar la entrega y el pago con ustedes de este pedido._`;
 
-    const encodedText = encodeURIComponent(orderDetails);
-    const whatsappNum = settings.whatsappNumber || '541123456789';
-    window.open(`https://wa.me/${whatsappNum}?text=${encodedText}`, '_blank');
+    // Encode text and open link
+    const encodedText = encodeURIComponent(message);
+    const cleanPhone = settings.whatsappNumber.replace(/[^0-9]/g, "");
+    const waUrl = `https://wa.me/${cleanPhone}?text=${encodedText}`;
+    
+    // Open in standard tab safely
+    window.open(waUrl, "_blank", "referrer");
+    onClearCart();
+    onClose();
   };
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 overflow-hidden">
-        {/* Backdrop overlay */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.3 }}
-          exit={{ opacity: 0 }}
-          onClick={onClose}
-          className="absolute inset-0 bg-black backdrop-blur-xs"
-          id="cart-backdrop"
-        />
-
-        {/* Drawer slide-in panel */}
-        <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
+      {isOpen && (
+        <>
+          {/* Backdrop */}
           <motion.div
-            initial={{ x: '100%' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+          />
+
+          {/* Drawer body */}
+          <motion.div
+            initial={{ x: "100%" }}
             animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="w-screen max-w-md bg-white border-l border-gray-200 text-gray-900 flex flex-col justify-between shadow-2xl h-full"
-            id="cart-drawer-panel"
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className={`fixed top-0 right-0 z-50 flex h-full w-full max-w-md flex-col text-white ${
+              settings.themeMode === "dark" ? "bg-zinc-950 border-l border-zinc-800" : "bg-white text-zinc-900 border-l border-gray-200"
+            }`}
           >
-            {/* Header top */}
-            <div className="p-6 border-b border-gray-150 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-gray-100 rounded-lg text-black">
-                  <ShoppingBag size={20} />
-                </div>
-                <h2 className="text-lg font-bold text-gray-950 tracking-tight">Tu Carrito de Compras</h2>
+            {/* Header */}
+            <div className={`flex items-center justify-between p-4 border-b ${
+              settings.themeMode === "dark" ? "border-zinc-800" : "border-gray-200"
+            }`}>
+              <div className="flex items-center gap-2">
+                <ShoppingBag className="h-5 w-5 theme-text-primary" />
+                <h2 className="text-lg font-semibold font-sans">Mi Carrito</h2>
+                <span className="rounded-full bg-zinc-800 text-zinc-300 px-2 py-0.5 text-xs font-mono font-bold">
+                  {cartItems.length} {cartItems.length === 1 ? "artículo" : "artículos"}
+                </span>
               </div>
               <button
                 onClick={onClose}
-                className="p-1.5 rounded-lg bg-gray-50 text-gray-500 hover:text-black hover:bg-gray-100 border border-gray-200 font-mono transition-transform active:scale-95"
-                id="close-cart-drawer"
+                className={`rounded-full p-1.5 transition ${
+                  settings.themeMode === "dark" ? "hover:bg-zinc-800 text-zinc-400 hover:text-white" : "hover:bg-gray-100 text-zinc-500 hover:text-black"
+                }`}
               >
-                <X size={18} />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* Middle Product List (scrollable) */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-              {cart.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
-                  <div className="h-16 w-16 bg-gray-100 rounded-2xl flex items-center justify-center text-gray-400">
-                    <ShoppingBag size={30} />
+            {/* Content list */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {cartItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center h-full">
+                  <div className="rounded-full bg-zinc-900 p-6 mb-4">
+                    <ShoppingBag className="h-10 w-10 text-zinc-500" />
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-800 font-bold">El carrito está vacío</p>
-                    <p className="text-xs text-gray-400 pt-1 font-mono">Agregá productos al catálogo para empezar.</p>
-                  </div>
-                  <button
-                    onClick={onClose}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-black hover:bg-zinc-900 text-white text-xs font-semibold py-2.5 px-5 tracking-tight shadow-sm"
-                  >
-                    <span>Seguir explorando</span>
-                    <ArrowRight size={13} />
-                  </button>
+                  <h3 className="text-base font-semibold text-zinc-300">Tu carrito está vacío</h3>
+                  <p className="text-zinc-500 text-sm mt-1 max-w-xs">
+                    Explora nuestra tienda y añade productos increíbles para realizar tu primer checkout.
+                  </p>
                 </div>
               ) : (
-                cart.map((item) => (
-                  <div 
-                    key={item.product.id}
-                    className="flex bg-gray-50/50 border border-gray-150 p-3.5 rounded-xl gap-3 hover:border-gray-250 transition-colors"
-                  >
-                    {/* Item Thumbnail */}
-                    <div className="h-16 w-16 rounded-lg overflow-hidden shrink-0 bg-white border border-gray-200">
-                      <img src={item.product.images[0]} alt={item.product.name} referrerPolicy="no-referrer" className="h-full w-full object-cover" />
-                    </div>
-
-                    {/* Content Details */}
-                    <div className="flex-1 flex flex-col justify-between min-w-0">
-                      <div className="flex justify-between items-start gap-1">
-                        <h4 className="text-xs font-bold text-gray-900 truncate pr-2 group-hover:underline">
+                <div className="space-y-4">
+                  {cartItems.map((item, index) => (
+                    <div
+                      key={`${item.product.id}-${item.selectedSize || "nosize"}-${item.selectedColor || "nocolor"}`}
+                      className={`flex gap-3 p-3 rounded-xl border ${
+                        settings.themeMode === "dark" ? "bg-zinc-900/40 border-zinc-800/80" : "bg-gray-50 border-gray-100"
+                      }`}
+                    >
+                      <img
+                        src={item.product.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80"}
+                        alt={item.product.name}
+                        className="h-20 w-16 rounded-lg object-cover bg-zinc-800 flex-shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-sm font-medium leading-snug line-clamp-2">
                           {item.product.name}
                         </h4>
-                        <button
-                          onClick={() => removeFromCart(item.product.id)}
-                          className="text-gray-400 hover:text-red-500 p-0.5 transition-colors"
-                          title="Eliminar artículo"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
+                        
+                        {/* Options tags */}
+                        {(item.selectedSize || item.selectedColor) && (
+                          <div className="flex flex-wrap gap-1.5 mt-1 font-mono text-[10px] text-zinc-400">
+                            {item.selectedSize && (
+                              <span className="px-1.5 py-0.5 rounded bg-zinc-800/80">Talle: {item.selectedSize}</span>
+                            )}
+                            {item.selectedColor && (
+                              <span className="px-1.5 py-0.5 rounded bg-zinc-800/80">Color: {item.selectedColor}</span>
+                            )}
+                          </div>
+                        )}
 
-                      {/* Quantity & Price info */}
-                      <div className="flex items-center justify-between pt-1">
-                        {/* Selector */}
-                        <div className="flex items-center gap-1.5 bg-white rounded-md border border-gray-200 py-0.5 px-1.5 scale-90 -ml-1 shadow-sm">
-                          <button
-                            onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
-                            className="text-gray-500 hover:text-black font-bold text-xs font-mono h-5 w-5 flex items-center justify-center rounded"
-                          >
-                            -
-                          </button>
-                          <span className="text-xs font-mono font-semibold text-gray-800">{item.quantity}</span>
-                          <button
-                            onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
-                            disabled={item.quantity >= item.product.stock}
-                            className="text-gray-500 hover:text-black disabled:opacity-30 font-bold text-xs font-mono h-5 w-5 flex items-center justify-center rounded"
-                          >
-                            +
-                          </button>
+                        <div className="flex items-center justify-between mt-3">
+                          {/* Stepper */}
+                          <div className={`flex items-center rounded-lg border text-sm ${
+                            settings.themeMode === "dark" ? "border-zinc-800 bg-zinc-950" : "border-gray-200 bg-white"
+                          }`}>
+                            <button
+                              onClick={() => {
+                                if (item.quantity > 1) {
+                                  onUpdateQuantity(item.product.id, item.quantity - 1, item.selectedSize, item.selectedColor);
+                                } else {
+                                  onRemoveItem(item.product.id, item.selectedSize, item.selectedColor);
+                                }
+                              }}
+                              className="px-2 py-1 text-zinc-400 hover:text-white transition-colors"
+                            >
+                              <Minus className="h-3.5 w-3.5" />
+                            </button>
+                            <span className="px-2 font-mono text-xs">{item.quantity}</span>
+                            <button
+                              onClick={() => onUpdateQuantity(item.product.id, item.quantity + 1, item.selectedSize, item.selectedColor)}
+                              className="px-2 py-1 text-zinc-400 hover:text-white transition-colors"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+
+                          {/* Price */}
+                          <div className="text-right">
+                            <span className="text-xs text-zinc-500 block line-through">
+                              {item.product.originalPrice && item.product.originalPrice > item.product.price && (
+                                `$${(item.product.originalPrice * item.quantity).toFixed(2)}`
+                              )}
+                            </span>
+                            <span className="text-sm font-bold theme-text-primary">
+                              ${(item.product.price * item.quantity).toFixed(2)}
+                            </span>
+                          </div>
                         </div>
-
-                        {/* Line aggregate price */}
-                        <span className="text-xs font-bold text-gray-950 font-mono">
-                          {formatCurrency(item.product.price * item.quantity)}
-                        </span>
                       </div>
 
+                      {/* Delete */}
+                      <button
+                        onClick={() => onRemoveItem(item.product.id, item.selectedSize, item.selectedColor)}
+                        className="text-zinc-500 hover:text-red-400 self-start p-1 transition"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
             </div>
 
-            {/* Bottom aggregate card logic */}
-            {cart.length > 0 && (
-              <div className="p-6 border-t border-gray-200 bg-gray-50/40 space-y-4">
-                
-                {/* Coupon apply Form */}
-                <form onSubmit={handleApplyPromo} className="flex gap-2">
-                  <div className="relative flex-1">
-                    <div className="absolute inset-y-0 left-3 flex items-center text-gray-400">
-                      <Percent size={14} />
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="Código de descuento..."
-                      value={promoInput}
-                      onChange={(e) => setPromoInput(e.target.value)}
-                      className="w-full bg-white border border-gray-250 rounded-xl py-2 pl-9 pr-3 text-xs placeholder-gray-400 text-gray-900 placeholder:font-mono focus:outline-none focus:border-black focus:ring-1 focus:ring-black"
-                      id="cart-coupon-input"
-                    />
-                  </div>
+            {/* Checkout & summary footer */}
+            {cartItems.length > 0 && (
+              <div className={`p-4 border-t space-y-4 ${
+                settings.themeMode === "dark" ? "border-zinc-800 bg-zinc-950/80" : "border-gray-150 bg-gray-50/50"
+              }`}>
+                {/* Promo Code area */}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Código de cupón (ej: APEX50)"
+                    value={promoCode}
+                    onChange={(e) => setPromoCode(e.target.value)}
+                    className={`flex-1 text-xs px-3 py-2 rounded-lg border outline-none font-mono ${
+                      settings.themeMode === "dark"
+                        ? "bg-zinc-900 border-zinc-800 text-white placeholder-zinc-500 focus:border-zinc-700"
+                        : "bg-white border-gray-200 text-zinc-900 placeholder-gray-400"
+                    }`}
+                  />
                   <button
-                    type="submit"
-                    className="rounded-xl bg-black hover:bg-zinc-900 text-white font-mono text-xs font-bold px-4 transition-colors shadow-sm"
+                    onClick={handleApplyPromo}
+                    className="px-3 py-2 rounded-lg text-xs font-semibold theme-btn-accent whitespace-nowrap"
                   >
-                    Apply
+                    Aplicar
                   </button>
-                </form>
+                </div>
 
-                {/* Applied status banners */}
-                {promoError && (
-                  <p className="text-[10px] text-red-500 font-mono">⚠️ Cupón inválido o inactivo.</p>
+                {promoStatus === "success" && (
+                  <p className="text-[11px] text-green-400 font-medium">✔️ ¡Descuento de 10% aplicado de manera exitosa!</p>
                 )}
-                {promoSuccess && (
-                  <p className="text-[10px] text-green-600 font-mono">✅ ¡Cupón aplicado exitosamente!</p>
-                )}
-                {appliedPromo && (
-                  <div className="flex items-center justify-between bg-emerald-50 border border-emerald-100 py-2 px-3 rounded-xl text-xs text-emerald-800">
-                    <span className="font-mono font-bold">Cupón activo: {appliedPromo.code}</span>
-                    <span className="font-mono font-semibold">-{appliedPromo.discountPercent}% OFF</span>
-                  </div>
+                {promoStatus === "invalid" && (
+                  <p className="text-[11px] text-red-400 font-medium">❌ Cupón inválido. Revisa el código.</p>
                 )}
 
-                {/* Summary list values */}
-                <div className="space-y-2 text-xs text-gray-500 font-mono pt-2">
-                  <div className="flex justify-between">
+                {/* Pricing summary */}
+                <div className="space-y-1.5 text-xs font-sans">
+                  <div className="flex justify-between text-zinc-400">
                     <span>Subtotal</span>
-                    <span className="text-gray-800 font-semibold">{formatCurrency(cartSubtotal)}</span>
+                    <span className="font-mono">${subtotal.toFixed(2)}</span>
                   </div>
-                  {appliedPromo && (
-                    <div className="flex justify-between text-emerald-700">
-                      <span>Descuento ({appliedPromo.discountPercent}%)</span>
-                      <span>-{formatCurrency(cartDiscount)}</span>
+                  {appliedDiscount > 0 && (
+                    <div className="flex justify-between text-green-400 font-medium">
+                      <span>Descuento ({appliedDiscount}%)</span>
+                      <span className="font-mono">-${discountAmount.toFixed(2)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between border-t border-gray-200 pt-2.5 text-sm font-bold text-gray-900">
-                    <span>Monto Total</span>
-                    <span className="font-sans text-black text-lg font-black">{formatCurrency(cartTotal)}</span>
+                  <div className="flex justify-between items-center text-sm font-bold pt-1.5 border-t border-dashed border-zinc-800">
+                    <span>Total Estimado</span>
+                    <span className="text-base font-mono theme-text-primary">
+                      ${total.toFixed(2)}
+                    </span>
                   </div>
                 </div>
 
-                {/* Actions purchase button triggers */}
-                <div className="space-y-2.5 pt-2">
+                {/* Shipping Form & Checkout */}
+                <form onSubmit={handleWhatsAppCheckout} className="space-y-3 pt-2">
+                  <hr className={`border-t ${settings.themeMode === "dark" ? "border-zinc-800" : "border-gray-200"}`} />
+                  <h4 className="text-xs font-semibold tracking-wider uppercase text-zinc-400">Datos para Envío (WhatsApp Coordinated)</h4>
+                  
+                  <div className="space-y-2">
+                    <input
+                      required
+                      type="text"
+                      placeholder="Nombre Completo"
+                      value={userName}
+                      onChange={(e) => setUserName(e.target.value)}
+                      className={`text-xs w-full px-3 py-2 rounded-lg border outline-none ${
+                        settings.themeMode === "dark"
+                          ? "bg-zinc-900 border-zinc-800 text-white placeholder-zinc-500 focus:border-zinc-700"
+                          : "bg-white border-gray-200 text-zinc-900 placeholder-gray-400"
+                      }`}
+                    />
+                    <input
+                      required
+                      type="text"
+                      placeholder="Dirección Física de Entrega"
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      className={`text-xs w-full px-3 py-2 rounded-lg border outline-none ${
+                        settings.themeMode === "dark"
+                          ? "bg-zinc-900 border-zinc-800 text-white placeholder-zinc-500 focus:border-zinc-700"
+                          : "bg-white border-gray-200 text-zinc-900 placeholder-gray-400"
+                      }`}
+                    />
+                    
+                    <div className="flex items-center gap-2 justify-between">
+                      <label className="text-[11px] text-zinc-400 font-sans">Pago preferido:</label>
+                      <select
+                        value={paymentMethod}
+                        onChange={(e) => setPaymentMethod(e.target.value)}
+                        className={`text-xs px-2 py-1 rounded-lg border outline-none ${
+                          settings.themeMode === "dark"
+                            ? "bg-zinc-900 border-zinc-800 text-white"
+                            : "bg-white border-gray-200 text-zinc-900"
+                        }`}
+                      >
+                        <option value="Transferencia BCP/Mercado Pago">MercadoPago / Transf.</option>
+                        <option value="Efectivo al recibir">Efectivo Contraentrega</option>
+                        <option value="Tarjeta vía link de pago">Tarjeta de Crédito/Débito</option>
+                      </select>
+                    </div>
+                  </div>
+
                   <button
-                    onClick={handleWhatsAppCheckout}
-                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-4 text-xs tracking-tight shadow-md transition-all active:scale-95"
-                    id="cart-whatsapp-checkout"
+                    type="submit"
+                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold font-sans theme-btn-primary mt-1 shadow-lg shadow-black/10 transition-transform active:scale-95"
                   >
-                    <Send size={14} />
-                    <span>Realizar Pedido por WhatsApp</span>
+                    Comprar vía WhatsApp
+                    <ArrowRight className="h-4 w-4" />
                   </button>
-
-                  <div className="flex gap-2 items-center justify-center text-[10px] text-gray-400 font-mono">
-                    <ShieldCheck size={14} className="text-black" />
-                    <span>Transacción directa por chat de WhatsApp</span>
-                  </div>
-                </div>
-
+                </form>
               </div>
             )}
-
           </motion.div>
-        </div>
-      </div>
+        </>
+      )}
     </AnimatePresence>
   );
-};
+}

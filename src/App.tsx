@@ -52,7 +52,7 @@ import SecurityPanel from "./components/SecurityPanel";
 import WhatsAppWidget from "./components/WhatsAppWidget";
 
 const DEFAULT_SETTINGS: SiteSettings = {
-  siteTitle: "Apex Outlet",
+  siteTitle: "Jum 2",
   siteSubtitle: "Moda, tecnología y accesorios con envío a todo el país.",
   bannerTitle: "Colección Exclusiva de Primavera",
   bannerSubtitle: "Descubre las últimas tendencias con descuentos de hasta el 40%.",

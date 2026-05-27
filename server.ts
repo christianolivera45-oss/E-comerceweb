@@ -29,7 +29,7 @@ const DEFAULT_SHOP_STATE: ShopState = {
     { id: "organizacion", nombre: "Organización", categoria_id: "hogar" }
   ],
   settings: {
-    siteTitle: "Apex Outlet",
+    siteTitle: "Juem",
     siteSubtitle: "Moda, tecnología y accesorios con envío a todo el país.",
     bannerTitle: "Colección Exclusiva de Primavera",
     bannerSubtitle: "Descubre las últimas tendencias con descuentos de hasta el 40%.",

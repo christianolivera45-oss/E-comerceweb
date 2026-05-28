@@ -29,7 +29,7 @@ const DEFAULT_SHOP_STATE: ShopState = {
     { id: "organizacion", nombre: "Organización", categoria_id: "hogar" }
   ],
   settings: {
-    siteTitle: "Apex Outlet",
+    siteTitle: "Ventas Juem",
     siteSubtitle: "Moda, tecnología y accesorios con envío a todo el país.",
     bannerTitle: "Colección Exclusiva de Primavera",
     bannerSubtitle: "Descubre las últimas tendencias con descuentos de hasta el 40%.",
@@ -38,7 +38,7 @@ const DEFAULT_SHOP_STATE: ShopState = {
     primaryColor: "#3b82f6", // Indigo/Blue
     accentColor: "#10b981", // Emerald
     themeMode: "dark",
-    promotionBannerText: "🚚 ¡ENVÍO GRATUITO en compras superiores a $50! Código: APEX50",
+    promotionBannerText: "🚚 ¡ENVÍO GRATUITO en compras superiores a $50! Código: JUEM50",
     showPromotionBanner: true,
     heroSlides: [
       {

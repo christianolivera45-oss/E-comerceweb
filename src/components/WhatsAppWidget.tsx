@@ -6,7 +6,7 @@ interface WhatsAppWidgetProps {
   siteTitle?: string;
 }
 
-export default function WhatsAppWidget({ whatsappNumber, siteTitle = "Apex Outlet" }: WhatsAppWidgetProps) {
+export default function WhatsAppWidget({ whatsappNumber, siteTitle = "Ventas Juem" }: WhatsAppWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);

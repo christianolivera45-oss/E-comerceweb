@@ -53,7 +53,7 @@ import SecurityPanel from "./components/SecurityPanel";
 import WhatsAppWidget from "./components/WhatsAppWidget";
 
 const DEFAULT_SETTINGS: SiteSettings = {
-  siteTitle: "Apex Outlet",
+  siteTitle: "Ventas Juem",
   siteSubtitle: "Moda, tecnología y accesorios con envío a todo el país.",
   bannerTitle: "Colección Exclusiva de Primavera",
   bannerSubtitle: "Descubre las últimas tendencias con descuentos de hasta el 40%.",
@@ -62,7 +62,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   primaryColor: "#2563eb",
   accentColor: "#10b981",
   themeMode: "dark",
-  promotionBannerText: "🚚 ¡ENVÍO GRATUITO en compras superiores a $50! Código: APEX50",
+  promotionBannerText: "🚚 ¡ENVÍO GRATUITO en compras superiores a $50! Código: JUEM50",
   showPromotionBanner: true,
   heroSlides: [
     {

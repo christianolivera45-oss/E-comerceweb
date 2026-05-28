@@ -53,7 +53,7 @@ export default function ProductDetails({
   };
 
   const handleImmediateWhatsAppQuery = () => {
-    const text = `Hola Apex Outlet! Me interesa obtener más información sobre este artículo:
+    const text = `Hola ${settings.siteTitle || "Ventas Juem"}! Me interesa obtener más información sobre este artículo:
 *${product.name}*
 ${selectedSize ? `👉 Talle seleccionado: ${selectedSize}\n` : ""}${selectedColor ? `👉 Color deseado: ${selectedColor}\n` : ""}Precio actual del catálogo: $${product.price}
 Me gustaría saber disponibilidad y formas de envío.`;

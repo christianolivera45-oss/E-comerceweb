@@ -29,7 +29,7 @@ const DEFAULT_SHOP_STATE: ShopState = {
     { id: "organizacion", nombre: "Organización", categoria_id: "hogar" }
   ],
   settings: {
-    siteTitle: "Juem",
+    siteTitle: "Apex Outlet",
     siteSubtitle: "Moda, tecnología y accesorios con envío a todo el país.",
     bannerTitle: "Colección Exclusiva de Primavera",
     bannerSubtitle: "Descubre las últimas tendencias con descuentos de hasta el 40%.",
@@ -165,6 +165,9 @@ const DEFAULT_SHOP_STATE: ShopState = {
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_FILE = path.join(DATA_DIR, "store.json");
+
+// Module scope cache
+let currentStoreState: ShopState = DEFAULT_SHOP_STATE;
 
 // Helper to ensure data directory and file exist
 function initDataStore(): ShopState {
@@ -304,6 +307,236 @@ function getDbPool() {
   return dbPool;
 }
 
+function hashPassword(password: string): string {
+  return crypto.createHash("sha256").update(password + "juem-salt-1248").digest("hex");
+}
+
+async function getDbState(): Promise<ShopState> {
+  const pool = getDbPool();
+  if (!pool) {
+    return currentStoreState;
+  }
+
+  try {
+    // 1. Fetch settings from shop_state row where id = 'settings'
+    const settingsRes = await pool.query("SELECT state FROM shop_state WHERE id = 'settings';");
+    let settings = DEFAULT_SHOP_STATE.settings;
+    if (settingsRes.rows.length > 0) {
+      settings = settingsRes.rows[0].state;
+    }
+
+    // 2. Fetch categories
+    const catRes = await pool.query("SELECT id, nombre, icono, orden, active FROM categories WHERE active = true ORDER BY orden ASC;");
+    const dbCategories = catRes.rows.map(row => ({
+      id: row.id,
+      nombre: row.nombre,
+      icono: row.icono || "Shirt",
+      orden: row.orden || 1,
+      active: row.active !== false
+    }));
+
+    // 3. Fetch subcategories
+    const subRes = await pool.query("SELECT id, nombre, categoria_id, active FROM subcategories WHERE active = true;");
+    const dbSubcategories = subRes.rows.map(row => ({
+      id: row.id,
+      nombre: row.nombre,
+      categoria_id: row.categoria_id,
+      active: row.active !== false
+    }));
+
+    // 4. Fetch coupons
+    const coupRes = await pool.query("SELECT code, discount_percent, expiration_date, active FROM coupons WHERE active = true;");
+    const coupons = coupRes.rows.map(row => ({
+      code: row.code,
+      discount_percent: Number(row.discount_percent),
+      expiration_date: row.expiration_date ? new Date(row.expiration_date).toISOString() : undefined,
+      active: row.active !== false
+    }));
+
+    // 5. Fetch admin credentials
+    const adminRes = await pool.query("SELECT username, password_hash, session_token FROM admin_credentials;");
+    let adminCredentials = currentStoreState.adminCredentials;
+    if (adminRes.rows.length > 0) {
+      adminCredentials = {
+        username: adminRes.rows[0].username,
+        passwordHash: adminRes.rows[0].password_hash,
+        sessionToken: adminRes.rows[0].session_token
+      };
+    }
+
+    // 6. Fetch products where active = true (logical soft delete)
+    const prodRes = await pool.query(`
+      SELECT id, name, price, stock, category, featured, image_url, created_at, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors 
+      FROM public.products 
+      WHERE active = true 
+      ORDER BY id DESC;
+    `);
+    const products = prodRes.rows.map(row => ({
+      id: String(row.id),
+      name: row.name,
+      price: Number(row.price),
+      stock: Number(row.stock),
+      category: row.category || "",
+      featured: row.featured === true,
+      imageUrl: row.image_url || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80",
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+      description: row.description || "",
+      categoria_id: row.categoria_id || "ropa",
+      originalPrice: row.original_price ? Number(row.original_price) : Number(row.price),
+      subcategoria_id: row.subcategoria_id || "all",
+      active: row.active !== false,
+      paused: row.paused === true,
+      sizes: Array.isArray(row.sizes) ? row.sizes : [],
+      colors: Array.isArray(row.colors) ? row.colors : []
+    }));
+
+    return {
+      categories: dbCategories.map(c => c.nombre),
+      dbCategories,
+      dbSubcategories,
+      settings,
+      products,
+      coupons,
+      adminCredentials
+    };
+  } catch (err) {
+    console.error("Error reading relational DB tables:", err);
+    return currentStoreState;
+  }
+}
+
+async function saveDbState(state: ShopState): Promise<boolean> {
+  const pool = getDbPool();
+  if (!pool) return false;
+
+  try {
+    // 1. Settings (global custom layout properties)
+    await pool.query(
+      "INSERT INTO shop_state (id, state) VALUES ('settings', $1) ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state;",
+      [JSON.stringify(state.settings)]
+    );
+
+    // 2. Categories soft delete logic & upsert
+    const existingCatsRes = await pool.query("SELECT id FROM categories;");
+    const existingCatIds = existingCatsRes.rows.map(r => r.id);
+    const incomingCatIds = (state.dbCategories || []).map(c => c.id);
+
+    const deletedCatIds = existingCatIds.filter(id => !incomingCatIds.includes(id));
+    if (deletedCatIds.length > 0) {
+      await pool.query("UPDATE categories SET active = false WHERE id = ANY($1);", [deletedCatIds]);
+    }
+
+    for (const cat of state.dbCategories || []) {
+      await pool.query(
+        "INSERT INTO categories (id, nombre, icono, orden, active) VALUES ($1, $2, $3, $4, true) ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre, icono = EXCLUDED.icono, orden = EXCLUDED.orden, active = true;",
+        [cat.id, cat.nombre, cat.icono || "Shirt", cat.orden || 1]
+      );
+    }
+
+    // 3. Subcategories soft delete logic & upsert
+    const existingSubsRes = await pool.query("SELECT id FROM subcategories;");
+    const existingSubIds = existingSubsRes.rows.map(r => r.id);
+    const incomingSubIds = (state.dbSubcategories || []).map(s => s.id);
+
+    const deletedSubIds = existingSubIds.filter(id => !incomingSubIds.includes(id));
+    if (deletedSubIds.length > 0) {
+      await pool.query("UPDATE subcategories SET active = false WHERE id = ANY($1);", [deletedSubIds]);
+    }
+
+    for (const sub of state.dbSubcategories || []) {
+      const activeVal = sub.active !== false;
+      await pool.query(
+        "INSERT INTO subcategories (id, nombre, categoria_id, active) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre, categoria_id = EXCLUDED.categoria_id, active = EXCLUDED.active;",
+        [sub.id, sub.nombre, sub.categoria_id, activeVal]
+      );
+    }
+
+    // 4. Coupons soft delete logic & upsert
+    const existingCouponsRes = await pool.query("SELECT code FROM coupons;");
+    const existingCodes = existingCouponsRes.rows.map(r => r.code);
+    const incomingCodes = (state.coupons || []).map(c => c.code);
+
+    const deletedCodes = existingCodes.filter(c => !incomingCodes.includes(c));
+    if (deletedCodes.length > 0) {
+      await pool.query("UPDATE coupons SET active = false WHERE code = ANY($1);", [deletedCodes]);
+    }
+
+    for (const coupon of state.coupons || []) {
+      const activeVal = coupon.active !== false;
+      const expDate = coupon.expiration_date ? new Date(coupon.expiration_date) : null;
+      await pool.query(
+        "INSERT INTO coupons (code, discount_percent, expiration_date, active) VALUES ($1, $2, $3, $4) ON CONFLICT (code) DO UPDATE SET discount_percent = EXCLUDED.discount_percent, expiration_date = EXCLUDED.expiration_date, active = EXCLUDED.active;",
+        [coupon.code, coupon.discount_percent, expDate, activeVal]
+      );
+    }
+
+    // 5. Admin credentials
+    if (state.adminCredentials) {
+      await pool.query(
+        "INSERT INTO admin_credentials (username, password_hash, session_token) VALUES ($1, $2, $3) ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash, session_token = EXCLUDED.session_token;",
+        [
+          state.adminCredentials.username,
+          state.adminCredentials.passwordHash,
+          state.adminCredentials.sessionToken || null
+        ]
+      );
+    }
+
+    // 6. Products Syncing: logical soft delete & upserts
+    const existingProdsRes = await pool.query("SELECT id FROM public.products WHERE active = true;");
+    const existingDbProdIds = existingProdsRes.rows.map(row => String(row.id));
+    const incomingProdIds = (state.products || []).map(p => String(p.id));
+
+    const deletedProdIds = existingDbProdIds.filter(id => !incomingProdIds.includes(id));
+    if (deletedProdIds.length > 0) {
+      const idInts = deletedProdIds.map(id => parseInt(id)).filter(id => !isNaN(id));
+      if (idInts.length > 0) {
+        await pool.query("UPDATE public.products SET active = false WHERE id = ANY($1::int[]);", [idInts]);
+      }
+    }
+
+    for (const prod of state.products || []) {
+      const isNew = !prod.id || isNaN(parseInt(prod.id));
+      const priceVal = Number(prod.price);
+      const originalPriceVal = prod.originalPrice ? Number(prod.originalPrice) : priceVal;
+      const stockVal = Math.floor(Number(prod.stock ?? 10));
+      const featuredVal = !!prod.featured;
+      const pausedVal = !!prod.paused;
+      const sizesVal = Array.isArray(prod.sizes) ? prod.sizes : [];
+      const colorsVal = Array.isArray(prod.colors) ? prod.colors : [];
+
+      if (isNew) {
+        await pool.query(`
+          INSERT INTO public.products (
+            name, price, stock, category, featured, image_url, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13);
+        `, [
+          prod.name, priceVal, stockVal, prod.category, featuredVal, prod.imageUrl,
+          prod.description || "", prod.categoria_id, originalPriceVal, prod.subcategoria_id,
+          pausedVal, sizesVal, colorsVal
+        ]);
+      } else {
+        const prodId = parseInt(prod.id);
+        await pool.query(`
+          UPDATE public.products SET
+            name = $1, price = $2, stock = $3, category = $4, featured = $5, image_url = $6, description = $7,
+            categoria_id = $8, original_price = $9, subcategoria_id = $10, active = true, paused = $11, sizes = $12, colors = $13
+          WHERE id = $14;
+        `, [
+          prod.name, priceVal, stockVal, prod.category, featuredVal, prod.imageUrl,
+          prod.description || "", prod.categoria_id, originalPriceVal, prod.subcategoria_id,
+          pausedVal, sizesVal, colorsVal, prodId
+        ]);
+      }
+    }
+
+    return true;
+  } catch (err) {
+    console.error("Error saving relational DB elements:", err);
+    return false;
+  }
+}
+
 async function initPostgresStore(): Promise<ShopState | null> {
   const rawUrl = process.env.DATABASE_URL || "";
   if (rawUrl.trim().startsWith("AIzaSy")) {
@@ -317,7 +550,7 @@ async function initPostgresStore(): Promise<ShopState | null> {
   if (!pool) return null;
 
   try {
-    // Crear tabla de configuración global si no existe
+    // 1. Create global shop state tracker
     await pool.query(`
       CREATE TABLE IF NOT EXISTS shop_state (
         id VARCHAR(50) PRIMARY KEY,
@@ -325,47 +558,151 @@ async function initPostgresStore(): Promise<ShopState | null> {
       );
     `);
 
-    // Intentar leer el estado guardado
-    const res = await pool.query("SELECT state FROM shop_state WHERE id = 'latest';");
-    if (res.rows.length > 0) {
-      console.log("Estado cargado con éxito desde PostgreSQL.");
-      writeDiagnosticReport("No error - Loaded successfully");
-      return res.rows[0].state as ShopState;
-    } else {
-      // Si la tabla está vacía, inicializamos con el estado predeterminado
-      console.log("La base de datos PostgreSQL está vacía. Inicializando con el estado inicial...");
-      await pool.query(
-          "INSERT INTO shop_state (id, state) VALUES ('latest', $1) ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state;",
-          [JSON.stringify(DEFAULT_SHOP_STATE)]
+    // 2. Create products table with compatible columns
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS public.products (
+        id INT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+        name TEXT NOT NULL,
+        price NUMERIC(10, 2) NOT NULL,
+        stock INTEGER NOT NULL DEFAULT 0,
+        category TEXT,
+        featured BOOLEAN DEFAULT false,
+        image_url TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        description TEXT,
+        categoria_id TEXT,
+        original_price NUMERIC(10, 2),
+        subcategoria_id TEXT
       );
-      writeDiagnosticReport("No error - Initialized successfully");
-      return DEFAULT_SHOP_STATE;
+    `);
+
+    // 3. Alter products to ensure active, paused, sizes, and colors exist
+    await pool.query(`
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS paused BOOLEAN DEFAULT false;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS sizes TEXT[] DEFAULT '{}';
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS colors TEXT[] DEFAULT '{}';
+    `);
+
+    // 4. Create categories
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS categories (
+        id VARCHAR(100) PRIMARY KEY,
+        nombre TEXT NOT NULL,
+        icono TEXT,
+        orden INTEGER DEFAULT 1,
+        active BOOLEAN DEFAULT true
+      );
+    `);
+
+    // 5. Create subcategories
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS subcategories (
+        id VARCHAR(100) PRIMARY KEY,
+        nombre TEXT NOT NULL,
+        categoria_id VARCHAR(100) REFERENCES categories(id) ON DELETE CASCADE,
+        active BOOLEAN DEFAULT true
+      );
+    `);
+
+    // 6. Create coupons
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS coupons (
+        code VARCHAR(100) PRIMARY KEY,
+        discount_percent INTEGER NOT NULL,
+        expiration_date TIMESTAMPTZ,
+        active BOOLEAN DEFAULT true
+      );
+    `);
+
+    // 7. Create admin credentials
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS admin_credentials (
+        username VARCHAR(100) PRIMARY KEY,
+        password_hash TEXT NOT NULL,
+        session_token TEXT
+      );
+    `);
+
+    // --- SEED TABLES IF EMPTY ---
+
+    // Seed categories
+    const catCheck = await pool.query("SELECT COUNT(*) FROM categories;");
+    if (parseInt(catCheck.rows[0].count) === 0) {
+      console.log("Seeding categories Table...");
+      for (const cat of DEFAULT_SHOP_STATE.dbCategories || []) {
+        await pool.query(
+          "INSERT INTO categories (id, nombre, icono, orden, active) VALUES ($1, $2, $3, $4, true);",
+          [cat.id, cat.nombre, cat.icono, cat.orden]
+        );
+      }
     }
+
+    // Seed subcategories
+    const subCheck = await pool.query("SELECT COUNT(*) FROM subcategories;");
+    if (parseInt(subCheck.rows[0].count) === 0) {
+      console.log("Seeding subcategories Table...");
+      for (const sub of DEFAULT_SHOP_STATE.dbSubcategories || []) {
+        await pool.query(
+          "INSERT INTO subcategories (id, nombre, categoria_id, active) VALUES ($1, $2, $3, true);",
+          [sub.id, sub.nombre, sub.categoria_id]
+        );
+      }
+    }
+
+    // Seed admin credentials
+    const adminCheck = await pool.query("SELECT COUNT(*) FROM admin_credentials;");
+    if (parseInt(adminCheck.rows[0].count) === 0) {
+      console.log("Seeding admin credentials Table...");
+      const defaultHash = hashPassword("olivera45");
+      await pool.query(
+        "INSERT INTO admin_credentials (username, password_hash) VALUES ('Juem', $1);",
+        [defaultHash]
+      );
+    }
+
+    // Seed settings JSON inside shop_state
+    const settingsCheck = await pool.query("SELECT COUNT(*) FROM shop_state WHERE id = 'settings';");
+    if (parseInt(settingsCheck.rows[0].count) === 0) {
+      console.log("Seeding settings inside shop_state...");
+      await pool.query(
+        "INSERT INTO shop_state (id, state) VALUES ('settings', $1);",
+        [JSON.stringify(DEFAULT_SHOP_STATE.settings)]
+      );
+    }
+
+    // Seed products table
+    const prodCheck = await pool.query("SELECT COUNT(*) FROM public.products WHERE active = true;");
+    if (parseInt(prodCheck.rows[0].count) === 0) {
+      console.log("Seeding products...");
+      for (const prod of DEFAULT_SHOP_STATE.products || []) {
+        const priceVal = Number(prod.price);
+        const originalPriceVal = prod.originalPrice ? Number(prod.originalPrice) : priceVal;
+        const stockVal = Math.floor(Number(prod.stock ?? 10));
+        const featuredVal = !!prod.featured;
+        const sizesVal = Array.isArray(prod.sizes) ? prod.sizes : [];
+        const colorsVal = Array.isArray(prod.colors) ? prod.colors : [];
+
+        await pool.query(`
+          INSERT INTO public.products (
+            name, price, stock, category, featured, image_url, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, false, $11, $12);
+        `, [
+          prod.name, priceVal, stockVal, prod.category, featuredVal, prod.imageUrl,
+          prod.description || "", prod.categoria_id, originalPriceVal, prod.subcategoria_id,
+          sizesVal, colorsVal
+        ]);
+      }
+    }
+
+    console.log("PostgreSQL schema validated. Fetching reconstructed ShopState...");
+    const state = await getDbState();
+    writeDiagnosticReport("No error - Loaded successfully via direct SQL");
+    return state;
   } catch (err: any) {
-    console.error("Error al inicializar la base de datos PostgreSQL:", err);
+    console.error("Error seeding or configuring PostgreSQL tables:", err);
     writeDiagnosticReport(err.message || String(err));
     return null;
-  }
-}
-
-function hashPassword(password: string): string {
-  return crypto.createHash("sha256").update(password + "juem-salt-1248").digest("hex");
-}
-
-async function savePostgresStore(state: ShopState): Promise<boolean> {
-  const pool = getDbPool();
-  if (!pool) return false;
-
-  try {
-    await pool.query(
-      "INSERT INTO shop_state (id, state) VALUES ('latest', $1) ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state;",
-      [JSON.stringify(state)]
-    );
-    console.log("Estado guardado con éxito en PostgreSQL.");
-    return true;
-  } catch (err) {
-    console.error("Error al guardar estado en PostgreSQL:", err);
-    return false;
   }
 }
 
@@ -375,8 +712,8 @@ async function startServer() {
 
   app.use(express.json({ limit: "15mb" })); // Support large images or custom payloads
 
-  // In-memory cache synced with store.json
-  let currentStoreState = initDataStore();
+  // Sync cache with store.json
+  currentStoreState = initDataStore();
 
   function isValidToken(authHeader: string | undefined): boolean {
     if (!authHeader || !authHeader.startsWith("Bearer ")) return false;
@@ -432,7 +769,7 @@ async function startServer() {
         try {
           fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
           if (process.env.DATABASE_URL) {
-            await savePostgresStore(currentStoreState);
+            await saveDbState(currentStoreState);
           }
         } catch (e) {}
       }
@@ -509,7 +846,7 @@ async function startServer() {
     try {
       fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
       if (process.env.DATABASE_URL) {
-        await savePostgresStore(currentStoreState);
+        await saveDbState(currentStoreState);
       }
       res.json({
         success: true,
@@ -524,7 +861,15 @@ async function startServer() {
   });
 
   // GET store state
-  app.get("/api/store", (req, res) => {
+  app.get("/api/store", async (req, res) => {
+    if (process.env.DATABASE_URL) {
+      try {
+        const dbState = await getDbState();
+        currentStoreState = dbState;
+      } catch (err) {
+        console.error("No se pudo cargar de Postgres en GET, usando cache local:", err);
+      }
+    }
     res.json(currentStoreState);
   });
 
@@ -535,7 +880,7 @@ async function startServer() {
       return res.status(403).json({ success: false, message: "Acceso no autorizado." });
     }
 
-    const { products, categories, settings, dbCategories, dbSubcategories } = req.body;
+    const { products, categories, settings, dbCategories, dbSubcategories, coupons } = req.body;
     if (!products || !categories || !settings) {
       return res.status(400).json({ success: false, message: "Datos incompletos." });
     }
@@ -547,7 +892,8 @@ async function startServer() {
         categories, 
         settings,
         dbCategories: dbCategories || currentStoreState.dbCategories,
-        dbSubcategories: dbSubcategories || currentStoreState.dbSubcategories
+        dbSubcategories: dbSubcategories || currentStoreState.dbSubcategories,
+        coupons: coupons || currentStoreState.coupons
       };
       
       // Guardar en archivo local como respaldo
@@ -559,10 +905,15 @@ async function startServer() {
 
       // Guardar en la base de datos PostgreSQL si está definido
       if (process.env.DATABASE_URL) {
-        await savePostgresStore(currentStoreState);
+        const saved = await saveDbState(currentStoreState);
+        if (saved) {
+          // Re-load to get actual database-assigned auto-incremented integer IDs!
+          const dbState = await getDbState();
+          currentStoreState = dbState;
+        }
       }
 
-      res.json({ success: true, message: "Cambios guardados con éxito en el servidor." });
+      res.json({ success: true, message: "Cambios guardados con éxito en el servidor.", state: currentStoreState });
     } catch (err) {
       console.error("Error al guardar estado de la tienda:", err);
       res.status(500).json({ success: false, message: "Error interno al guardar los datos." });

@@ -1,6 +1,6 @@
 import { useState, FormEvent } from "react";
 import { X, ShoppingBag, Trash2, Plus, Minus, ArrowRight } from "lucide-react";
-import { CartItem, SiteSettings } from "../types";
+import { CartItem, SiteSettings, Coupon } from "../types";
 import { motion, AnimatePresence } from "motion/react";
 
 interface CartDrawerProps {
@@ -11,6 +11,7 @@ interface CartDrawerProps {
   onRemoveItem: (productId: string, size?: string, color?: string) => void;
   settings: SiteSettings;
   onClearCart: () => void;
+  coupons?: Coupon[];
 }
 
 export default function CartDrawer({
@@ -20,7 +21,8 @@ export default function CartDrawer({
   onUpdateQuantity,
   onRemoveItem,
   settings,
-  onClearCart
+  onClearCart,
+  coupons
 }: CartDrawerProps) {
   const [userName, setUserName] = useState("");
   const [address, setAddress] = useState("");
@@ -44,8 +46,31 @@ export default function CartDrawer({
       setAppliedDiscount(0);
       return;
     }
-    // Match common keywords or configuration values
     const cleanPromo = promoCode.trim().toUpperCase();
+
+    // Check with backend-seeded coupon codes
+    const matchedCoupon = coupons?.find(
+      (c) => c.code.toUpperCase() === cleanPromo && c.active !== false
+    );
+
+    if (matchedCoupon) {
+      // Validate expiration date if specified
+      let isExpired = false;
+      if (matchedCoupon.expiration_date) {
+        const expiration = new Date(matchedCoupon.expiration_date);
+        if (expiration.getTime() < Date.now()) {
+          isExpired = true;
+        }
+      }
+
+      if (!isExpired) {
+        setAppliedDiscount(matchedCoupon.discount_percent);
+        setPromoStatus("success");
+        return;
+      }
+    }
+
+    // Match common keywords or configuration values as fallback
     if (cleanPromo === "APEX50" || cleanPromo === "DESCUENTO10" || cleanPromo === "PROMO" || cleanPromo === "OFFER") {
       setAppliedDiscount(10); // 10%
       setPromoStatus("success");

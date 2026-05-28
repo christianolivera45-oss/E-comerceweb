@@ -14,6 +14,8 @@ export interface Product {
   createdAt: string;
   sizes?: string[];
   colors?: string[];
+  active?: boolean; // Logical soft delete
+  paused?: boolean; // Pause in eCommerce store front
 }
 
 export interface HeroSlide {
@@ -53,6 +55,14 @@ export interface Subcategory {
   id: string;
   nombre: string;
   categoria_id: string;
+  active?: boolean;
+}
+
+export interface Coupon {
+  code: string;
+  discount_percent: number;
+  expiration_date?: string; // ISO string on client side
+  active?: boolean;
 }
 
 export interface AdminCredentials {
@@ -69,6 +79,7 @@ export interface ShopState {
   dbSubcategories?: Subcategory[]; // dynamic subcategories
   settings: SiteSettings;
   adminCredentials?: AdminCredentials;
+  coupons?: Coupon[];
 }
 
 export interface CartItem {

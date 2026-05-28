@@ -26,6 +26,7 @@ import {
   ShoppingBag as CartIcon,
   Palette,
   Eye,
+  EyeOff,
   Type,
   Layout,
   MessageCircle,
@@ -52,7 +53,7 @@ import SecurityPanel from "./components/SecurityPanel";
 import WhatsAppWidget from "./components/WhatsAppWidget";
 
 const DEFAULT_SETTINGS: SiteSettings = {
-  siteTitle: "Jum 2",
+  siteTitle: "Apex Outlet",
   siteSubtitle: "Moda, tecnología y accesorios con envío a todo el país.",
   bannerTitle: "Colección Exclusiva de Primavera",
   bannerSubtitle: "Descubre las últimas tendencias con descuentos de hasta el 40%.",
@@ -493,6 +494,10 @@ export default function App() {
   const [newCategoryOrder, setNewCategoryOrder] = useState<number>(1);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
+  const [newCouponCode, setNewCouponCode] = useState("");
+  const [newCouponDiscount, setNewCouponDiscount] = useState<number>(10);
+  const [newCouponExpiration, setNewCouponExpiration] = useState("");
+
   const [newSubcategoryName, setNewSubcategoryName] = useState("");
   const [newSubcategoryParent, setNewSubcategoryParent] = useState("");
   const [editingSubcategory, setEditingSubcategory] = useState<Subcategory | null>(null);
@@ -766,7 +771,12 @@ export default function App() {
         throw new Error("No se pudo guardar la información en la base de datos.");
       }
 
-      setStore(updatedStore);
+      const resData = await res.json();
+      if (resData.success && resData.state) {
+        setStore(resData.state);
+      } else {
+        setStore(updatedStore);
+      }
       setSyncStatus("synced");
     } catch (err: any) {
       console.error(err);
@@ -891,6 +901,60 @@ export default function App() {
     const updatedProducts = store.products.filter((p) => p.id !== productId);
     const updatedState = { ...store, products: updatedProducts };
     saveStateToServer(updatedState);
+  };
+
+  const handleTogglePause = (productId: string) => {
+    const updatedProducts = store.products.map((p) => {
+      if (p.id === productId) {
+        return { ...p, paused: !p.paused };
+      }
+      return p;
+    });
+    const updatedState = { ...store, products: updatedProducts };
+    saveStateToServer(updatedState);
+  };
+
+  // CRUD handlers - Coupons
+  const handleAddCoupon = (e: FormEvent) => {
+    e.preventDefault();
+    const code = newCouponCode.trim().toUpperCase();
+    if (!code) {
+      showAdminToast("El código del cupón es obligatorio", "error");
+      return;
+    }
+    if (newCouponDiscount <= 0 || newCouponDiscount > 100) {
+      showAdminToast("El porcentaje de descuento debe estar entre 1 y 100", "error");
+      return;
+    }
+
+    const exists = (store.coupons || []).some(c => c.code.toUpperCase() === code);
+    if (exists) {
+      showAdminToast("Este código de cupón ya existe", "error");
+      return;
+    }
+
+    const newC = {
+      code,
+      discount_percent: Number(newCouponDiscount),
+      expiration_date: newCouponExpiration ? new Date(newCouponExpiration).toISOString() : undefined,
+      active: true
+    };
+
+    const updatedCoupons = [...(store.coupons || []), newC];
+    const updatedState = { ...store, coupons: updatedCoupons };
+    saveStateToServer(updatedState);
+    setNewCouponCode("");
+    setNewCouponDiscount(10);
+    setNewCouponExpiration("");
+    showAdminToast("¡Cupón agregado con éxito!", "success");
+  };
+
+  const handleDeleteCoupon = (code: string) => {
+    if (!confirm(`¿Estás seguro de que deseas eliminar el cupón ${code}?`)) return;
+    const updatedCoupons = (store.coupons || []).filter(c => c.code !== code);
+    const updatedState = { ...store, coupons: updatedCoupons };
+    saveStateToServer(updatedState);
+    showAdminToast("¡Cupón eliminado correctamente!", "success");
   };
 
   // CRUD handlers - Categories & Subcategories
@@ -1140,6 +1204,7 @@ export default function App() {
 
   // Filtering products for listing
   const filteredProducts = store.products.filter((p) => {
+    if (p.paused) return false;
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           p.description.toLowerCase().includes(searchQuery.toLowerCase());
     
@@ -1154,7 +1219,7 @@ export default function App() {
                              (p.category && p.category.toLowerCase() === selectedCategory.toLowerCase());
       
       if (!isMainCatMatch) {
-        matchesCategory = false;
+         matchesCategory = false;
       } else if (selectedSubcategory && selectedSubcategory !== "all") {
         if (p.subcategoria_id && p.subcategoria_id !== "all") {
           matchesCategory = p.subcategoria_id === selectedSubcategory;
@@ -1179,7 +1244,7 @@ export default function App() {
     return matchesSearch && matchesCategory;
   });
 
-  const featuredProducts = store.products.filter((p) => p.featured);
+  const featuredProducts = store.products.filter((p) => p.featured && !p.paused);
 
   const clothingProducts = store.products.filter((p) => {
     const cat = p.category.toLowerCase();
@@ -1293,7 +1358,7 @@ export default function App() {
                 const isCatActive = selectedCategory === catObj.nombre;
                 
                 // Get dynamic subcategories nested under this category
-                const dbSubs = (store.dbSubcategories || []).filter(sub => sub.categoria_id === catObj.id);
+                const dbSubs = (store.dbSubcategories || []).filter(sub => sub.categoria_id === catObj.id && sub.active !== false);
                 // Define complete menu subcategories list, starting with full collection explorer option
                 const itemSubcategories = [
                   { id: "all", name: `Ver todo ${catObj.nombre}` },
@@ -2445,7 +2510,14 @@ export default function App() {
                             />
                             
                             <div className="flex-1 min-w-0">
-                              <h5 className="font-semibold text-xs truncate text-slate-900 dark:text-zinc-200">{p.name}</h5>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h5 className="font-semibold text-xs truncate text-slate-900 dark:text-zinc-200">{p.name}</h5>
+                                {p.paused && (
+                                  <span className="bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded text-[9px] font-extrabold uppercase px-1.5 py-0.5 tracking-wider font-mono">
+                                    Pausado
+                                  </span>
+                                )}
+                              </div>
                               <div className="flex items-center gap-2 mt-0.5 text-[10px] text-zinc-400">
                                 <span className="bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-400">{p.category}</span>
                                 <span>PVP: <strong>${p.price.toFixed(2)}</strong></span>
@@ -2455,15 +2527,26 @@ export default function App() {
 
                             <div className="flex items-center gap-1.5">
                               <button
+                                onClick={() => handleTogglePause(p.id)}
+                                className={`p-1.5 rounded-lg transition cursor-pointer ${
+                                  p.paused 
+                                    ? "bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-500" 
+                                    : "bg-zinc-800/80 hover:bg-zinc-700 hover:text-white text-zinc-450"
+                                }`}
+                                title={p.paused ? "Reanudar (Mostrar en la web)" : "Pausar (Ocultar en la web)"}
+                              >
+                                {p.paused ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                              </button>
+                              <button
                                 onClick={() => setEditingProduct(p)}
-                                className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 hover:text-white text-zinc-300 transition"
+                                className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 hover:text-white text-zinc-300 transition cursor-pointer"
                                 title="Editar"
                               >
                                 <Edit className="h-3.5 w-3.5" />
                               </button>
                               <button
                                 onClick={() => handleDeleteProduct(p.id)}
-                                className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400 transition"
+                                className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400 transition cursor-pointer"
                                 title="Eliminar"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
@@ -3457,13 +3540,38 @@ export default function App() {
                                           return (
                                             <div key={sub.id} className="p-2.5 bg-slate-50 dark:bg-zinc-900/60 rounded-xl border border-slate-100 dark:border-zinc-850/40 flex items-center justify-between">
                                               <div className="min-w-0">
-                                                <p className="text-xs font-semibold truncate text-slate-900 dark:text-zinc-300">{sub.nombre}</p>
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                  <p className="text-xs font-semibold truncate text-slate-900 dark:text-zinc-300">{sub.nombre}</p>
+                                                  {sub.active === false ? (
+                                                    <span className="text-[7.5px] bg-red-500/10 text-red-500 px-1 py-0.2 rounded font-bold uppercase tracking-wider font-mono">Inactiva</span>
+                                                  ) : (
+                                                    <span className="text-[7.5px] bg-emerald-500/10 text-emerald-400 px-1 py-0.2 rounded font-bold uppercase tracking-wider font-mono">Activa</span>
+                                                  )}
+                                                </div>
                                                 <span className="text-[9px] text-zinc-500">
                                                   {subProductsCount} {subProductsCount === 1 ? "producto" : "productos"}
                                                 </span>
                                               </div>
                                               
                                               <div className="flex items-center gap-1 shrink-0 ml-2">
+                                                <button
+                                                  onClick={() => {
+                                                    const nextActiveStatus = sub.active === false ? true : false;
+                                                    const updatedDbSubcategories = (store.dbSubcategories || []).map(s => {
+                                                      if (s.id === sub.id) return { ...s, active: nextActiveStatus };
+                                                      return s;
+                                                    });
+                                                    saveStateToServer({ ...store, dbSubcategories: updatedDbSubcategories });
+                                                  }}
+                                                  className={`px-1.5 py-0.5 rounded text-[9px] transition cursor-pointer font-bold ${
+                                                    sub.active === false 
+                                                      ? "bg-emerald-500/10 hover:bg-emerald-500 hover:text-white text-emerald-400 border border-emerald-500/20 animate-pulse" 
+                                                      : "bg-zinc-800 hover:bg-zinc-700 text-zinc-400"
+                                                  }`}
+                                                  title={sub.active === false ? "Activar Subcategoría" : "Desactivar Subcategoría"}
+                                                >
+                                                  {sub.active === false ? "Activar" : "Desactivar"}
+                                                </button>
                                                 <button
                                                   onClick={() => handleStartEditSubcategory(sub)}
                                                   className="p-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-all text-[10px] cursor-pointer"
@@ -3496,7 +3604,8 @@ export default function App() {
 
                 {/* 6. PROMOTIONS AND DISCOUNTS PAGE */}
                 {adminSection === "promos" && (
-                  <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4">
+                  <div className="space-y-4">
+                    <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4">
                     <div className="flex items-center gap-2 border-b border-zinc-800/10 dark:border-zinc-800 pb-3 mb-2">
                       <Tag className="h-4 w-4 text-amber-500" />
                       <h3 className="font-bold text-sm text-slate-900 dark:text-white">Sección de Promociones & Cupones</h3>
@@ -3544,7 +3653,106 @@ export default function App() {
                       </button>
                     </div>
                   </div>
-                )}
+
+                  {/* Dynamic coupon CRUD card */}
+                  <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4">
+                    <div className="flex items-center gap-2 border-b border-zinc-800/10 dark:border-zinc-800 pb-3 mb-2">
+                      <Percent className="h-4 w-4 text-emerald-500" />
+                      <h3 className="font-bold text-sm text-slate-900 dark:text-white">Crear y Gestionar Cupones de Descuento</h3>
+                    </div>
+
+                    <form onSubmit={handleAddCoupon} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end bg-slate-50 dark:bg-zinc-905/30 p-4 rounded-xl border border-slate-100 dark:border-zinc-850/40">
+                      <div>
+                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Código Único (PK/Code)</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Ej. MASFAST15"
+                          value={newCouponCode}
+                          onChange={(e) => setNewCouponCode(e.target.value)}
+                          className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white uppercase font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">% Descuento Directo</label>
+                        <input
+                          type="number"
+                          required
+                          min="1"
+                          max="100"
+                          placeholder="p.ej. 15"
+                          value={newCouponDiscount}
+                          onChange={(e) => setNewCouponDiscount(Number(e.target.value))}
+                          className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Fecha de Vencimiento</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="date"
+                            value={newCouponExpiration}
+                            onChange={(e) => setNewCouponExpiration(e.target.value)}
+                            className="flex-1 px-3 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white cursor-pointer"
+                          />
+                          <button
+                            type="submit"
+                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer whitespace-nowrap"
+                          >
+                            Agregar
+                          </button>
+                        </div>
+                      </div>
+                    </form>
+
+                    {/* Coupons List */}
+                    <div className="space-y-2 mt-4">
+                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Cupones Activos Registrados en Base de Datos</label>
+                      {!(store.coupons && store.coupons.length > 0) ? (
+                        <p className="text-xs text-zinc-500 italic mt-1 bg-slate-50 dark:bg-zinc-900/50 p-3 rounded-lg border border-dashed border-zinc-800">
+                          No hay cupones personalizados en la base de datos de Ventas Juem todavía. Puedes crear uno arriba y se validará en vivo en el carrito.
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                          {store.coupons.map((c) => {
+                            const isExpired = c.expiration_date ? new Date(c.expiration_date).getTime() < Date.now() : false;
+                            return (
+                              <div key={c.code} className="p-3 bg-slate-50 dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-850 flex items-center justify-between">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-xs font-mono font-black text-indigo-400 uppercase tracking-wide bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded">
+                                      {c.code}
+                                    </span>
+                                    <span className="text-xs font-bold text-emerald-400">
+                                      {c.discount_percent}% OFF
+                                    </span>
+                                  </div>
+                                  <div className="text-[10px] text-zinc-400 mt-1">
+                                    {c.expiration_date ? (
+                                      <span className={isExpired ? "text-red-400 line-through font-semibold" : "text-zinc-400"}>
+                                        Vence: {new Date(c.expiration_date).toLocaleDateString()} {isExpired && " (Expirado)"}
+                                      </span>
+                                    ) : (
+                                      <span>Sin límite de vencimiento</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => handleDeleteCoupon(c.code)}
+                                  className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400 transition cursor-pointer"
+                                  title="Eliminar Cupón"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
                 {/* 10. ACCESS SECURITY & CREDENTIALS CONFIG */}
                 {adminSection === "security" && (
@@ -3720,6 +3928,7 @@ export default function App() {
         onRemoveItem={handleRemoveCartItem}
         settings={store.settings}
         onClearCart={handleClearCart}
+        coupons={store.coupons}
       />
 
       {/* Mobile Drawer Navigation Menu */}
@@ -3816,7 +4025,7 @@ export default function App() {
                       .sort((a, b) => (a.orden || 0) - (b.orden || 0))
                       .map((catObj) => {
                         const isCatActive = selectedCategory === catObj.nombre;
-                        const dbSubs = (store.dbSubcategories || []).filter(sub => sub.categoria_id === catObj.id);
+                        const dbSubs = (store.dbSubcategories || []).filter(sub => sub.categoria_id === catObj.id && sub.active !== false);
                         
                         return (
                           <div key={catObj.id} className="space-y-1">

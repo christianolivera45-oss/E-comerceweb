@@ -42,7 +42,7 @@ import {
   X,
   ChevronRight
 } from "lucide-react";
-import { Product, SiteSettings, ShopState, CartItem, Category, Subcategory } from "./types";
+import { Product, SiteSettings, ShopState, CartItem, Category, Subcategory, ProductVariant } from "./types";
 import ThemeStyles from "./components/ThemeStyles";
 import ProductCard from "./components/ProductCard";
 import ProductSlider from "./components/ProductSlider";
@@ -2824,6 +2824,72 @@ export default function App() {
                       </div>
                     </div>
 
+                    {/* GALERÍA DE IMÁGENES ADICIONALES */}
+                    <div className="space-y-3 border border-slate-200/60 dark:border-zinc-850 p-4 rounded-xl bg-slate-50/20 dark:bg-zinc-900/10">
+                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest flex items-center justify-between">
+                        <span>Galería de Imágenes Adicionales</span>
+                        <span className="text-[9px] text-zinc-500 font-normal">Múltiples vistas o colores del producto</span>
+                      </label>
+                      
+                      {((newProduct.imagenes || []).length > 0) && (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-100/30 dark:bg-zinc-950 p-3 rounded-lg border border-slate-150 dark:border-zinc-900">
+                          {(newProduct.imagenes || []).map((imgUrl, i) => (
+                            <div key={i} className="relative group aspect-square rounded-md overflow-hidden border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+                              <img src={imgUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1594122230689-45899d9e6f69?w=300"; }} />
+                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const nextImgList = (newProduct.imagenes || []).filter((_, idx) => idx !== i);
+                                    setNewProduct({ ...newProduct, imagenes: nextImgList });
+                                  }}
+                                  className="p-1 px-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-[10px] font-bold cursor-pointer"
+                                >
+                                  Eliminar
+                                </button>
+                              </div>
+                              <span className="absolute bottom-1 left-1 bg-black/80 text-white text-[8px] font-bold px-1 rounded">#{i + 1}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex gap-2">
+                        <input
+                          id="new-product-gallery-input"
+                          type="text"
+                          placeholder="Introduce URL de imagen adicional y pulsa Añadir..."
+                          className="flex-1 px-3 py-1.5 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none text-slate-900 dark:text-white font-mono"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              const val = e.currentTarget.value.trim();
+                              if (val) {
+                                setNewProduct({ ...newProduct, imagenes: [...(newProduct.imagenes || []), val] });
+                                e.currentTarget.value = "";
+                              }
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const inputEl = document.getElementById('new-product-gallery-input') as HTMLInputElement;
+                            if (inputEl) {
+                              const val = inputEl.value.trim();
+                              if (val) {
+                                setNewProduct({ ...newProduct, imagenes: [...(newProduct.imagenes || []), val] });
+                                inputEl.value = "";
+                              }
+                            }
+                          }}
+                          className="px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                        >
+                          Añadir
+                        </button>
+                      </div>
+                    </div>
+
                     <div>
                       <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Descripción Detallada</label>
                       <textarea
@@ -2916,6 +2982,184 @@ export default function App() {
                           })}
                         </div>
                       </div>
+                    </div>
+
+                    {/* PRODUCT COMBINATIONS VARIANT STOCK MANAGER */}
+                    <div className="border border-indigo-500/10 p-4 rounded-xl bg-slate-50/50 dark:bg-zinc-900/40 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div>
+                          <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">
+                            Gestor de Stock de Variantes (Combinación Exacto)
+                          </label>
+                          <p className="text-[9px] text-zinc-400 mt-0.5">Asigna inventarios individuales por talle y color</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const curSizes = newProduct.sizes || [];
+                            const curColors = newProduct.colors || [];
+                            if (curSizes.length === 0 && curColors.length === 0) {
+                              showAdminToast("Primero ingresa talles o colores arriba para generar combinaciones.", "error");
+                              return;
+                            }
+                            
+                            const generated: ProductVariant[] = [];
+                            const sizesList = curSizes.length > 0 ? curSizes : ["Único"];
+                            const colorsList = curColors.length > 0 ? curColors : ["General"];
+                            
+                            for (const sz of sizesList) {
+                              for (const col of colorsList) {
+                                const exists = (newProduct.variants || []).some(v => v.size === sz && v.color === col);
+                                if (!exists) {
+                                  generated.push({
+                                    size: sz,
+                                    color: col,
+                                    colorCode: col === "Negro" ? "#000000" : col === "Blanco" ? "#ffffff" : col === "Rojo" ? "#ef4444" : col === "Azul" ? "#3b82f6" : col === "Verde" ? "#22c55e" : col === "Gris" ? "#6b7280" : col === "Beige" ? "#f5f5dc" : col === "Rosa" ? "#f472b6" : "#9ca3af",
+                                    stock: Math.floor(Number(newProduct.stock || 5)),
+                                    priceDelta: 0
+                                  });
+                                }
+                              }
+                            }
+                            
+                            const combined = [...(newProduct.variants || []), ...generated];
+                            setNewProduct({
+                              ...newProduct,
+                              variants: combined,
+                              stock: combined.reduce((sum, v) => sum + v.stock, 0)
+                            });
+                            showAdminToast(`Se autogeneraron ${generated.length} combinaciones.`, "success");
+                          }}
+                          className="text-[9px] px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded shadow transition-all cursor-pointer self-start sm:self-center"
+                        >
+                          Generar Todas las Combinaciones
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-100/30 dark:bg-zinc-950 p-2.5 rounded-lg border border-slate-150 dark:border-zinc-850">
+                        <div>
+                          <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Talle</label>
+                          <select id="new-var-size" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold text-zinc-800 dark:text-zinc-200">
+                            {((newProduct.sizes || []).length > 0 ? (newProduct.sizes || []) : ["Único"]).map(sz => (
+                              <option key={sz} value={sz}>{sz}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Color</label>
+                          <select id="new-var-color" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold text-zinc-800 dark:text-zinc-200">
+                            {((newProduct.colors || []).length > 0 ? (newProduct.colors || []) : ["General"]).map(col => (
+                              <option key={col} value={col}>{col}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Stock Físico</label>
+                          <input id="new-var-stock" type="number" defaultValue="5" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-mono font-bold" />
+                        </div>
+                        <div className="flex items-end">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const szEl = document.getElementById('new-var-size') as HTMLSelectElement;
+                              const colEl = document.getElementById('new-var-color') as HTMLSelectElement;
+                              const stkEl = document.getElementById('new-var-stock') as HTMLInputElement;
+                              
+                              if (szEl && colEl && stkEl) {
+                                const sz = szEl.value;
+                                const col = colEl.value;
+                                const stk = Math.floor(Number(stkEl.value || 0));
+                                
+                                const current = newProduct.variants || [];
+                                if (current.some(v => v.size === sz && v.color === col)) {
+                                  showAdminToast(`La combinación ${sz} - ${col} ya existe.`, "error");
+                                  return;
+                                }
+                                
+                                const newV: ProductVariant = {
+                                  size: sz,
+                                  color: col,
+                                  colorCode: col === "Negro" ? "#000000" : col === "Blanco" ? "#ffffff" : col === "Rojo" ? "#ef4444" : col === "Azul" ? "#3b82f6" : col === "Verde" ? "#22c55e" : col === "Gris" ? "#6b7280" : col === "Beige" ? "#f5f5dc" : col === "Rosa" ? "#f472b6" : "#9ca3af",
+                                  stock: stk,
+                                  priceDelta: 0
+                                };
+                                const updated = [...current, newV];
+                                setNewProduct({
+                                  ...newProduct,
+                                  variants: updated,
+                                  stock: updated.reduce((sum, v) => sum + v.stock, 0)
+                                });
+                                showAdminToast("Combinación añadida", "success");
+                              }
+                            }}
+                            className="w-full py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-bold rounded border border-zinc-700 transition cursor-pointer"
+                          >
+                            + Añadir
+                          </button>
+                        </div>
+                      </div>
+
+                      {((newProduct.variants || []).length > 0) ? (
+                        <div className="max-h-52 overflow-y-auto border border-slate-150 dark:border-zinc-850 rounded-lg text-xs shadow-inner">
+                          <table className="w-full text-left border-collapse bg-white dark:bg-zinc-950">
+                            <thead>
+                              <tr className="bg-slate-100 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-850 text-[10px] text-zinc-400 font-extrabold uppercase">
+                                <th className="p-2">Talle</th>
+                                <th className="p-2">Color / Tono</th>
+                                <th className="p-2">Stock Disponible</th>
+                                <th className="p-2 text-right">Acciones</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(newProduct.variants || []).map((v, i) => (
+                                <tr key={i} className="border-b border-slate-100 dark:border-zinc-900/50 hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 text-slate-700 dark:text-zinc-300">
+                                  <td className="p-2 font-mono font-bold text-indigo-500 dark:text-indigo-400">{v.size}</td>
+                                  <td className="p-2 flex items-center gap-2">
+                                    <span className="w-3.5 h-3.5 rounded-full border border-zinc-300 dark:border-zinc-800 shadow-sm" style={{ backgroundColor: v.colorCode || '#666' }}></span>
+                                    <span>{v.color}</span>
+                                  </td>
+                                  <td className="p-2">
+                                    <input
+                                      type="number"
+                                      value={v.stock}
+                                      onChange={(e) => {
+                                        const nextStockArr = JSON.parse(JSON.stringify(newProduct.variants || []));
+                                        nextStockArr[i].stock = Math.max(0, Math.floor(Number(e.target.value || 0)));
+                                        setNewProduct({
+                                          ...newProduct,
+                                          variants: nextStockArr,
+                                          stock: nextStockArr.reduce((sum: number, item: any) => sum + item.stock, 0)
+                                        });
+                                      }}
+                                      className="w-16 px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none"
+                                    />
+                                  </td>
+                                  <td className="p-2 text-right">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const nextVariants = (newProduct.variants || []).filter((_, idx) => idx !== i);
+                                        setNewProduct({
+                                          ...newProduct,
+                                          variants: nextVariants,
+                                          stock: nextVariants.reduce((sum, item) => sum + item.stock, 0)
+                                        });
+                                      }}
+                                      className="text-red-500 hover:text-red-600 font-bold transition-all cursor-pointer"
+                                    >
+                                      Remover
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="p-3 text-center text-zinc-500 text-[11px] bg-slate-100/30 dark:bg-zinc-950 rounded-lg border border-dashed border-slate-200 dark:border-zinc-800">
+                          Sin combinaciones registradas. Se usará el stock físico general definido arriba. Puedes autogenerarlas o añadirlas manualmente.
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -3100,6 +3344,72 @@ export default function App() {
                       />
                     </div>
 
+                    {/* GALERÍA DE IMÁGENES EDICIÓN */}
+                    <div className="space-y-3 border border-slate-200/60 dark:border-zinc-850 p-4 rounded-xl bg-slate-50/20 dark:bg-zinc-900/10">
+                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest flex items-center justify-between">
+                        <span>Galería de Imágenes Adicionales</span>
+                        <span className="text-[9px] text-zinc-500 font-normal font-sans">Múltiples vistas o colores del artículo</span>
+                      </label>
+                      
+                      {((editingProduct.imagenes || []).length > 0) && (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-100/30 dark:bg-zinc-950 p-3 rounded-lg border border-slate-150 dark:border-zinc-900">
+                          {(editingProduct.imagenes || []).map((imgUrl, i) => (
+                            <div key={i} className="relative group aspect-square rounded-md overflow-hidden border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+                              <img src={imgUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1594122230689-45899d9e6f69?w=300"; }} />
+                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const nextImgList = (editingProduct.imagenes || []).filter((_, idx) => idx !== i);
+                                    setEditingProduct({ ...editingProduct, imagenes: nextImgList });
+                                  }}
+                                  className="p-1 px-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-[10px] font-bold cursor-pointer"
+                                >
+                                  Eliminar
+                                </button>
+                              </div>
+                              <span className="absolute bottom-1 left-1 bg-black/80 text-white text-[8px] font-bold px-1 rounded">#{i + 1}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex gap-2">
+                        <input
+                          id="edit-product-gallery-input"
+                          type="text"
+                          placeholder="Introduce URL de imagen adicional y pulsa Añadir..."
+                          className="flex-1 px-3 py-1.5 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none text-slate-900 dark:text-white font-mono"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              const val = e.currentTarget.value.trim();
+                              if (val) {
+                                setEditingProduct({ ...editingProduct, imagenes: [...(editingProduct.imagenes || []), val] });
+                                e.currentTarget.value = "";
+                              }
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const inputEl = document.getElementById('edit-product-gallery-input') as HTMLInputElement;
+                            if (inputEl) {
+                              const val = inputEl.value.trim();
+                              if (val) {
+                                setEditingProduct({ ...editingProduct, imagenes: [...(editingProduct.imagenes || []), val] });
+                                inputEl.value = "";
+                              }
+                            }
+                          }}
+                          className="px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                        >
+                          Añadir
+                        </button>
+                      </div>
+                    </div>
+
                     <div>
                       <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Descripción Detallada</label>
                       <textarea
@@ -3191,6 +3501,184 @@ export default function App() {
                           })}
                         </div>
                       </div>
+                    </div>
+
+                    {/* PRODUCT COMBINATIONS VARIANT STOCK MANAGER FOR EDITING */}
+                    <div className="border border-indigo-500/10 p-4 rounded-xl bg-slate-50/50 dark:bg-zinc-900/40 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div>
+                          <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">
+                            Gestor de Stock de Variantes (Combinación Exacto)
+                          </label>
+                          <p className="text-[9px] text-zinc-400 mt-0.5 font-sans">Asigna inventarios individuales por talle y color</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const curSizes = editingProduct.sizes || [];
+                            const curColors = editingProduct.colors || [];
+                            if (curSizes.length === 0 && curColors.length === 0) {
+                              showAdminToast("Primero ingresa talles o colores arriba para generar combinaciones.", "error");
+                              return;
+                            }
+                            
+                            const generated: ProductVariant[] = [];
+                            const sizesList = curSizes.length > 0 ? curSizes : ["Único"];
+                            const colorsList = curColors.length > 0 ? curColors : ["General"];
+                            
+                            for (const sz of sizesList) {
+                              for (const col of colorsList) {
+                                const exists = (editingProduct.variants || []).some(v => v.size === sz && v.color === col);
+                                if (!exists) {
+                                  generated.push({
+                                    size: sz,
+                                    color: col,
+                                    colorCode: col === "Negro" ? "#000000" : col === "Blanco" ? "#ffffff" : col === "Rojo" ? "#ef4444" : col === "Azul" ? "#3b82f6" : col === "Verde" ? "#22c55e" : col === "Gris" ? "#6b7280" : col === "Beige" ? "#f5f5dc" : col === "Rosa" ? "#f472b6" : "#9ca3af",
+                                    stock: Math.floor(Number(editingProduct.stock || 5)),
+                                    priceDelta: 0
+                                  });
+                                }
+                              }
+                            }
+                            
+                            const combined = [...(editingProduct.variants || []), ...generated];
+                            setEditingProduct({
+                              ...editingProduct,
+                              variants: combined,
+                              stock: combined.reduce((sum, v) => sum + v.stock, 0)
+                            });
+                            showAdminToast(`Se autogeneraron ${generated.length} combinaciones.`, "success");
+                          }}
+                          className="text-[9px] px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded shadow transition-all cursor-pointer self-start sm:self-center"
+                        >
+                          Generar Todas las Combinaciones
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-100/30 dark:bg-zinc-950 p-2.5 rounded-lg border border-slate-150 dark:border-zinc-850">
+                        <div>
+                          <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Talle</label>
+                          <select id="edit-var-size" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold text-zinc-800 dark:text-zinc-200">
+                            {((editingProduct.sizes || []).length > 0 ? (editingProduct.sizes || []) : ["Único"]).map(sz => (
+                              <option key={sz} value={sz}>{sz}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Color</label>
+                          <select id="edit-var-color" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold text-zinc-800 dark:text-zinc-200">
+                            {((editingProduct.colors || []).length > 0 ? (editingProduct.colors || []) : ["General"]).map(col => (
+                              <option key={col} value={col}>{col}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Stock Físico</label>
+                          <input id="edit-var-stock" type="number" defaultValue="5" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-mono font-bold" />
+                        </div>
+                        <div className="flex items-end">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const szEl = document.getElementById('edit-var-size') as HTMLSelectElement;
+                              const colEl = document.getElementById('edit-var-color') as HTMLSelectElement;
+                              const stkEl = document.getElementById('edit-var-stock') as HTMLInputElement;
+                              
+                              if (szEl && colEl && stkEl) {
+                                const sz = szEl.value;
+                                const col = colEl.value;
+                                const stk = Math.floor(Number(stkEl.value || 0));
+                                
+                                const current = editingProduct.variants || [];
+                                if (current.some(v => v.size === sz && v.color === col)) {
+                                  showAdminToast(`La combinación ${sz} - ${col} ya existe.`, "error");
+                                  return;
+                                }
+                                
+                                const newV: ProductVariant = {
+                                  size: sz,
+                                  color: col,
+                                  colorCode: col === "Negro" ? "#000000" : col === "Blanco" ? "#ffffff" : col === "Rojo" ? "#ef4444" : col === "Azul" ? "#3b82f6" : col === "Verde" ? "#22c55e" : col === "Gris" ? "#6b7280" : col === "Beige" ? "#f5f5dc" : col === "Rosa" ? "#f472b6" : "#9ca3af",
+                                  stock: stk,
+                                  priceDelta: 0
+                                };
+                                const updated = [...current, newV];
+                                setEditingProduct({
+                                  ...editingProduct,
+                                  variants: updated,
+                                  stock: updated.reduce((sum, v) => sum + v.stock, 0)
+                                });
+                                showAdminToast("Combinación añadida", "success");
+                              }
+                            }}
+                            className="w-full py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-bold rounded border border-zinc-700 transition cursor-pointer"
+                          >
+                            + Añadir
+                          </button>
+                        </div>
+                      </div>
+
+                      {((editingProduct.variants || []).length > 0) ? (
+                        <div className="max-h-52 overflow-y-auto border border-slate-150 dark:border-zinc-850 rounded-lg text-xs shadow-inner">
+                          <table className="w-full text-left border-collapse bg-white dark:bg-zinc-950">
+                            <thead>
+                              <tr className="bg-slate-100 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-850 text-[10px] text-zinc-400 font-extrabold uppercase">
+                                <th className="p-2">Talle</th>
+                                <th className="p-2">Color / Tono</th>
+                                <th className="p-2">Stock Disponible</th>
+                                <th className="p-2 text-right">Acciones</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(editingProduct.variants || []).map((v, i) => (
+                                <tr key={i} className="border-b border-slate-100 dark:border-zinc-900/50 hover:bg-slate-50/50 dark:hover:bg-zinc-900/30 text-slate-700 dark:text-zinc-300">
+                                  <td className="p-2 font-mono font-bold text-indigo-500 dark:text-indigo-400">{v.size}</td>
+                                  <td className="p-2 flex items-center gap-2">
+                                    <span className="w-3.5 h-3.5 rounded-full border border-zinc-300 dark:border-zinc-800 shadow-sm" style={{ backgroundColor: v.colorCode || '#666' }}></span>
+                                    <span>{v.color}</span>
+                                  </td>
+                                  <td className="p-2">
+                                    <input
+                                      type="number"
+                                      value={v.stock}
+                                      onChange={(e) => {
+                                        const nextStockArr = JSON.parse(JSON.stringify(editingProduct.variants || []));
+                                        nextStockArr[i].stock = Math.max(0, Math.floor(Number(e.target.value || 0)));
+                                        setEditingProduct({
+                                          ...editingProduct,
+                                          variants: nextStockArr,
+                                          stock: nextStockArr.reduce((sum: number, item: any) => sum + item.stock, 0)
+                                        });
+                                      }}
+                                      className="w-16 px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none"
+                                    />
+                                  </td>
+                                  <td className="p-2 text-right">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const nextVariants = (editingProduct.variants || []).filter((_, idx) => idx !== i);
+                                        setEditingProduct({
+                                          ...editingProduct,
+                                          variants: nextVariants,
+                                          stock: nextVariants.reduce((sum, item) => sum + item.stock, 0)
+                                        });
+                                      }}
+                                      className="text-red-500 hover:text-red-600 font-bold transition-all cursor-pointer"
+                                    >
+                                      Remover
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="p-3 text-center text-zinc-500 text-[11px] bg-slate-100/30 dark:bg-zinc-950 rounded-lg border border-dashed border-slate-200 dark:border-zinc-800">
+                          Sin combinaciones registradas. Se usará el stock físico general definido arriba. Puedes autogenerarlas o añadirlas manualmente.
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2">

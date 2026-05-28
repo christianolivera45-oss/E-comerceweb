@@ -371,24 +371,67 @@ async function getDbState(): Promise<ShopState> {
       WHERE active = true 
       ORDER BY id DESC;
     `);
-    const products = prodRes.rows.map(row => ({
-      id: String(row.id),
-      name: row.name,
-      price: Number(row.price),
-      stock: Number(row.stock),
-      category: row.category || "",
-      featured: row.featured === true,
-      imageUrl: row.image_url || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80",
-      createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
-      description: row.description || "",
-      categoria_id: row.categoria_id || "ropa",
-      originalPrice: row.original_price ? Number(row.original_price) : Number(row.price),
-      subcategoria_id: row.subcategoria_id || "all",
-      active: row.active !== false,
-      paused: row.paused === true,
-      sizes: Array.isArray(row.sizes) ? row.sizes : [],
-      colors: Array.isArray(row.colors) ? row.colors : []
-    }));
+
+    // Fetch product multiple images
+    const productImagesMap: Record<number, string[]> = {};
+    try {
+      const imagesRes = await pool.query("SELECT product_id, image_url, order_index FROM public.product_images ORDER BY order_index ASC;");
+      for (const imgRow of imagesRes.rows) {
+        const pid = imgRow.product_id;
+        if (!productImagesMap[pid]) {
+          productImagesMap[pid] = [];
+        }
+        productImagesMap[pid].push(imgRow.image_url);
+      }
+    } catch (imgErr) {
+      console.warn("Product images table read failed (possibly not created yet):", imgErr);
+    }
+
+    // Fetch product variants
+    const productVariantsMap: Record<number, any[]> = {};
+    try {
+      const variantsRes = await pool.query("SELECT id, product_id, size_value, color_name, color_code, additional_price, stock FROM public.product_variants WHERE active = true;");
+      for (const vRow of variantsRes.rows) {
+        const pid = vRow.product_id;
+        if (!productVariantsMap[pid]) {
+          productVariantsMap[pid] = [];
+        }
+        productVariantsMap[pid].push({
+          id: String(vRow.id),
+          size: vRow.size_value || "",
+          color: vRow.color_name || "",
+          colorCode: vRow.color_code || "",
+          priceDelta: vRow.additional_price ? Number(vRow.additional_price) : 0,
+          stock: vRow.stock ? Number(vRow.stock) : 0
+        });
+      }
+    } catch (varErr) {
+      console.warn("Product variants table read failed (possibly not created yet):", varErr);
+    }
+
+    const products = prodRes.rows.map(row => {
+      const pid = row.id;
+      return {
+        id: String(pid),
+        name: row.name,
+        price: Number(row.price),
+        stock: Number(row.stock),
+        category: row.category || "",
+        featured: row.featured === true,
+        imageUrl: row.image_url || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80",
+        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+        description: row.description || "",
+        categoria_id: row.categoria_id || "ropa",
+        originalPrice: row.original_price ? Number(row.original_price) : Number(row.price),
+        subcategoria_id: row.subcategoria_id || "all",
+        active: row.active !== false,
+        paused: row.paused === true,
+        sizes: Array.isArray(row.sizes) ? row.sizes : [],
+        colors: Array.isArray(row.colors) ? row.colors : [],
+        imagenes: productImagesMap[pid] || [],
+        variants: productVariantsMap[pid] || []
+      };
+    });
 
     return {
       categories: dbCategories.map(c => c.nombre),
@@ -496,7 +539,7 @@ async function saveDbState(state: ShopState): Promise<boolean> {
     }
 
     for (const prod of state.products || []) {
-      const isNew = !prod.id || isNaN(parseInt(prod.id));
+      const isNew = !prod.id || isNaN(parseInt(prod.id)) || String(prod.id).startsWith("prod-");
       const priceVal = Number(prod.price);
       const originalPriceVal = prod.originalPrice ? Number(prod.originalPrice) : priceVal;
       const stockVal = Math.floor(Number(prod.stock ?? 10));
@@ -505,18 +548,22 @@ async function saveDbState(state: ShopState): Promise<boolean> {
       const sizesVal = Array.isArray(prod.sizes) ? prod.sizes : [];
       const colorsVal = Array.isArray(prod.colors) ? prod.colors : [];
 
+      let prodId: number;
       if (isNew) {
-        await pool.query(`
+        const insertRes = await pool.query(`
           INSERT INTO public.products (
             name, price, stock, category, featured, image_url, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13);
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13)
+          RETURNING id;
         `, [
           prod.name, priceVal, stockVal, prod.category, featuredVal, prod.imageUrl,
           prod.description || "", prod.categoria_id, originalPriceVal, prod.subcategoria_id,
           pausedVal, sizesVal, colorsVal
         ]);
+        prodId = insertRes.rows[0].id;
+        prod.id = String(prodId);
       } else {
-        const prodId = parseInt(prod.id);
+        prodId = parseInt(prod.id);
         await pool.query(`
           UPDATE public.products SET
             name = $1, price = $2, stock = $3, category = $4, featured = $5, image_url = $6, description = $7,
@@ -527,6 +574,48 @@ async function saveDbState(state: ShopState): Promise<boolean> {
           prod.description || "", prod.categoria_id, originalPriceVal, prod.subcategoria_id,
           pausedVal, sizesVal, colorsVal, prodId
         ]);
+      }
+
+      // Sync product multiple images
+      try {
+        await pool.query("DELETE FROM public.product_images WHERE product_id = $1;", [prodId]);
+        if (Array.isArray(prod.imagenes) && prod.imagenes.length > 0) {
+          for (let i = 0; i < prod.imagenes.length; i++) {
+            const imgUrl = prod.imagenes[i];
+            if (imgUrl && imgUrl.trim()) {
+              await pool.query(`
+                INSERT INTO public.product_images (product_id, image_url, order_index)
+                VALUES ($1, $2, $3);
+              `, [prodId, imgUrl.trim(), i]);
+            }
+          }
+        }
+      } catch (imgErr) {
+        console.error(`Error saving product images for product ${prodId}:`, imgErr);
+      }
+
+      // Sync product variants
+      try {
+        await pool.query("DELETE FROM public.product_variants WHERE product_id = $1;", [prodId]);
+        if (Array.isArray(prod.variants) && prod.variants.length > 0) {
+          for (const variant of prod.variants) {
+            const sku = variant.sku || `SKU-${prodId}-${variant.size}-${variant.color}-${Math.floor(Math.random() * 10000)}`;
+            await pool.query(`
+              INSERT INTO public.product_variants (product_id, sku, size_value, color_name, color_code, additional_price, stock, active)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, true);
+            `, [
+              prodId,
+              sku,
+              variant.size,
+              variant.color,
+              variant.colorCode || "",
+              Number(variant.priceDelta || 0),
+              Math.floor(Number(variant.stock || 0))
+            ]);
+          }
+        }
+      } catch (varErr) {
+        console.error(`Error saving product variants for product ${prodId}:`, varErr);
       }
     }
 
@@ -582,6 +671,35 @@ async function initPostgresStore(): Promise<ShopState | null> {
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS paused BOOLEAN DEFAULT false;
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS sizes TEXT[] DEFAULT '{}';
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS colors TEXT[] DEFAULT '{}';
+    `);
+
+    // Create product_images table if not exists
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS public.product_images (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        product_id INTEGER NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+        image_url TEXT NOT NULL,
+        alt_text VARCHAR(150),
+        order_index INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // Create product_variants table if not exists
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS public.product_variants (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        product_id INTEGER NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+        sku VARCHAR(100) UNIQUE,
+        size_value VARCHAR(50),
+        color_name VARCHAR(50),
+        color_code VARCHAR(20),
+        additional_price NUMERIC(10, 2) DEFAULT 0.00,
+        stock INTEGER NOT NULL DEFAULT 0,
+        active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
     `);
 
     // 4. Create categories

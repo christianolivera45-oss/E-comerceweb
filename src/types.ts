@@ -1,3 +1,13 @@
+export interface ProductVariant {
+  id?: string;
+  sku?: string;
+  size: string;
+  color: string;
+  colorCode?: string; // e.g. '#2563eb'
+  priceDelta?: number;
+  stock: number;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -9,6 +19,7 @@ export interface Product {
   subcategoria_id?: string; // Subcategory ID
   imageUrl: string;
   imagenes?: string[]; // List of multiple product images
+  variants?: ProductVariant[]; // Advanced dyn sub-variants with stock
   stock: number;
   featured: boolean;
   createdAt: string;

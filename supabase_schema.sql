@@ -400,10 +400,18 @@ ALTER TABLE public.subcategories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.banners ENABLE ROW LEVEL SECURITY;
 
 -- Políticas de Lectura Pública (Todos pueden navegar el sitio)
+DROP POLICY IF EXISTS "Permitir lectura publica de productos" ON public.products;
 CREATE POLICY "Permitir lectura publica de productos" ON public.products FOR SELECT USING (active = true AND paused = false);
+
+DROP POLICY IF EXISTS "Permitir lectura publica de categorias" ON public.categories;
 CREATE POLICY "Permitir lectura publica de categorias" ON public.categories FOR SELECT USING (active = true);
+
+DROP POLICY IF EXISTS "Permitir lectura publica de subcategorias" ON public.subcategories;
 CREATE POLICY "Permitir lectura publica de subcategorias" ON public.subcategories FOR SELECT USING (active = true);
+
+DROP POLICY IF EXISTS "Permitir lectura publica de banners" ON public.banners;
 CREATE POLICY "Permitir lectura publica de banners" ON public.banners FOR SELECT USING (active = true);
 
 -- Políticas de Escritura solo para autenticados o administradores (simulación ilustrativa)
+DROP POLICY IF EXISTS "Solo administradores pueden modificar productos" ON public.products;
 CREATE POLICY "Solo administradores pueden modificar productos" ON public.products FOR ALL TO authenticated USING (true);

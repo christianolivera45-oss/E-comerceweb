@@ -665,12 +665,13 @@ async function initPostgresStore(): Promise<ShopState | null> {
       );
     `);
 
-    // 3. Alter products to ensure active, paused, sizes, and colors exist
+    // 3. Alter products to ensure active, paused, sizes, colors, and updated_at exist
     await pool.query(`
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS paused BOOLEAN DEFAULT false;
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS sizes TEXT[] DEFAULT '{}';
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS colors TEXT[] DEFAULT '{}';
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
     `);
 
     // Create product_images table if not exists
@@ -712,6 +713,9 @@ async function initPostgresStore(): Promise<ShopState | null> {
         active BOOLEAN DEFAULT true
       );
     `);
+    await pool.query(`
+      ALTER TABLE categories ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    `);
 
     // 5. Create subcategories
     await pool.query(`
@@ -721,6 +725,9 @@ async function initPostgresStore(): Promise<ShopState | null> {
         categoria_id VARCHAR(100) REFERENCES categories(id) ON DELETE CASCADE,
         active BOOLEAN DEFAULT true
       );
+    `);
+    await pool.query(`
+      ALTER TABLE subcategories ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
     `);
 
     // 6. Create coupons

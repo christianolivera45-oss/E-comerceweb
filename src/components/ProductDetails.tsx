@@ -112,7 +112,7 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 md:p-6 backdrop-blur-sm overflow-y-auto">
       <div
-        className={`relative w-full max-w-4xl rounded-3xl overflow-y-auto md:overflow-hidden max-h-[90vh] md:max-h-none shadow-2xl transition-transform duration-300 ${
+        className={`relative w-full max-w-4xl rounded-3xl overflow-y-auto md:overflow-hidden max-h-[95vh] md:max-h-[85vh] md:h-[640px] shadow-2xl transition-transform duration-300 ${
           isThemeDark ? "bg-zinc-950 border border-zinc-805 text-white" : "bg-white text-zinc-900 border border-gray-150"
         }`}
       >
@@ -126,9 +126,9 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
           <X className="h-5 w-5" />
         </button>
 
-        <div className="grid grid-cols-1 md:grid-cols-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 h-auto md:h-full">
           {/* CAROUSEL IMAGES VIEW */}
-          <div className="flex flex-col bg-slate-50 dark:bg-zinc-900/30 p-4 md:p-6 justify-center items-center relative gap-4 border-r border-slate-100 dark:border-zinc-900">
+          <div className="flex flex-col bg-slate-50 dark:bg-zinc-900/30 p-4 md:p-6 justify-center items-center relative gap-4 border-r border-slate-100 dark:border-zinc-900 h-auto md:h-full overflow-hidden">
             <div className="relative aspect-square w-full max-w-[380px] rounded-2xl overflow-hidden border border-slate-200 dark:border-zinc-800/80 bg-zinc-950/20 shadow-inner group">
               <img
                 src={allImages[activeImgIndex] || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80"}
@@ -183,7 +183,7 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
           </div>
 
           {/* Details Form Section */}
-          <div className="p-6 md:p-8 flex flex-col justify-between">
+          <div className="p-6 md:p-8 flex flex-col justify-between h-auto md:h-full md:overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-400/30 dark:scrollbar-thumb-zinc-700/30">
             <div>
               {/* Category */}
               <span className="text-xs font-semibold tracking-widest uppercase text-zinc-500 block mb-1">
@@ -209,9 +209,19 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
 
               {/* Description */}
               <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1">Detalles</h3>
-              <p className={`text-sm mb-6 leading-relaxed ${isThemeDark ? "text-zinc-300" : "text-zinc-650"}`}>
-                {product.description || "Sin descripción detallada por el momento."}
-              </p>
+              <div 
+                className={`text-sm mb-6 max-h-24 md:max-h-36 overflow-y-auto pr-2 leading-relaxed scrollbar-thin scrollbar-thumb-zinc-400/30 dark:scrollbar-thumb-zinc-700/30 ${
+                  isThemeDark ? "text-zinc-300" : "text-zinc-650"
+                }`}
+                style={{
+                  wordBreak: "break-word",
+                  overflowWrap: "anywhere"
+                }}
+              >
+                <p className="whitespace-pre-line">
+                  {product.description || "Sin descripción detallada por el momento."}
+                </p>
+              </div>
 
               {/* Sizes choosing */}
               {sizes.length > 0 && (

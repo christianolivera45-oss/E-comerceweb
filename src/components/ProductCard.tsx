@@ -98,7 +98,7 @@ export default function ProductCard({
         </h3>
 
         {/* Subtle separator */}
-        <p className="text-[11px] sm:text-xs text-zinc-400 mt-1 line-clamp-2 leading-relaxed flex-1">
+        <p className="text-[11px] sm:text-xs text-zinc-400 mt-1 line-clamp-2 leading-relaxed flex-1 break-words overflow-hidden" style={{ overflowWrap: "anywhere" }}>
           {product.description}
         </p>
 

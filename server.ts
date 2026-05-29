@@ -167,10 +167,13 @@ const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_FILE = path.join(DATA_DIR, "store.json");
 
 // Module scope cache
-let currentStoreState: ShopState = DEFAULT_SHOP_STATE;
+let currentStoreState: ShopState = process.env.DATABASE_URL
+  ? { ...DEFAULT_SHOP_STATE, products: [] }
+  : DEFAULT_SHOP_STATE;
 
 // Helper to ensure data directory and file exist
 function initDataStore(): ShopState {
+  const isPostgresActive = !!process.env.DATABASE_URL;
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -180,7 +183,9 @@ function initDataStore(): ShopState {
       if (!content) {
         console.warn("El archivo de almacenamiento está vacío. Inicializando con el estado por defecto...");
         fs.writeFileSync(STORE_FILE, JSON.stringify(DEFAULT_SHOP_STATE, null, 2), "utf-8");
-        return DEFAULT_SHOP_STATE;
+        const defaultState = { ...DEFAULT_SHOP_STATE };
+        if (isPostgresActive) defaultState.products = [];
+        return defaultState;
       }
 
       let parsed: ShopState;
@@ -189,7 +194,9 @@ function initDataStore(): ShopState {
       } catch (parseErr) {
         console.error("El archivo store.json contiene JSON inválido. Reconstruyendo con el estado por defecto...", parseErr);
         fs.writeFileSync(STORE_FILE, JSON.stringify(DEFAULT_SHOP_STATE, null, 2), "utf-8");
-        return DEFAULT_SHOP_STATE;
+        const defaultState = { ...DEFAULT_SHOP_STATE };
+        if (isPostgresActive) defaultState.products = [];
+        return defaultState;
       }
       
       // Auto-migrate if its dynamic database models are empty or missing
@@ -229,14 +236,22 @@ function initDataStore(): ShopState {
       if (changed) {
         fs.writeFileSync(STORE_FILE, JSON.stringify(parsed, null, 2), "utf-8");
       }
+
+      if (isPostgresActive) {
+        parsed.products = [];
+      }
       return parsed;
     } else {
       fs.writeFileSync(STORE_FILE, JSON.stringify(DEFAULT_SHOP_STATE, null, 2), "utf-8");
-      return DEFAULT_SHOP_STATE;
+      const defaultState = { ...DEFAULT_SHOP_STATE };
+      if (isPostgresActive) defaultState.products = [];
+      return defaultState;
     }
   } catch (err) {
     console.error("Error accessing data store, using defaults:", err);
-    return DEFAULT_SHOP_STATE;
+    const defaultState = { ...DEFAULT_SHOP_STATE };
+    if (isPostgresActive) defaultState.products = [];
+    return defaultState;
   }
 }
 
@@ -802,8 +817,8 @@ async function initPostgresStore(): Promise<ShopState | null> {
       );
     }
 
-    // Seed products table
-    const prodCheck = await pool.query("SELECT COUNT(*) FROM public.products WHERE active = true;");
+    // Seed products table ONLY if table is completely empty (no previous products at all)
+    const prodCheck = await pool.query("SELECT COUNT(*) FROM public.products;");
     if (parseInt(prodCheck.rows[0].count) === 0) {
       console.log("Seeding products...");
       for (const prod of DEFAULT_SHOP_STATE.products || []) {
@@ -868,11 +883,14 @@ async function startServer() {
       const pgState = await initPostgresStore();
       if (pgState) {
         currentStoreState = pgState;
-        console.log("Estado sincronizado con base de datos PostgreSQL.");
+        console.log("🟢 Estado sincronizado con la base de datos de Supabase exitosamente.");
       }
     } catch (pgError) {
-      console.error("No se pudo cargar de Postgres en el inicio, usando cache local:", pgError);
+      console.error("🔴 Error: No se pudo cargar de Postgres en el inicio, usando cache local:", pgError);
     }
+  } else {
+    console.warn("⚠️ ADVERTENCIA: La variable DATABASE_URL no está configurada en las variables de entorno de Render.");
+    console.warn("⚠️ El servidor usará el archivo local de respaldo '/data/store.json' (cualquier cambio se perderá al reiniciar o desplegar en Render).");
   }
 
   // API Admin login

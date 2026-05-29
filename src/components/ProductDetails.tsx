@@ -226,9 +226,8 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
               {/* Sizes choosing */}
               {sizes.length > 0 && (
                 <div className="mb-4">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5 flex justify-between">
-                    <span>Talla Seleccionada:</span>
-                    <span className="text-[10px] text-zinc-500 font-mono font-bold uppercase">{selectedSize || "Ninguno"}</span>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
+                    Talla Seleccionada:
                   </h3>
                   <div className="flex flex-wrap gap-2">
                     {sizes.map((sz) => (
@@ -257,9 +256,8 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
               {/* Colors choosing */}
               {colors.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5 flex justify-between">
-                    <span>Color Seleccionado:</span>
-                    <span className="text-[10px] text-zinc-505 font-mono font-bold uppercase">{selectedColor || "Ninguno"}</span>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
+                    Color Seleccionado:
                   </h3>
                   <div className="flex flex-wrap gap-2">
                     {colors.map((col) => {
@@ -321,7 +319,7 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
                 </div>
                 
                 {currentStock > 0 && (
-                  <div className="text-xs text-zinc-450 self-end mb-1">
+                  <div className="text-xs text-zinc-455 self-end mb-1">
                     Disponibles: <strong className="font-mono text-zinc-500 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-900 px-2 py-0.5 rounded">{currentStock} un.</strong>
                   </div>
                 )}
@@ -361,22 +359,6 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
                   ¡Producto añadido al carrito con éxito!
                 </p>
               )}
-
-              {/* Guarantees info */}
-              <div className="grid grid-cols-3 gap-2 pt-4 border-t border-dashed border-zinc-200 dark:border-zinc-800 text-[10px] text-zinc-455 text-center">
-                <div className="flex flex-col items-center">
-                  <ShieldCheck className="h-4 w-4 text-zinc-500 dark:text-zinc-500 mb-1" />
-                  <span>Pago Seguro Coor.</span>
-                </div>
-                <div className="flex flex-col items-center">
-                  <Truck className="h-4 w-4 text-zinc-500 dark:text-zinc-500 mb-1" />
-                  <span>Envíos Prioritarios</span>
-                </div>
-                <div className="flex flex-col items-center">
-                  <RefreshCw className="h-4 w-4 text-zinc-500 dark:text-zinc-505 mb-1" />
-                  <span>Cambios de Talle</span>
-                </div>
-              </div>
             </div>
           </div>
         </div>

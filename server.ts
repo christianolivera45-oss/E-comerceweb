@@ -672,6 +672,9 @@ async function initPostgresStore(): Promise<ShopState | null> {
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS sizes TEXT[] DEFAULT '{}';
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS colors TEXT[] DEFAULT '{}';
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS original_price NUMERIC(10, 2);
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS subcategoria_id TEXT;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS categoria_id TEXT;
     `);
 
     // Create product_images table if not exists
@@ -701,6 +704,9 @@ async function initPostgresStore(): Promise<ShopState | null> {
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
+    `);
+    await pool.query(`
+      ALTER TABLE public.product_variants ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
     `);
 
     // 4. Create categories

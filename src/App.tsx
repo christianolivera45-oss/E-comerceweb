@@ -51,6 +51,7 @@ import CartDrawer from "./components/CartDrawer";
 import HeroSlider from "./components/HeroSlider";
 import SecurityPanel from "./components/SecurityPanel";
 import WhatsAppWidget from "./components/WhatsAppWidget";
+import ImageGalleryEditor from "./components/ImageGalleryEditor";
 
 const DEFAULT_SETTINGS: SiteSettings = {
   siteTitle: "Ventas Juem",
@@ -2800,95 +2801,17 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Imagen del Artículo URL</label>
-                      <input
-                        type="text"
-                        value={newProduct.imageUrl}
-                        onChange={(e) => setNewProduct({ ...newProduct, imageUrl: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono"
-                        placeholder="https://images.unsplash.com/..."
-                      />
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        <span className="text-[10px] text-zinc-400 self-center">Elegir stock Unsplash:</span>
-                        {UNSPLASH_TEMPLATES.map((tpl) => (
-                          <button
-                            key={tpl.title}
-                            type="button"
-                            onClick={() => setNewProduct({ ...newProduct, imageUrl: tpl.url })}
-                            className="text-[10px] py-0.5 px-2 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-all cursor-pointer"
-                          >
-                            {tpl.title}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* GALERÍA DE IMÁGENES ADICIONALES */}
-                    <div className="space-y-3 border border-slate-200/60 dark:border-zinc-850 p-4 rounded-xl bg-slate-50/20 dark:bg-zinc-900/10">
-                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest flex items-center justify-between">
-                        <span>Galería de Imágenes Adicionales</span>
-                        <span className="text-[9px] text-zinc-500 font-normal">Múltiples vistas o colores del producto</span>
-                      </label>
-                      
-                      {((newProduct.imagenes || []).length > 0) && (
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-100/30 dark:bg-zinc-950 p-3 rounded-lg border border-slate-150 dark:border-zinc-900">
-                          {(newProduct.imagenes || []).map((imgUrl, i) => (
-                            <div key={i} className="relative group aspect-square rounded-md overflow-hidden border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-                              <img src={imgUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1594122230689-45899d9e6f69?w=300"; }} />
-                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const nextImgList = (newProduct.imagenes || []).filter((_, idx) => idx !== i);
-                                    setNewProduct({ ...newProduct, imagenes: nextImgList });
-                                  }}
-                                  className="p-1 px-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-[10px] font-bold cursor-pointer"
-                                >
-                                  Eliminar
-                                </button>
-                              </div>
-                              <span className="absolute bottom-1 left-1 bg-black/80 text-white text-[8px] font-bold px-1 rounded">#{i + 1}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="flex gap-2">
-                        <input
-                          id="new-product-gallery-input"
-                          type="text"
-                          placeholder="Introduce URL de imagen adicional y pulsa Añadir..."
-                          className="flex-1 px-3 py-1.5 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none text-slate-900 dark:text-white font-mono"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              const val = e.currentTarget.value.trim();
-                              if (val) {
-                                setNewProduct({ ...newProduct, imagenes: [...(newProduct.imagenes || []), val] });
-                                e.currentTarget.value = "";
-                              }
-                            }
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const inputEl = document.getElementById('new-product-gallery-input') as HTMLInputElement;
-                            if (inputEl) {
-                              const val = inputEl.value.trim();
-                              if (val) {
-                                setNewProduct({ ...newProduct, imagenes: [...(newProduct.imagenes || []), val] });
-                                inputEl.value = "";
-                              }
-                            }
-                          }}
-                          className="px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold cursor-pointer"
-                        >
-                          Añadir
-                        </button>
-                      </div>
-                    </div>
+                    <ImageGalleryEditor
+                      images={[newProduct.imageUrl || "", ...(newProduct.imagenes || [])].filter(Boolean)}
+                      onChange={(updatedImages) => {
+                        setNewProduct({
+                          ...newProduct,
+                          imageUrl: updatedImages[0] || "",
+                          imagenes: updatedImages.slice(1)
+                        });
+                      }}
+                      isThemeDark={store.settings.themeMode === "dark"}
+                    />
 
                     <div>
                       <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Descripción Detallada</label>
@@ -3334,81 +3257,17 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Imagen del Artículo URL</label>
-                      <input
-                        type="text"
-                        value={editingProduct.imageUrl}
-                        onChange={(e) => setEditingProduct({ ...editingProduct, imageUrl: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono"
-                      />
-                    </div>
-
-                    {/* GALERÍA DE IMÁGENES EDICIÓN */}
-                    <div className="space-y-3 border border-slate-200/60 dark:border-zinc-850 p-4 rounded-xl bg-slate-50/20 dark:bg-zinc-900/10">
-                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest flex items-center justify-between">
-                        <span>Galería de Imágenes Adicionales</span>
-                        <span className="text-[9px] text-zinc-500 font-normal font-sans">Múltiples vistas o colores del artículo</span>
-                      </label>
-                      
-                      {((editingProduct.imagenes || []).length > 0) && (
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-100/30 dark:bg-zinc-950 p-3 rounded-lg border border-slate-150 dark:border-zinc-900">
-                          {(editingProduct.imagenes || []).map((imgUrl, i) => (
-                            <div key={i} className="relative group aspect-square rounded-md overflow-hidden border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-                              <img src={imgUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" onError={(e) => { (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1594122230689-45899d9e6f69?w=300"; }} />
-                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const nextImgList = (editingProduct.imagenes || []).filter((_, idx) => idx !== i);
-                                    setEditingProduct({ ...editingProduct, imagenes: nextImgList });
-                                  }}
-                                  className="p-1 px-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-[10px] font-bold cursor-pointer"
-                                >
-                                  Eliminar
-                                </button>
-                              </div>
-                              <span className="absolute bottom-1 left-1 bg-black/80 text-white text-[8px] font-bold px-1 rounded">#{i + 1}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="flex gap-2">
-                        <input
-                          id="edit-product-gallery-input"
-                          type="text"
-                          placeholder="Introduce URL de imagen adicional y pulsa Añadir..."
-                          className="flex-1 px-3 py-1.5 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none text-slate-900 dark:text-white font-mono"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              const val = e.currentTarget.value.trim();
-                              if (val) {
-                                setEditingProduct({ ...editingProduct, imagenes: [...(editingProduct.imagenes || []), val] });
-                                e.currentTarget.value = "";
-                              }
-                            }
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const inputEl = document.getElementById('edit-product-gallery-input') as HTMLInputElement;
-                            if (inputEl) {
-                              const val = inputEl.value.trim();
-                              if (val) {
-                                setEditingProduct({ ...editingProduct, imagenes: [...(editingProduct.imagenes || []), val] });
-                                inputEl.value = "";
-                              }
-                            }
-                          }}
-                          className="px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold cursor-pointer"
-                        >
-                          Añadir
-                        </button>
-                      </div>
-                    </div>
+                    <ImageGalleryEditor
+                      images={[editingProduct.imageUrl || "", ...(editingProduct.imagenes || [])].filter(Boolean)}
+                      onChange={(updatedImages) => {
+                        setEditingProduct({
+                          ...editingProduct,
+                          imageUrl: updatedImages[0] || "",
+                          imagenes: updatedImages.slice(1)
+                        });
+                      }}
+                      isThemeDark={store.settings.themeMode === "dark"}
+                    />
 
                     <div>
                       <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Descripción Detallada</label>

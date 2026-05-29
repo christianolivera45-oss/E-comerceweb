@@ -52,6 +52,13 @@ export interface SiteSettings {
   logoType?: 'text' | 'image';
   logoText?: string;
   logoImageUrl?: string;
+  footerCol1Title?: string;
+  footerCol1Text?: string;
+  footerCol2Title?: string;
+  footerCol2Text?: string;
+  footerCol3Title?: string;
+  footerCol3Text?: string;
+  footerCopyright?: string;
 }
 
 export interface Category {

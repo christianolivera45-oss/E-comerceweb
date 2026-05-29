@@ -341,7 +341,7 @@ async function getDbState(): Promise<ShopState> {
     }
 
     // 2. Fetch categories
-    const catRes = await pool.query("SELECT id, nombre, icono, orden, active FROM categories WHERE active = true ORDER BY orden ASC;");
+    const catRes = await pool.query("SELECT id, nombre, icono, orden, active FROM categories ORDER BY orden ASC;");
     const dbCategories = catRes.rows.map(row => ({
       id: row.id,
       nombre: row.nombre,
@@ -351,7 +351,7 @@ async function getDbState(): Promise<ShopState> {
     }));
 
     // 3. Fetch subcategories
-    const subRes = await pool.query("SELECT id, nombre, categoria_id, active FROM subcategories WHERE active = true;");
+    const subRes = await pool.query("SELECT id, nombre, categoria_id, active FROM subcategories;");
     const dbSubcategories = subRes.rows.map(row => ({
       id: row.id,
       nombre: row.nombre,
@@ -360,7 +360,7 @@ async function getDbState(): Promise<ShopState> {
     }));
 
     // 4. Fetch coupons
-    const coupRes = await pool.query("SELECT code, discount_percent, expiration_date, active FROM coupons WHERE active = true;");
+    const coupRes = await pool.query("SELECT code, discount_percent, expiration_date, active FROM coupons;");
     const coupons = coupRes.rows.map(row => ({
       code: row.code,
       discount_percent: Number(row.discount_percent),
@@ -485,9 +485,10 @@ async function saveDbState(state: ShopState): Promise<boolean> {
     }
 
     for (const cat of state.dbCategories || []) {
+      const activeVal = cat.active !== false;
       await pool.query(
-        "INSERT INTO categories (id, nombre, icono, orden, active) VALUES ($1, $2, $3, $4, true) ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre, icono = EXCLUDED.icono, orden = EXCLUDED.orden, active = true;",
-        [cat.id, cat.nombre, cat.icono || "Shirt", cat.orden || 1]
+        "INSERT INTO categories (id, nombre, icono, orden, active) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO UPDATE SET nombre = EXCLUDED.nombre, icono = EXCLUDED.icono, orden = EXCLUDED.orden, active = EXCLUDED.active;",
+        [cat.id, cat.nombre, cat.icono || "Shirt", cat.orden || 1, activeVal]
       );
     }
 

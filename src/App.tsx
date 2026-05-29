@@ -87,7 +87,14 @@ const DEFAULT_SETTINGS: SiteSettings = {
   ],
   logoType: "text",
   logoText: "J",
-  logoImageUrl: ""
+  logoImageUrl: "",
+  footerCol1Title: "🚀 Compra Personalizada",
+  footerCol1Text: "Realiza tus pedidos seleccionando tus talles y colores favoritos. El carrito envía una lista formateada directo a nuestro WhatsApp de atención oficial para coordinar pago y entrega express.",
+  footerCol2Title: "🌟 Calidad Asegurada",
+  footerCol2Text: "Todos los productos que visualizas pasan por un control estricto de empaque y selección. Ofrecemos cambio de talle inmediato dentro de las 72 horas de recibida tu compra.",
+  footerCol3Title: "📞 Soporte Directo",
+  footerCol3Text: "¿Habiendo dudas con talles o stock rápido? Pícale al botón de consulta express en la ficha de cada producto y un asesor te responderá inmediatamente en WhatsApp.",
+  footerCopyright: "Desarrollado con tecnología de punta responsive. Reservados todos los derechos."
 };
 
 const getCategoryIcon = (categoryOrIcon: string) => {
@@ -1352,14 +1359,13 @@ export default function App() {
         {activeTab === "storefront" && (
           <div className="hidden lg:flex items-center flex-wrap gap-1.5 sm:gap-3 md:gap-4 py-1 relative z-50 overflow-visible justify-center">
             {(store.dbCategories || [])
-              .filter((c) => c.active !== false)
               .sort((a, b) => (a.orden || 0) - (b.orden || 0))
               .map((catObj) => {
                 const displayName = catObj.nombre;
                 const isCatActive = selectedCategory === catObj.nombre;
                 
                 // Get dynamic subcategories nested under this category
-                const dbSubs = (store.dbSubcategories || []).filter(sub => sub.categoria_id === catObj.id && sub.active !== false);
+                const dbSubs = (store.dbSubcategories || []).filter(sub => sub.categoria_id === catObj.id);
                 // Define complete menu subcategories list, starting with full collection explorer option
                 const itemSubcategories = [
                   { id: "all", name: `Ver todo ${catObj.nombre}` },
@@ -1721,33 +1727,47 @@ export default function App() {
           </section>
 
           {/* Features highlight banner */}
-          <footer className={`py-12 border-t mt-12 ${
+          <footer className={`py-12 border-t mt-12 transition-all duration-300 ${
             store.settings.themeMode === "dark" 
-              ? "bg-zinc-900/40 border-zinc-900/80 text-zinc-400" 
-              : "bg-white border-slate-100/80 text-slate-500"
+              ? "bg-zinc-950/40 border-zinc-900/60 text-zinc-400" 
+              : "bg-white border-slate-100/85 text-slate-500"
           }`}>
             <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-8 text-center md:text-left">
-              <div>
-                <h4 className="font-bold text-sm text-zinc-200 uppercase tracking-widest mb-2 font-mono">🚀 Compra Personalizada</h4>
-                <p className="text-xs leading-relaxed">
-                  Realiza tus pedidos seleccionando tus talles y colores favoritos. El carrito envía una lista formateada directo a nuestro WhatsApp de atención oficial para coordinar pago y entrega express.
+              <div className="space-y-2 group">
+                <h4 className={`font-bold text-xs uppercase tracking-[0.14em] font-mono transition-all duration-300 ${
+                  store.settings.themeMode === "dark" ? "text-zinc-100 group-hover:text-[#5346ff]" : "text-slate-850 group-hover:text-indigo-600"
+                }`}>
+                  {store.settings.footerCol1Title || "🚀 Compra Personalizada"}
+                </h4>
+                <p className="text-xs leading-relaxed opacity-85 hover:opacity-100 transition-opacity">
+                  {store.settings.footerCol1Text || "Realiza tus pedidos seleccionando tus talles y colores favoritos. El carrito envía una lista formateada directo a nuestro WhatsApp de atención oficial para coordinar pago y entrega express."}
                 </p>
               </div>
-              <div>
-                <h4 className="font-bold text-sm text-zinc-200 uppercase tracking-widest mb-2 font-mono">🌟 Calidad Asegurada</h4>
-                <p className="text-xs leading-relaxed">
-                  Todos los productos que visualizas pasan por un control estricto de empaque y selección. Ofrecemos cambio de talle inmediato dentro de las 72 horas de recibida tu compra.
+              <div className="space-y-2 group">
+                <h4 className={`font-bold text-xs uppercase tracking-[0.14em] font-mono transition-all duration-300 ${
+                  store.settings.themeMode === "dark" ? "text-zinc-100 group-hover:text-[#5346ff]" : "text-slate-850 group-hover:text-indigo-600"
+                }`}>
+                  {store.settings.footerCol2Title || "🌟 Calidad Asegurada"}
+                </h4>
+                <p className="text-xs leading-relaxed opacity-85 hover:opacity-100 transition-opacity">
+                  {store.settings.footerCol2Text || "Todos los productos que visualizas pasan por un control estricto de empaque y selección. Ofrecemos cambio de talle inmediato dentro de las 72 horas de recibida tu compra."}
                 </p>
               </div>
-              <div>
-                <h4 className="font-bold text-sm text-zinc-200 uppercase tracking-widest mb-2 font-mono">📞 Soporte Directo</h4>
-                <p className="text-xs leading-relaxed">
-                  ¿Habiendo dudas con talles o stock rápido? Pícale al botón de consulta express en la ficha de cada producto y un asesor te responderá inmediatamente en WhatsApp.
+              <div className="space-y-2 group">
+                <h4 className={`font-bold text-xs uppercase tracking-[0.14em] font-mono transition-all duration-300 ${
+                  store.settings.themeMode === "dark" ? "text-zinc-100 group-hover:text-[#5346ff]" : "text-slate-850 group-hover:text-indigo-600"
+                }`}>
+                  {store.settings.footerCol3Title || "📞 Soporte Directo"}
+                </h4>
+                <p className="text-xs leading-relaxed opacity-85 hover:opacity-100 transition-opacity">
+                  {store.settings.footerCol3Text || "¿Habiendo dudas con talles o stock rápido? Pícale al botón de consulta express en la ficha de cada producto y un asesor te responderá inmediatamente en WhatsApp."}
                 </p>
               </div>
             </div>
             <div className="max-w-7xl mx-auto px-6 mt-8 pt-8 border-t border-zinc-800/10 text-center text-[11px] space-y-2">
-              <p>&copy; 2026 {store.settings.siteTitle}. Desarrollado con tecnología de punta responsive. Reservados todos los derechos.</p>
+              <p className="leading-relaxed opacity-75">
+                &copy; 2026 {store.settings.siteTitle}. {store.settings.footerCopyright || "Desarrollado con tecnología de punta responsive. Reservados todos los derechos."}
+              </p>
               {!authToken && (
                 <button
                   onClick={() => setIsLoginModalOpen(true)}
@@ -2347,6 +2367,109 @@ export default function App() {
 
                     <hr className="border-slate-100 dark:border-zinc-850 my-4" />
 
+                    {/* Footer Customizer Card */}
+                    <div className="border border-slate-200 dark:border-zinc-800 rounded-xl p-4 bg-slate-50/55 dark:bg-zinc-900/40 space-y-4">
+                      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-zinc-800 pb-2">
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-zinc-200">
+                          Personalización del Pie de Página (Footer)
+                        </span>
+                      </div>
+
+                      <div className="space-y-4">
+                        {/* Columna 1 */}
+                        <div className="p-3 bg-white dark:bg-zinc-950/70 border border-slate-150 dark:border-zinc-850 rounded-xl space-y-2.5">
+                          <label className="block text-[10px] font-black text-blue-500 uppercase tracking-widest">Columna 1: Información de Envío o Compra</label>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div className="md:col-span-1">
+                              <label className="block text-[9px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase mb-1">Título</label>
+                              <input
+                                type="text"
+                                value={editingSettings.footerCol1Title || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, footerCol1Title: e.target.value })}
+                                className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
+                                placeholder="🚀 Compra Personalizada"
+                              />
+                            </div>
+                            <div className="md:col-span-2">
+                              <label className="block text-[9px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase mb-1">Descripción corta o Detalles</label>
+                              <textarea
+                                value={editingSettings.footerCol1Text || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, footerCol1Text: e.target.value })}
+                                className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white h-[68px] resize-none"
+                                placeholder="Detalles de compra personalizada o envíos..."
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Columna 2 */}
+                        <div className="p-3 bg-white dark:bg-zinc-950/70 border border-slate-150 dark:border-zinc-850 rounded-xl space-y-2.5">
+                          <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest">Columna 2: Calidad o Garantía</label>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div className="md:col-span-1">
+                              <label className="block text-[9px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase mb-1">Título</label>
+                              <input
+                                type="text"
+                                value={editingSettings.footerCol2Title || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, footerCol2Title: e.target.value })}
+                                className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
+                                placeholder="🌟 Calidad Asegurada"
+                              />
+                            </div>
+                            <div className="md:col-span-2">
+                              <label className="block text-[9px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase mb-1">Descripción corta o Políticas</label>
+                              <textarea
+                                value={editingSettings.footerCol2Text || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, footerCol2Text: e.target.value })}
+                                className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white h-[68px] resize-none"
+                                placeholder="Políticas de cambio de talle, calidad..."
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Columna 3 */}
+                        <div className="p-3 bg-white dark:bg-zinc-950/70 border border-slate-150 dark:border-zinc-850 rounded-xl space-y-2.5">
+                          <label className="block text-[10px] font-black text-pink-500 uppercase tracking-widest">Columna 3: Información de Contacto / Soporte</label>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div className="md:col-span-1">
+                              <label className="block text-[9px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase mb-1">Título</label>
+                              <input
+                                type="text"
+                                value={editingSettings.footerCol3Title || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, footerCol3Title: e.target.value })}
+                                className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
+                                placeholder="📞 Soporte Directo"
+                              />
+                            </div>
+                            <div className="md:col-span-2">
+                              <label className="block text-[9px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase mb-1">Descripción corta o Canales</label>
+                              <textarea
+                                value={editingSettings.footerCol3Text || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, footerCol3Text: e.target.value })}
+                                className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white h-[68px] resize-none"
+                                placeholder="Canales de soporte directo por WhatsApp..."
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Copyright */}
+                        <div className="p-3 bg-white dark:bg-zinc-950/70 border border-slate-150 dark:border-zinc-850 rounded-xl">
+                          <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Texto del Copyright (Derechos Reservados)</label>
+                          <input
+                            type="text"
+                            value={editingSettings.footerCopyright || ""}
+                            onChange={(e) => setEditingSettings({ ...editingSettings, footerCopyright: e.target.value })}
+                            className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
+                            placeholder="Desarrollado con tecnología de punta responsive. Reservados todos los derechos."
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <hr className="border-slate-100 dark:border-zinc-850 my-4" />
+
                     <div className="grid grid-cols-3 gap-4">
                       <div>
                         <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Color Primario</label>
@@ -2679,7 +2802,7 @@ export default function App() {
                             .filter(s => s.categoria_id === newProduct.categoria_id)
                             .map((s) => (
                               <option key={s.id} value={s.id}>
-                                {s.nombre}
+                                {s.nombre} {s.active === false ? " (Inactiva)" : ""}
                               </option>
                             ))}
                         </select>
@@ -3185,7 +3308,7 @@ export default function App() {
                             .filter(s => s.categoria_id === editingProduct.categoria_id)
                             .map((s) => (
                               <option key={s.id} value={s.id}>
-                                {s.nombre}
+                                {s.nombre} {s.active === false ? " (Inactiva)" : ""}
                               </option>
                             ))}
                         </select>
@@ -3825,9 +3948,13 @@ export default function App() {
                                         <div className="flex items-center gap-2">
                                           <span className="text-xs font-bold text-slate-800 dark:text-zinc-200">{cat.nombre}</span>
                                           {cat.active === false ? (
-                                            <span className="text-[9px] bg-red-500/10 text-red-500 px-1.5 rounded font-bold uppercase tracking-wider">Inactiva</span>
+                                            <span className="text-[9px] bg-amber-500/10 text-amber-500 dark:text-amber-400 px-1.5 rounded font-bold uppercase tracking-wider flex items-center gap-1">
+                                              <span>👁</span> Oculta en Web
+                                            </span>
                                           ) : (
-                                            <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-1.5 rounded font-bold uppercase tracking-wider">Activa</span>
+                                            <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-1.5 rounded font-bold uppercase tracking-wider flex items-center gap-1">
+                                              <span>✨</span> Visible en Web
+                                            </span>
                                           )}
                                         </div>
                                         <p className="text-[10px] text-zinc-500 font-semibold mt-0.5">
@@ -3853,7 +3980,7 @@ export default function App() {
                                             : "border-zinc-750 bg-zinc-900/50 hover:bg-zinc-800 text-zinc-450 hover:text-white"
                                         }`}
                                       >
-                                        {cat.active === false ? "Activar" : "Desactivar"}
+                                        {cat.active === false ? "Mostrar en Web" : "Ocultar de Web"}
                                       </button>
                                       
                                       <button
@@ -3890,9 +4017,9 @@ export default function App() {
                                                 <div className="flex items-center gap-1.5 flex-wrap">
                                                   <p className="text-xs font-semibold truncate text-slate-900 dark:text-zinc-300">{sub.nombre}</p>
                                                   {sub.active === false ? (
-                                                    <span className="text-[7.5px] bg-red-500/10 text-red-500 px-1 py-0.2 rounded font-bold uppercase tracking-wider font-mono">Inactiva</span>
+                                                    <span className="text-[7.5px] bg-amber-500/10 text-amber-500 px-1 py-0.2 rounded font-bold uppercase tracking-wider font-mono">Oculta</span>
                                                   ) : (
-                                                    <span className="text-[7.5px] bg-emerald-500/10 text-emerald-400 px-1 py-0.2 rounded font-bold uppercase tracking-wider font-mono">Activa</span>
+                                                    <span className="text-[7.5px] bg-emerald-500/10 text-emerald-400 px-1 py-0.2 rounded font-bold uppercase tracking-wider font-mono">Visible</span>
                                                   )}
                                                 </div>
                                                 <span className="text-[9px] text-zinc-500">
@@ -3912,12 +4039,12 @@ export default function App() {
                                                   }}
                                                   className={`px-1.5 py-0.5 rounded text-[9px] transition cursor-pointer font-bold ${
                                                     sub.active === false 
-                                                      ? "bg-emerald-500/10 hover:bg-emerald-500 hover:text-white text-emerald-400 border border-emerald-500/20 animate-pulse" 
-                                                      : "bg-zinc-800 hover:bg-zinc-700 text-zinc-400"
+                                                      ? "bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-500 border border-amber-500/20" 
+                                                      : "bg-zinc-800 hover:bg-zinc-750 text-zinc-400 hover:text-white"
                                                   }`}
-                                                  title={sub.active === false ? "Activar Subcategoría" : "Desactivar Subcategoría"}
+                                                  title={sub.active === false ? "Mostrar en Web" : "Ocultar en Web"}
                                                 >
-                                                  {sub.active === false ? "Activar" : "Desactivar"}
+                                                  {sub.active === false ? "Mostrar" : "Ocultar"}
                                                 </button>
                                                 <button
                                                   onClick={() => handleStartEditSubcategory(sub)}
@@ -4368,11 +4495,10 @@ export default function App() {
 
                     {/* Main Categories list */}
                     {(store.dbCategories || [])
-                      .filter((c) => c.active !== false)
                       .sort((a, b) => (a.orden || 0) - (b.orden || 0))
                       .map((catObj) => {
                         const isCatActive = selectedCategory === catObj.nombre;
-                        const dbSubs = (store.dbSubcategories || []).filter(sub => sub.categoria_id === catObj.id && sub.active !== false);
+                        const dbSubs = (store.dbSubcategories || []).filter(sub => sub.categoria_id === catObj.id);
                         
                         return (
                           <div key={catObj.id} className="space-y-1">

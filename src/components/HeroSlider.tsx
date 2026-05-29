@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 
 interface HeroSliderProps {
   settings: SiteSettings;
-  onExploreCatalog: () => void;
+  onExploreCatalog: (slideLink?: string) => void;
 }
 
 export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderProps) {
@@ -144,10 +144,10 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
                     className="mt-8 flex flex-wrap items-center justify-center md:justify-start gap-4"
                   >
                     <button
-                      onClick={onExploreCatalog}
+                      onClick={() => onExploreCatalog(slides[currentIndex].buttonLink)}
                       className="py-3 px-6 rounded-xl font-bold text-sm tracking-wide theme-btn-primary shadow-lg hover:shadow-indigo-500/20 cursor-pointer transform hover:-translate-y-0.5 transition"
                     >
-                      Explorar Catálogo
+                      {slides[currentIndex].buttonText || "Explorar Catálogo"}
                     </button>
                   </motion.div>
                 </div>

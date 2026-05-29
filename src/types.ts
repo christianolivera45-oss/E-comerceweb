@@ -34,6 +34,8 @@ export interface HeroSlide {
   title: string;
   subtitle: string;
   imageUrl: string;
+  buttonText?: string;
+  buttonLink?: string;
 }
 
 export interface SiteSettings {

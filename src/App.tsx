@@ -330,6 +330,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"storefront" | "admin">("storefront");
   const [adminSection, setAdminSection] = useState<"general" | "products" | "categories" | "promos" | "security">("general");
   const [searchQuery, setSearchQuery] = useState("");
+  const [bannerProductSearch, setBannerProductSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("todos");
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>("all");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -645,6 +646,12 @@ export default function App() {
     };
   }, []);
 
+  const handleOpenProduct = (prod: Product) => {
+    setSelectedProduct(prod);
+    const newUrl = `${window.location.pathname}?product=${prod.id}`;
+    window.history.pushState(null, "", newUrl);
+  };
+
   const fetchStoreData = async () => {
     try {
       setLoading(true);
@@ -658,6 +665,16 @@ export default function App() {
         setNewSubcategoryParent(data.dbCategories[0].id);
       }
       parseRoute(data.dbCategories);
+      
+      // Auto-open product details modal if query parameter is present
+      const urlParams = new URLSearchParams(window.location.search);
+      const prodId = urlParams.get("product");
+      if (prodId && data.products) {
+        const prod = data.products.find(p => p.id === prodId);
+        if (prod) {
+          setSelectedProduct(prod);
+        }
+      }
     } catch (err: any) {
       console.error(err);
       setErrorMessage("No se pudo sincronizar con la base de datos.");
@@ -1548,8 +1565,50 @@ export default function App() {
           {selectedCategory === "todos" && !searchQuery && (
             <HeroSlider
               settings={store.settings}
-              onExploreCatalog={() => {
-                // Explore block - no scroll behaviors
+              onExploreCatalog={(slideLink) => {
+                if (!slideLink) {
+                  const el = document.getElementById("catalog-view");
+                  if (el) el.scrollIntoView({ behavior: "smooth" });
+                  return;
+                }
+
+                if (slideLink.startsWith("category:")) {
+                  const catName = slideLink.replace("category:", "");
+                  setSelectedCategory(catName);
+                  setSelectedSubcategory("all");
+                  setTimeout(() => {
+                    const el = document.getElementById("catalog-view");
+                    if (el) el.scrollIntoView({ behavior: "smooth" });
+                  }, 100);
+                } else if (slideLink.startsWith("subcategory:")) {
+                  const subId = slideLink.replace("subcategory:", "");
+                  const subcat = (store.dbSubcategories || []).find(s => s.id === subId);
+                  if (subcat) {
+                    const catObj = (store.dbCategories || []).find(c => c.id === subcat.categoria_id);
+                    if (catObj) {
+                      setSelectedCategory(catObj.nombre);
+                    }
+                    setSelectedSubcategory(subId);
+                    setTimeout(() => {
+                      const el = document.getElementById("catalog-view");
+                      if (el) el.scrollIntoView({ behavior: "smooth" });
+                    }, 100);
+                  }
+                } else if (slideLink.startsWith("product:")) {
+                  const prodId = slideLink.replace("product:", "");
+                  const prod = store.products.find(p => p.id === prodId);
+                  if (prod) {
+                    handleOpenProduct(prod);
+                  }
+                } else if (slideLink.startsWith("http://") || slideLink.startsWith("https://")) {
+                  window.open(slideLink, "_blank");
+                } else if (slideLink.startsWith("#") && slideLink.length > 1) {
+                  const el = document.getElementById(slideLink.substring(1));
+                  if (el) el.scrollIntoView({ behavior: "smooth" });
+                } else {
+                  const el = document.getElementById("catalog-view");
+                  if (el) el.scrollIntoView({ behavior: "smooth" });
+                }
               }}
             />
           )}
@@ -1601,7 +1660,7 @@ export default function App() {
                       product={p}
                       settings={store.settings}
                       onAddToCart={(prod, sz, col) => handleAddToCart(prod, sz, col)}
-                      onViewProduct={(prod) => setSelectedProduct(prod)}
+                      onViewProduct={(prod) => handleOpenProduct(prod)}
                     />
                   ))}
                 </div>
@@ -1670,7 +1729,7 @@ export default function App() {
                         product={p}
                         settings={store.settings}
                         onAddToCart={(prod, sz, col) => handleAddToCart(prod, sz, col)}
-                        onViewProduct={(prod) => setSelectedProduct(prod)}
+                        onViewProduct={(prod) => handleOpenProduct(prod)}
                       />
                     ))}
                   </div>
@@ -1714,7 +1773,7 @@ export default function App() {
                           products={catProducts}
                           settings={store.settings}
                           onAddToCart={(prod, sz, col) => handleAddToCart(prod, sz, col)}
-                          onViewProduct={(prod) => setSelectedProduct(prod)}
+                          onViewProduct={(prod) => handleOpenProduct(prod)}
                           emptyIcon={getCategoryIcon(catObj.icono || catObj.nombre)}
                           emptyText={`No se encontraron artículos de ${catObj.nombre}.`}
                           emptySubtext={`Puedes crear artículos desde el panel de productos asignando como categoría "${catObj.nombre}".`}
@@ -2166,7 +2225,7 @@ export default function App() {
                             ]
                         ).map((slide, idx) => {
                           // Helper handler updates editingSettings list inline
-                          const updateSlideField = (field: "title" | "subtitle" | "imageUrl", value: string) => {
+                          const updateSlideField = (field: "title" | "subtitle" | "imageUrl" | "buttonText" | "buttonLink", value: string) => {
                             const currentSlides = editingSettings.heroSlides && editingSettings.heroSlides.length > 0
                               ? [...editingSettings.heroSlides]
                               : [
@@ -2303,18 +2362,138 @@ export default function App() {
                                 </div>
                                 
                                 {/* Quick Unsplash selector for this slide */}
-                                <div className="flex flex-wrap gap-1 mt-1.5">
-                                  <span className="text-[9px] text-zinc-500 self-center">Elegir plantilla premium:</span>
-                                  {UNSPLASH_TEMPLATES.map((tpl) => (
-                                    <button
-                                      key={tpl.title}
-                                      type="button"
-                                      onClick={() => updateSlideField("imageUrl", tpl.url)}
-                                      className="text-[9px] py-0.5 px-1.5 rounded bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 transition-all cursor-pointer"
-                                    >
-                                      {tpl.title}
-                                    </button>
-                                  ))}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 pt-3 border-t border-slate-100 dark:border-zinc-850">
+                                  <div>
+                                    <label className="block text-[9px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
+                                      Texto del Botón (Opcional)
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={slide.buttonText || ""}
+                                      onChange={(e) => updateSlideField("buttonText", e.target.value)}
+                                      className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
+                                      placeholder="ej: Explorar Catálogo (Por defecto)"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[9px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
+                                      Direccionar Botón a (Enlace / Categoría / Producto)
+                                    </label>
+                                    <div className="flex gap-1.5 col-span-1">
+                                      <select
+                                        value={
+                                          slide.buttonLink?.startsWith("category:") 
+                                            ? "category" 
+                                            : slide.buttonLink?.startsWith("subcategory:") 
+                                              ? "subcategory" 
+                                              : slide.buttonLink?.startsWith("product:") 
+                                                ? "product" 
+                                                : slide.buttonLink?.startsWith("http") 
+                                                  ? "external" 
+                                                  : "custom"
+                                        }
+                                        onChange={(e) => {
+                                          const type = e.target.value;
+                                          if (type === "category") {
+                                            const firstCat = (store.dbCategories || [])[0]?.nombre || "todos";
+                                            updateSlideField("buttonLink", `category:${firstCat}`);
+                                          } else if (type === "subcategory") {
+                                            const firstSub = (store.dbSubcategories || [])[0]?.id || "";
+                                            updateSlideField("buttonLink", `subcategory:${firstSub}`);
+                                          } else if (type === "product") {
+                                            const firstProd = store.products[0]?.id || "";
+                                            updateSlideField("buttonLink", `product:${firstProd}`);
+                                          } else if (type === "external") {
+                                            updateSlideField("buttonLink", "https://");
+                                          } else {
+                                            updateSlideField("buttonLink", "");
+                                          }
+                                        }}
+                                        className="px-2 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                                      >
+                                        <option value="custom">Manual / Ninguno</option>
+                                        <option value="category">Categoría</option>
+                                        <option value="subcategory">Subcategoría</option>
+                                        <option value="product">Producto</option>
+                                        <option value="external">Enlace Externo</option>
+                                      </select>
+                                      
+                                      {slide.buttonLink?.startsWith("category:") ? (
+                                        <select
+                                          value={slide.buttonLink.replace("category:", "")}
+                                          onChange={(e) => updateSlideField("buttonLink", `category:${e.target.value}`)}
+                                          className="flex-1 px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer animate-fade-in"
+                                        >
+                                          <option value="todos">Todos los Productos</option>
+                                          {(store.dbCategories || []).map((cat) => (
+                                            <option key={cat.id} value={cat.nombre}>
+                                              {cat.nombre}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      ) : slide.buttonLink?.startsWith("subcategory:") ? (
+                                        <select
+                                          value={slide.buttonLink.replace("subcategory:", "")}
+                                          onChange={(e) => updateSlideField("buttonLink", `subcategory:${e.target.value}`)}
+                                          className="flex-1 px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer animate-fade-in"
+                                        >
+                                          {(store.dbSubcategories || []).map((sub) => (
+                                            <option key={sub.id} value={sub.id}>
+                                              {sub.nombre} ({ (store.dbCategories || []).find(c => c.id === sub.categoria_id)?.nombre || "Sin cat" })
+                                            </option>
+                                          ))}
+                                        </select>
+                                      ) : slide.buttonLink?.startsWith("product:") ? (
+                                        <div className="flex-1 flex flex-col gap-1.5 animate-fade-in col-span-1">
+                                          <div className="flex gap-1.5">
+                                            <input
+                                              type="text"
+                                              value={bannerProductSearch}
+                                              onChange={(e) => setBannerProductSearch(e.target.value)}
+                                              placeholder="🔍 Buscar producto..."
+                                              className="w-full px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200/60 dark:bg-zinc-850 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 rounded text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-blue-500"
+                                            />
+                                            {bannerProductSearch && (
+                                              <button
+                                                type="button"
+                                                onClick={() => setBannerProductSearch("")}
+                                                className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded text-[10px] font-bold"
+                                              >
+                                                Borrar
+                                              </button>
+                                            )}
+                                          </div>
+                                          
+                                          <select
+                                            value={slide.buttonLink.replace("product:", "")}
+                                            onChange={(e) => updateSlideField("buttonLink", `product:${e.target.value}`)}
+                                            className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                                          >
+                                            <option value="">-- Seleccionar producto --</option>
+                                            {store.products
+                                              .filter(p => !bannerProductSearch || p.name.toLowerCase().includes(bannerProductSearch.toLowerCase()) || p.category?.toLowerCase().includes(bannerProductSearch.toLowerCase()))
+                                              .map((p) => (
+                                                <option key={p.id} value={p.id}>
+                                                  {p.name} (${Number(p.price || 0).toFixed(2)})
+                                                </option>
+                                              ))}
+                                          </select>
+                                          
+                                          <span className="text-[9px] text-zinc-400 italic">
+                                            {store.products.filter(p => !bannerProductSearch || p.name.toLowerCase().includes(bannerProductSearch.toLowerCase()) || p.category?.toLowerCase().includes(bannerProductSearch.toLowerCase())).length} de {store.products.length} productos en lista
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <input
+                                          type="text"
+                                          value={slide.buttonLink || ""}
+                                          onChange={(e) => updateSlideField("buttonLink", e.target.value)}
+                                          className="flex-1 px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono"
+                                          placeholder="ej: #catalog-view o URL completa"
+                                        />
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -4239,7 +4418,7 @@ export default function App() {
               </div>
 
               {/* SECTION B: LIVE PREVIEW COLUMN - EXTREMELY SOPHISTICATED LOOK */}
-              <div className="lg:col-span-5 flex flex-col gap-3 sticky top-4">
+              <div className="hidden lg:flex lg:col-span-5 flex-col gap-3 sticky top-4">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1">
                     <Smartphone className="h-4 w-4" />
@@ -4620,10 +4799,16 @@ export default function App() {
       {selectedProduct && (
         <ProductDetails
           product={selectedProduct}
-          onClose={() => setSelectedProduct(null)}
+          onClose={() => {
+            setSelectedProduct(null);
+            const newUrl = window.location.pathname;
+            window.history.pushState(null, "", newUrl);
+          }}
           onAddToCart={(p, sz, col, qty) => {
             handleAddToCart(p, sz, col, qty);
             setSelectedProduct(null);
+            const newUrl = window.location.pathname;
+            window.history.pushState(null, "", newUrl);
           }}
           settings={store.settings}
         />

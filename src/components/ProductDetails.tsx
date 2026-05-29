@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, ShoppingCart, MessageSquare, ShieldCheck, Truck, RefreshCw, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react";
+import { X, ShoppingCart, MessageSquare, ShieldCheck, Truck, RefreshCw, ChevronLeft, ChevronRight, AlertCircle, Share2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Product, SiteSettings } from "../types";
 
@@ -47,6 +47,7 @@ export default function ProductDetails({
 
   const [quantity, setQuantity] = useState(1);
   const [addedMessage, setAddedMessage] = useState(false);
+  const [copiedShare, setCopiedShare] = useState(false);
 
   // Dynamic stock calculations based on Cartesian variant mapping
   let currentStock = product.stock;
@@ -409,6 +410,24 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
             >
               <MessageSquare className="h-4 w-4 text-emerald-500" />
               Consultar disponibilidad por WhatsApp
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const url = `${window.location.origin}?product=${product.id}`;
+                navigator.clipboard.writeText(url);
+                setCopiedShare(true);
+                setTimeout(() => setCopiedShare(false), 2500);
+              }}
+              className={`w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl font-bold text-xs border cursor-pointer transition-all duration-200 select-none ${
+                isThemeDark 
+                  ? "border-zinc-800 text-zinc-300 hover:bg-zinc-850 hover:border-zinc-700 bg-zinc-900" 
+                  : "border-slate-200 text-zinc-650 hover:bg-slate-50 bg-white"
+              }`}
+            >
+              <Share2 className="h-4 w-4 text-sky-500" />
+              {copiedShare ? "¡Enlace de Producto Copiado!" : "Compartir / Copiar enlace"}
             </button>
 
             {addedMessage && (

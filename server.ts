@@ -1,3 +1,5 @@
+import dotenv from "dotenv";
+dotenv.config({ override: true });
 import express from "express";
 import path from "path";
 import fs from "fs";
@@ -174,6 +176,10 @@ let currentStoreState: ShopState = process.env.DATABASE_URL
 // Helper to ensure data directory and file exist
 function initDataStore(): ShopState {
   const isPostgresActive = !!process.env.DATABASE_URL;
+  if (isPostgresActive) {
+    // Si la base de datos PostgreSQL/Supabase externa está configurada, evitamos tocar o crear archivos locales.
+    return { ...DEFAULT_SHOP_STATE, products: [] };
+  }
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -304,7 +310,13 @@ function writeDiagnosticReport(errorMsg?: string) {
 
 function getDbPool() {
   if (!dbPool && process.env.DATABASE_URL) {
-    const url = process.env.DATABASE_URL.trim();
+    let url = process.env.DATABASE_URL.trim();
+    if (url.startsWith('"') && url.endsWith('"')) {
+      url = url.substring(1, url.length - 1);
+    }
+    if (url.startsWith("'") && url.endsWith("'")) {
+      url = url.substring(1, url.length - 1);
+    }
     if (url.startsWith("AIzaSy")) {
       console.error("⛔️ ALERTA CRÍTICA DE CONFIGURACIÓN:");
       console.error("La variable DATABASE_URL está configurada con una API Key de Gemini (empieza con 'AIzaSy') en lugar de la cadena de conexión de Supabase.");
@@ -855,7 +867,7 @@ async function initPostgresStore(): Promise<ShopState | null> {
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  const PORT = 3000;
 
   app.use(express.json({ limit: "15mb" })); // Support large images or custom payloads
 
@@ -917,8 +929,9 @@ async function startServer() {
         }
 
         try {
-          fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
-          if (process.env.DATABASE_URL) {
+          if (!process.env.DATABASE_URL) {
+            fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+          } else {
             await saveDbState(currentStoreState);
           }
         } catch (e) {}
@@ -994,8 +1007,9 @@ async function startServer() {
     };
 
     try {
-      fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
-      if (process.env.DATABASE_URL) {
+      if (!process.env.DATABASE_URL) {
+        fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+      } else {
         await saveDbState(currentStoreState);
       }
       res.json({
@@ -1046,15 +1060,14 @@ async function startServer() {
         coupons: coupons || currentStoreState.coupons
       };
       
-      // Guardar en archivo local como respaldo
-      try {
-        fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
-      } catch (fsErr) {
-        console.error("Error al escribir respaldo en archivo local:", fsErr);
-      }
-
-      // Guardar en la base de datos PostgreSQL si está definido
-      if (process.env.DATABASE_URL) {
+      // Guardar en archivo local como respaldo o guardar en base de datos
+      if (!process.env.DATABASE_URL) {
+        try {
+          fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+        } catch (fsErr) {
+          console.error("Error al escribir respaldo en archivo local:", fsErr);
+        }
+      } else {
         const saved = await saveDbState(currentStoreState);
         if (saved) {
           // Re-load to get actual database-assigned auto-incremented integer IDs!

@@ -61,6 +61,7 @@ export interface SiteSettings {
   footerCol3Title?: string;
   footerCol3Text?: string;
   footerCopyright?: string;
+  lowStockThreshold?: number;
 }
 
 export interface Category {

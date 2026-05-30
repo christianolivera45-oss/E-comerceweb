@@ -20,6 +20,8 @@ export default function ProductCard({
     ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100)
     : 0;
 
+  const lowStockThreshold = typeof settings?.lowStockThreshold === 'number' ? settings.lowStockThreshold : 5;
+
   return (
     <div
       className={`group relative flex flex-col rounded-2xl border overflow-hidden transition-all duration-300 hover:shadow-xl hover:shadow-black/20 ${
@@ -49,8 +51,8 @@ export default function ProductCard({
         )}
 
         {/* Stock warning */}
-        {product.stock <= 5 && product.stock > 0 && (
-          <div className="absolute top-2 right-2 sm:top-3 sm:right-3 bg-amber-500/90 text-zinc-950 font-sans text-[8.5px] sm:text-[10px] font-extrabold px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded-full tracking-wide shadow-md z-10">
+        {product.stock <= lowStockThreshold && product.stock > 0 && (
+          <div className="absolute top-2 right-2 sm:top-3 sm:right-3 bg-amber-500/90 text-zinc-950 font-sans text-[8.5px] sm:text-[10px] font-extrabold px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded-full tracking-wide shadow-md z-10 font-bold">
             ÚLTIMAS {product.stock}U
           </div>
         )}

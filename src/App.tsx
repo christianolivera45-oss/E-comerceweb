@@ -40,7 +40,9 @@ import {
   HelpCircle,
   Menu,
   X,
-  ChevronRight
+  ChevronRight,
+  TrendingUp,
+  TrendingDown
 } from "lucide-react";
 import { Product, SiteSettings, ShopState, CartItem, Category, Subcategory, ProductVariant } from "./types";
 import ThemeStyles from "./components/ThemeStyles";
@@ -50,6 +52,7 @@ import ProductDetails from "./components/ProductDetails";
 import CartDrawer from "./components/CartDrawer";
 import HeroSlider from "./components/HeroSlider";
 import SecurityPanel from "./components/SecurityPanel";
+import { DashboardGeneral } from "./components/DashboardGeneral";
 import WhatsAppWidget from "./components/WhatsAppWidget";
 import ImageGalleryEditor from "./components/ImageGalleryEditor";
 
@@ -65,6 +68,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   themeMode: "dark",
   promotionBannerText: "🚚 ¡ENVÍO GRATUITO en compras superiores a $50! Código: JUEM50",
   showPromotionBanner: true,
+  lowStockThreshold: 5,
   heroSlides: [
     {
       id: "slide-1",
@@ -328,7 +332,7 @@ export default function App() {
 
   // Search & Navigation
   const [activeTab, setActiveTab] = useState<"storefront" | "admin">("storefront");
-  const [adminSection, setAdminSection] = useState<"general" | "products" | "categories" | "promos" | "security">("general");
+  const [adminSection, setAdminSection] = useState<"general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer">("dashboard");
   const [searchQuery, setSearchQuery] = useState("");
   const [bannerProductSearch, setBannerProductSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("todos");
@@ -336,6 +340,12 @@ export default function App() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [scrolled, setScrolled] = useState(false);
+
+  // Sorting & Filtering States
+  const [sortBy, setSortBy] = useState<string>("featured");
+  const [onlyInStock, setOnlyInStock] = useState<boolean>(false);
+  const [showFiltersPanel, setShowFiltersPanel] = useState<boolean>(false);
+  const [stockFilterTab, setStockFilterTab] = useState<"all" | "outOfStock" | "lowStock" | "alerts">("alerts");
 
   // Helper to verify admin token with backend
   const verifyAdminToken = async (token: string) => {
@@ -361,7 +371,7 @@ export default function App() {
     }
   };
 
-  const navigateAdminSection = (section: "general" | "products" | "categories" | "promos" | "security") => {
+  const navigateAdminSection = (section: "general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer") => {
     setAdminSection(section);
     setEditingProduct(null);
     setIsNewProductMode(false);
@@ -383,7 +393,11 @@ export default function App() {
       else if (sub === "categories") setAdminSection("categories");
       else if (sub === "promos") setAdminSection("promos");
       else if (sub === "security") setAdminSection("security");
-      else setAdminSection("general");
+      else if (sub === "stock") setAdminSection("stock");
+      else if (sub === "dashboard") setAdminSection("dashboard");
+      else if (sub === "banner") setAdminSection("banner");
+      else if (sub === "footer") setAdminSection("footer");
+      else setAdminSection("dashboard");
 
       // Verify session token integrity on every URL change
       const token = localStorage.getItem("apex_admin_token");
@@ -939,6 +953,26 @@ export default function App() {
     saveStateToServer(updatedState);
   };
 
+  const handleQuickUpdateStock = (productId: string, newStock: number) => {
+    const updatedProducts = store.products.map((p) => {
+      if (p.id === productId) {
+        return { ...p, stock: Math.max(0, newStock) };
+      }
+      return p;
+    });
+    const updatedState = { ...store, products: updatedProducts };
+    saveStateToServer(updatedState);
+    showAdminToast("Stock rápido actualizado con éxito.", "success");
+  };
+
+  const handleSaveLowStockThreshold = (newThreshold: number) => {
+    const updatedSettings = { ...store.settings, lowStockThreshold: newThreshold };
+    const updatedState = { ...store, settings: updatedSettings };
+    saveStateToServer(updatedState);
+    setEditingSettings(updatedSettings);
+    showAdminToast(`Límite de stock bajo configurado: ${newThreshold} unidades.`, "success");
+  };
+
   // CRUD handlers - Coupons
   const handleAddCoupon = (e: FormEvent) => {
     e.preventDefault();
@@ -1227,9 +1261,15 @@ export default function App() {
     { title: "Accesorios 2", url: "https://images.unsplash.com/photo-1511499767150-a48a237f0083?auto=format&fit=crop&w=800&q=80" }
   ];
 
+  // Business Stock Alerts Logic
+  const lowStockThresholdSetting = typeof store.settings?.lowStockThreshold === 'number' ? store.settings.lowStockThreshold : 5;
+  const outOfStockProducts = store.products.filter(p => p.active !== false && p.stock <= 0);
+  const lowStockProducts = store.products.filter(p => p.active !== false && p.stock > 0 && p.stock <= lowStockThresholdSetting);
+  const totalStockAlerts = outOfStockProducts.length + lowStockProducts.length;
+
   // Filtering products for listing
   const filteredProducts = store.products.filter((p) => {
-    if (p.paused) return false;
+    if (p.paused || p.active === false) return false;
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           p.description.toLowerCase().includes(searchQuery.toLowerCase());
     
@@ -1265,8 +1305,32 @@ export default function App() {
         }
       }
     }
+
+    // Stock Filter
+    if (onlyInStock && p.stock <= 0) {
+      return false;
+    }
     
     return matchesSearch && matchesCategory;
+  });
+
+  // Apply sorting options
+  const sortedProducts = [...filteredProducts].sort((a, b) => {
+    if (sortBy === "price-asc") {
+      return a.price - b.price;
+    }
+    if (sortBy === "price-desc") {
+      return b.price - a.price;
+    }
+    if (sortBy === "newest") {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    }
+    // Default: Featured
+    if (sortBy === "featured") {
+      if (a.featured && !b.featured) return -1;
+      if (!a.featured && b.featured) return 1;
+    }
+    return 0;
   });
 
   const featuredProducts = store.products.filter((p) => p.featured && !p.paused);
@@ -1615,7 +1679,7 @@ export default function App() {
 
           {/* Search bar container */}
           <section id="catalog-view" className="py-8 max-w-7xl mx-auto px-6 w-full flex-1">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 border-b pb-8 border-zinc-200/50 dark:border-zinc-800/50">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6 border-b pb-6 border-zinc-200/50 dark:border-zinc-800/50">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1.5">
                   <span className="w-1.5 h-4 bg-indigo-500 rounded-full"></span>
@@ -1626,24 +1690,153 @@ export default function App() {
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">Encuentra prendas de vestir, tecnología y accesorios al instante.</p>
               </div>
 
-              {/* Simple Search bar */}
-              <div className="w-full md:w-80 shrink-0">
-                <div className="relative">
+              {/* Premium Search, Sorting & Stock Filter Bar */}
+              <div className="w-full md:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+                <div className="relative w-full md:w-80">
                   <input
                     type="text"
-                    placeholder="Buscar por nombre, talle, color o marca..."
+                    placeholder="Buscar por nombre, descripción o marca..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className={`w-full pl-9 pr-4 py-3 rounded-xl text-xs outline-none border transition-all ${
+                    className={`w-full pl-9 pr-10 py-3 rounded-xl text-xs outline-none border transition-all ${
                       store.settings.themeMode === "dark"
                         ? "bg-zinc-900 border-zinc-800 text-white placeholder-zinc-500 focus:border-zinc-700 focus:bg-zinc-950"
                         : "bg-slate-50 border-slate-150 text-slate-800 focus:bg-white focus:border-blue-400"
                     }`}
                   />
                   <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white text-xs font-bold font-mono cursor-pointer"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
+
+                {/* Show elegant Filtros & Orden button ONLY when a category is selected */}
+                {selectedCategory !== "todos" && (
+                  <button
+                    id="btn-advanced-filters"
+                    onClick={() => setShowFiltersPanel(!showFiltersPanel)}
+                    className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-xs font-bold transition-all border cursor-pointer select-none ${
+                      showFiltersPanel || onlyInStock || sortBy !== "featured"
+                        ? "theme-btn-accent text-zinc-950 border-transparent shadow-sm scale-102"
+                        : store.settings.themeMode === "dark"
+                        ? "bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-850"
+                        : "bg-slate-100 border-slate-200 text-zinc-700 hover:bg-slate-200"
+                    }`}
+                  >
+                    <Sliders className="h-4 w-4" />
+                    <span>Filtros & Orden</span>
+                    {(onlyInStock || sortBy !== "featured") && (
+                      <span className="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
+
+            {/* Collapsible advanced filters panel (Only shown inside a category) */}
+            <AnimatePresence>
+              {selectedCategory !== "todos" && showFiltersPanel && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.25, ease: "easeInOut" }}
+                  className="overflow-hidden pb-6 border-b border-zinc-200/50 dark:border-zinc-800/50 mb-6"
+                >
+                  <div className={`p-5 rounded-2xl border ${
+                    store.settings.themeMode === "dark"
+                      ? "bg-zinc-950/40 border-zinc-900"
+                      : "bg-slate-50/50 border-slate-150"
+                  } grid grid-cols-1 sm:grid-cols-2 gap-6`}>
+                    
+                    {/* Collapsible Sorting options */}
+                    <div>
+                      <h4 className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3">
+                        Ordenar por
+                      </h4>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: "featured", label: "Destacados ⭐" },
+                          { id: "price-asc", label: "Menor Precio 📈" },
+                          { id: "price-desc", label: "Mayor Precio 📉" },
+                          { id: "newest", label: "Más Recientes 📅" }
+                        ].map(option => (
+                          <button
+                            key={option.id}
+                            onClick={() => setSortBy(option.id)}
+                            className={`px-3 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-205 text-center ${
+                              sortBy === option.id
+                                ? "theme-btn-primary text-white scale-[1.01]"
+                                : store.settings.themeMode === "dark"
+                                ? "bg-zinc-900/50 text-zinc-400 hover:bg-zinc-900 hover:text-white border border-zinc-800"
+                                : "bg-slate-100 text-zinc-650 hover:bg-slate-200/60 hover:text-zinc-900 border border-slate-200"
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Stock switch availability */}
+                    <div className="flex flex-col justify-center">
+                      <h4 className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3 font-semibold">
+                        Disponibilidad
+                      </h4>
+                      <div className="block">
+                        <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={onlyInStock}
+                            onChange={(e) => setOnlyInStock(e.target.checked)}
+                            className="rounded border-zinc-300 dark:border-zinc-850 text-indigo-600 focus:ring-indigo-550 h-4 w-4 pointer-events-auto cursor-pointer"
+                          />
+                          <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Mostrar solo productos con Stock disponible</span>
+                        </label>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Clean filters notification strip */}
+                  {(onlyInStock || sortBy !== "featured") && (
+                    <div className="flex items-center justify-between gap-3 mt-4 px-2">
+                      <span className="text-[11px] text-indigo-400 font-semibold">✨ Filtro rápido activo para ordenar tu catálogo</span>
+                      <button
+                        onClick={() => {
+                          setOnlyInStock(false);
+                          setSortBy("featured");
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold text-red-500 hover:bg-red-500/10 cursor-pointer transition-colors"
+                      >
+                        Limpiar Selección ×
+                      </button>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Clean current filters notification strip on non-panel view */}
+            {selectedCategory !== "todos" && !showFiltersPanel && (onlyInStock || sortBy !== "featured") && (
+              <div className="flex items-center justify-between gap-3 pb-4 border-b border-zinc-200/50 dark:border-zinc-800/50 mb-6 px-1">
+                <span className="text-[11px] text-indigo-400 font-semibold">✨ Filtro rápido activo para ordenar tu catálogo</span>
+                <button
+                  onClick={() => {
+                    setOnlyInStock(false);
+                    setSortBy("featured");
+                  }}
+                  className="px-3 py-1 rounded-lg text-xs font-bold text-red-500 hover:bg-red-500/10 cursor-pointer transition-colors"
+                >
+                  Limpiar Orden ×
+                </button>
+              </div>
+            )}
 
             {/* Featured Showcase if there are products marked featured */}
             {featuredProducts.length > 0 && selectedCategory === "todos" && !searchQuery && (
@@ -1667,8 +1860,8 @@ export default function App() {
               </div>
             )}
 
-            {/* If there's an active search query OR a specific category selected, show a single filtered grid view */}
-            {(selectedCategory !== "todos" || searchQuery) ? (
+            {/* If there's an active filter query, category, or custom sorting, show a single filtered/sorted grid view */}
+            {(selectedCategory !== "todos" || searchQuery || onlyInStock || sortBy !== "featured") ? (
               <>
                 <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
                   <div className="flex items-center gap-2">
@@ -1676,7 +1869,7 @@ export default function App() {
                     <h3 className="text-xl font-bold tracking-tight">
                       {searchQuery ? (
                         "Resultados de Búsqueda"
-                      ) : (
+                      ) : selectedCategory !== "todos" ? (
                         <span className="inline-flex items-center gap-1.5">
                           <span>{getCategoryDisplayName(selectedCategory)}</span>
                           {selectedSubcategory && selectedSubcategory !== "all" && (
@@ -1688,15 +1881,19 @@ export default function App() {
                             </>
                           )}
                         </span>
+                      ) : (
+                        "Catálogo de Productos"
                       )}
                     </h3>
-                    <span className="text-xs font-mono text-zinc-500 dark:text-zinc-400">({filteredProducts.length} productos)</span>
+                    <span className="text-xs font-mono text-zinc-500 dark:text-zinc-400">({sortedProducts.length} productos)</span>
                   </div>
 
                   <button
                     onClick={() => {
                       navigateToProductRoute("todos", "all");
                       setSearchQuery("");
+                      setOnlyInStock(false);
+                      setSortBy("featured");
                     }}
                     className="text-xs text-indigo-500 hover:underline transition-all cursor-pointer font-bold"
                   >
@@ -1704,7 +1901,7 @@ export default function App() {
                   </button>
                 </div>
 
-                {filteredProducts.length === 0 ? (
+                {sortedProducts.length === 0 ? (
                   <div className={`p-16 text-center rounded-2xl border border-dashed ${
                     store.settings.themeMode === "dark" ? "border-zinc-800 text-zinc-500" : "border-slate-200 text-slate-400"
                   }`}>
@@ -1715,6 +1912,8 @@ export default function App() {
                       onClick={() => {
                         navigateToProductRoute("todos", "all");
                         setSearchQuery("");
+                        setOnlyInStock(false);
+                        setSortBy("featured");
                       }}
                       className="mt-4 px-4 py-2 rounded-xl text-xs theme-btn-primary inline-block font-semibold pointer-events-auto cursor-pointer"
                     >
@@ -1723,7 +1922,7 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
-                    {filteredProducts.map((p) => (
+                    {sortedProducts.map((p) => (
                       <ProductCard
                         key={p.id}
                         product={p}
@@ -1920,6 +2119,18 @@ export default function App() {
               <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-4 px-3">
                 Gestión Operativa
               </div>
+
+              <button
+                onClick={() => navigateAdminSection("dashboard")}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
+                  adminSection === "dashboard"
+                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
+                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                }`}
+              >
+                <TrendingUp className="h-4 w-4" />
+                <span>Dashboard de Negocio 📊</span>
+              </button>
               
               <button
                 onClick={() => navigateAdminSection("general")}
@@ -1929,8 +2140,32 @@ export default function App() {
                     : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
                 }`}
               >
+                <Palette className="h-4 w-4" />
+                <span>Identidad de Marca🎨</span>
+              </button>
+
+              <button
+                onClick={() => navigateAdminSection("banner")}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
+                  adminSection === "banner"
+                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
+                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                }`}
+              >
+                <Image className="h-4 w-4" />
+                <span>Banners y Carrusel 📷</span>
+              </button>
+
+              <button
+                onClick={() => navigateAdminSection("footer")}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
+                  adminSection === "footer"
+                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
+                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                }`}
+              >
                 <Layout className="h-4 w-4" />
-                <span>Branding y Configuración</span>
+                <span>Pie de Página (Footer) 👣</span>
               </button>
 
               <button
@@ -1943,6 +2178,29 @@ export default function App() {
               >
                 <Grid className="h-4 w-4" />
                 <span>Catálogo de Productos ({store.products.length})</span>
+              </button>
+
+              <button
+                onClick={() => navigateAdminSection("stock")}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
+                  adminSection === "stock"
+                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
+                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Box className="h-4 w-4" />
+                  <span>Gestión de Stock</span>
+                </div>
+                {totalStockAlerts > 0 && (
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                    outOfStockProducts.length > 0
+                      ? "bg-red-500 text-white"
+                      : "bg-amber-500 text-zinc-950"
+                  }`}>
+                    {totalStockAlerts}
+                  </span>
+                )}
               </button>
 
               <button
@@ -2020,11 +2278,15 @@ export default function App() {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-3 shrink-0">
               <div>
                 <h2 className="text-2xl font-bold font-sans text-slate-900 dark:text-white">
-                  {adminSection === "general" && "Personalización Visual & Branding"}
+                  {adminSection === "dashboard" && "Resumen de Métricas & Dashboard de Negocio"}
+                  {adminSection === "general" && "Identidad de Marca, Tipografías & Colores"}
+                  {adminSection === "banner" && "Control del Slider y Banners Principales"}
+                  {adminSection === "footer" && "Configuración de Columnas del Pie de Página"}
                   {adminSection === "products" && "Catálogo General de Productos"}
                   {adminSection === "categories" && "Configuración de Categorías de Tienda"}
                   {adminSection === "promos" && "Promociones y Administrador de Cupones"}
                   {adminSection === "security" && "Seguridad y Control de Acceso"}
+                  {adminSection === "stock" && "Control y Alertas de Stock Bajo"}
                 </h2>
                 <p className="text-slate-500 dark:text-zinc-400 text-xs">
                   Modifica los contenidos de tu tienda en tiempo real. Los cambios se sincronizarán directamente con tu base de datos central sin tocar código.
@@ -2068,7 +2330,16 @@ export default function App() {
             )}
 
             {/* DYNAMIC SECTIONS GRID */}
-            <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {adminSection === "dashboard" ? (
+              <DashboardGeneral
+                store={store}
+                navigateAdminSection={navigateAdminSection}
+                setStockFilterTab={setStockFilterTab}
+                setIsNewProductMode={setIsNewProductMode}
+                setEditingProduct={(p) => setEditingProduct(p as any)}
+              />
+            ) : (
+              <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               
               {/* SECTION A: THE PRINCIPAL CONTROL FORM */}
               <div className="lg:col-span-7 space-y-4">
@@ -2186,7 +2457,25 @@ export default function App() {
                       </div>
                     </div>
 
-                    <hr className="border-slate-100 dark:border-zinc-850 my-4" />
+                    <div className="pt-4 flex justify-end">
+                      <button
+                        onClick={handleSaveSettings}
+                        disabled={saving}
+                        className="py-2.5 px-6 bg-blue-600 text-white rounded-lg font-semibold text-xs transition-all hover:bg-blue-700 hover:scale-[1.01] active:scale-[0.99] flex items-center gap-1.5 cursor-pointer shadow-md"
+                      >
+                        <Save className="h-4 w-4" />
+                        <span>{saving ? "Guardando..." : "Guardar Personalización"}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {adminSection === "banner" && (
+                  <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4 animate-fade-in">
+                    <div className="flex items-center gap-2 border-b border-zinc-800/10 dark:border-zinc-800 pb-3 mb-2">
+                      <Image className="h-4 w-4 theme-text-primary" />
+                      <h3 className="font-bold text-sm text-slate-950 dark:text-zinc-150 font-sans">Banners del Carrusel de Tienda</h3>
+                    </div>
 
                     {/* Carousel Slides Manager in Admin Section */}
                     <div className="border border-slate-200 dark:border-zinc-800 rounded-xl p-4 bg-slate-50/50 dark:bg-zinc-900/30 space-y-4">
@@ -2544,7 +2833,25 @@ export default function App() {
                       </div>
                     </div>
 
-                    <hr className="border-slate-100 dark:border-zinc-850 my-4" />
+                    <div className="pt-4 flex justify-end">
+                      <button
+                        onClick={handleSaveSettings}
+                        disabled={saving}
+                        className="py-2.5 px-6 bg-blue-600 text-white rounded-lg font-semibold text-xs transition-all hover:bg-blue-700 hover:scale-[1.01] active:scale-[0.99] flex items-center gap-1.5 cursor-pointer shadow-md"
+                      >
+                        <Save className="h-4 w-4" />
+                        <span>{saving ? "Guardando..." : "Guardar Carrusel"}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {adminSection === "footer" && (
+                  <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4 animate-fade-in">
+                    <div className="flex items-center gap-2 border-b border-zinc-800/10 dark:border-zinc-800 pb-3 mb-2">
+                      <Layout className="h-4 w-4 theme-text-primary" />
+                      <h3 className="font-bold text-sm text-slate-950 dark:text-zinc-150 font-sans">Información del Pie de Página (Footer)</h3>
+                    </div>
 
                     {/* Footer Customizer Card */}
                     <div className="border border-slate-200 dark:border-zinc-800 rounded-xl p-4 bg-slate-50/55 dark:bg-zinc-900/40 space-y-4">
@@ -2647,7 +2954,26 @@ export default function App() {
                       </div>
                     </div>
 
-                    <hr className="border-slate-100 dark:border-zinc-850 my-4" />
+                    <div className="pt-4 flex justify-end">
+                      <button
+                        onClick={handleSaveSettings}
+                        disabled={saving}
+                        className="py-2.5 px-6 bg-blue-600 text-white rounded-lg font-semibold text-xs transition-colors hover:bg-blue-700 hover:scale-[1.01] active:scale-[0.99] flex items-center gap-1.5 cursor-pointer shadow-md"
+                      >
+                        <Save className="h-4 w-4" />
+                        <span>{saving ? "Guardando..." : "Guardar Pie de Página"}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Colors section remains combined with general branding */}
+                {adminSection === "general" && (
+                  <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4 animate-fade-in mt-4">
+                    <div className="flex items-center gap-2 border-b border-zinc-800/10 dark:border-zinc-800 pb-3 mb-2">
+                      <Palette className="h-4 w-4 theme-text-primary" />
+                      <h3 className="font-bold text-sm text-slate-950 dark:text-zinc-150 font-sans">Paleta de Colores de Tienda y Tematización</h3>
+                    </div>
 
                     <div className="grid grid-cols-3 gap-4">
                       <div>
@@ -4407,6 +4733,244 @@ export default function App() {
                 </div>
               )}
 
+                {/* 9. GESTION DE ALERTAS Y STOCK BAJO (GESTION DEL NEGOCIO) */}
+                {adminSection === "stock" && (
+                  <div className="space-y-6">
+                    
+                    {/* Alertas Diagnóstico de Negocio */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl flex items-center gap-4">
+                        <div className="h-10 w-10 rounded-xl bg-red-500/20 text-red-500 flex items-center justify-center text-lg font-bold">
+                          {outOfStockProducts.length}
+                        </div>
+                        <div>
+                          <h4 className="text-[10px] font-extrabold uppercase tracking-widest text-red-500">Sin Stock (Crítico)</h4>
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400 font-semibold mt-0.5">Productos agotados</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl flex items-center gap-4">
+                        <div className="h-10 w-10 rounded-xl bg-amber-500/20 text-amber-500 flex items-center justify-center text-lg font-bold">
+                          {lowStockProducts.length}
+                        </div>
+                        <div>
+                          <h4 className="text-[10px] font-extrabold uppercase tracking-widest text-amber-500">Stock Bajo (Advertencia)</h4>
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400 font-semibold mt-0.5">Límite de {lowStockThresholdSetting} u o menos</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl flex items-center gap-4">
+                        <div className="h-10 w-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg font-bold">
+                          {store.products.filter(p => p.active !== false && p.stock > lowStockThresholdSetting).length}
+                        </div>
+                        <div>
+                          <h4 className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-400">Stock Saludable</h4>
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400 font-semibold mt-0.5">Niveles de stock correctos</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Selector de límite de Alerta de Stock Bajo */}
+                    <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Sliders className="h-4.5 w-4.5 text-indigo-500" />
+                          <h4 className="font-bold text-xs uppercase tracking-wider text-slate-950 dark:text-zinc-150">Límite de Alerta de Stock Bajo</h4>
+                        </div>
+                        <span className="text-[10px] font-mono text-zinc-500 dark:text-zinc-400 font-bold">Configuración persistente</span>
+                      </div>
+                      
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed font-semibold">
+                        Define las unidades a partir de las cuales se marcará de forma automática el aviso "ÚLTIMAS" en tu catálogo público y se detonarán alertas de reposición en este espacio de gestión del negocio.
+                      </p>
+
+                      <div className="flex items-center gap-4 pt-1.5">
+                        <input
+                          type="range"
+                          min="1"
+                          max="25"
+                          value={lowStockThresholdSetting}
+                          onChange={(e) => handleSaveLowStockThreshold(Number(e.target.value))}
+                          className="flex-1 accent-indigo-600 h-2 bg-slate-200 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+                        />
+                        <div className="px-3.5 py-1.5 bg-indigo-600 text-white font-mono font-bold text-xs rounded-lg shrink-0 shadow-md shadow-indigo-500/10">
+                          {lowStockThresholdSetting} unidades
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Alertas List View & Interactive Stock Adjustment */}
+                    <div className="bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm overflow-hidden space-y-4">
+                      
+                      {/* Filter Pills with labels and counters */}
+                      <div className="p-4 border-b border-slate-200 dark:border-zinc-850 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div>
+                          <h4 className="font-bold text-xs uppercase tracking-wider text-slate-550">Registro del Inventario de Negocio</h4>
+                        </div>
+
+                        {/* Switch bar */}
+                        <div className="flex flex-wrap gap-1">
+                          {[
+                            { id: "alerts", label: "Solo Alertas ⚠", count: totalStockAlerts, color: "text-red-500" },
+                            { id: "outOfStock", label: "Agotado", count: outOfStockProducts.length, color: "text-red-400" },
+                            { id: "lowStock", label: "Stock Bajo", count: lowStockProducts.length, color: "text-amber-400" },
+                            { id: "all", label: "Todo el Catálogo", count: store.products.filter(p => p.active !== false).length, color: "text-zinc-450" }
+                          ].map(tab => (
+                            <button
+                              key={tab.id}
+                              onClick={() => setStockFilterTab(tab.id as any)}
+                              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                                stockFilterTab === tab.id
+                                  ? "bg-indigo-600 text-white shadow"
+                                  : "border border-slate-200 dark:border-zinc-850 text-zinc-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-900"
+                              }`}
+                            >
+                              <span>{tab.label}</span>
+                              <span className={`px-1 rounded-md text-[10px] font-mono ${stockFilterTab === tab.id ? 'bg-indigo-700 text-white' : 'bg-slate-100 dark:bg-zinc-900'}`}>{tab.count}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Filter products matching state tab picker */}
+                      {(() => {
+                        let displayedStockProducts = store.products.filter(p => p.active !== false);
+                        if (stockFilterTab === "alerts") {
+                          displayedStockProducts = displayedStockProducts.filter(p => p.stock <= lowStockThresholdSetting);
+                        } else if (stockFilterTab === "outOfStock") {
+                          displayedStockProducts = displayedStockProducts.filter(p => p.stock <= 0);
+                        } else if (stockFilterTab === "lowStock") {
+                          displayedStockProducts = displayedStockProducts.filter(p => p.stock > 0 && p.stock <= lowStockThresholdSetting);
+                        }
+
+                        if (displayedStockProducts.length === 0) {
+                          return (
+                            <div className="p-8 text-center text-zinc-500">
+                              <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2 opacity-80" />
+                              <p className="text-xs font-bold">¡Tu negocio está completamente al día!</p>
+                              <p className="text-[11px] text-zinc-400 mt-0.5">Ningún artículo registrado coincide con los filtros de alertas seleccionados.</p>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="divide-y divide-slate-150 dark:divide-zinc-850">
+                            {displayedStockProducts.map((p) => {
+                              const isOutOfStock = p.stock <= 0;
+                              const isLowStock = p.stock > 0 && p.stock <= lowStockThresholdSetting;
+                              const hasVariants = p.variants && p.variants.length > 0;
+
+                              return (
+                                <div key={p.id} className="p-4 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between hover:bg-slate-100/50 dark:hover:bg-zinc-900/10 transition">
+                                  
+                                  {/* Thumbnail & Title metadata */}
+                                  <div className="flex gap-3 items-center min-w-0 flex-1">
+                                    <img
+                                      src={p.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=100&q=80"}
+                                      alt={p.name}
+                                      className="h-9 w-9 rounded-lg object-cover bg-zinc-850 shrink-0 border border-slate-200 dark:border-zinc-800"
+                                    />
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <h5 className="font-bold text-xs text-slate-900 dark:text-zinc-200 truncate">{p.name}</h5>
+                                        {p.paused && (
+                                          <span className="bg-amber-500/15 text-amber-500 text-[8px] font-bold uppercase py-0.5 px-1.5 rounded tracking-wide border border-amber-500/20">
+                                            Pausado
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-[10px] text-zinc-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                                        <span className="bg-slate-100 dark:bg-zinc-900 px-1.5 py-0.5 rounded font-bold uppercase">{p.category}</span>
+                                        <span>Precio: <strong>${p.price.toFixed(2)}</strong></span>
+                                        {hasVariants && (
+                                          <span className="text-zinc-500">({p.variants?.length} combinaciones registradas)</span>
+                                        )}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  {/* Current Stock status column */}
+                                  <div className="flex items-center gap-4 shrink-0 mt-2 md:mt-0 w-full md:w-auto justify-between md:justify-end">
+                                    <div className="text-left md:text-right">
+                                      {isOutOfStock ? (
+                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500/10 text-red-500 text-[10px] font-extrabold tracking-wide uppercase border border-red-500/25">
+                                          ● SIN STOCK
+                                        </span>
+                                      ) : isLowStock ? (
+                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-extrabold tracking-wide uppercase border border-amber-500/25">
+                                          ⚠ BAJO STOCK ({p.stock}u)
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[10px] font-extrabold tracking-wide uppercase border border-emerald-500/25">
+                                          ✓ CORRECTO
+                                        </span>
+                                      )}
+                                      
+                                      {/* Sub-variant status descriptions if any */}
+                                      {hasVariants && (
+                                        <div className="text-[9px] text-indigo-400 font-bold mt-1 font-mono">
+                                          {p.variants?.map((v, idx) => (
+                                            <span key={idx} className="block">
+                                              Talle {v.size} / {v.color}: {v.stock <= 0 ? "Agotado 🚫" : v.stock <= lowStockThresholdSetting ? `Bajo (${v.stock}u) ⚠` : `${v.stock}u` }
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Action Counter Stock Changer */}
+                                    <div>
+                                      {hasVariants ? (
+                                        <div className="text-[10px] bg-indigo-500/5 text-indigo-400 border border-indigo-500/10 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5 font-semibold">
+                                          <span>Posee Variantes.</span>
+                                          <button
+                                            onClick={() => {
+                                              setEditingProduct(p);
+                                              setAdminSection("products");
+                                            }}
+                                            className="underline text-[10px] text-indigo-300 font-extrabold hover:text-indigo-200 cursor-pointer"
+                                          >
+                                            Editar Ficha ×
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-1 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-850 p-1 rounded-xl">
+                                          <button
+                                            onClick={() => handleQuickUpdateStock(p.id, p.stock - 1)}
+                                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-750 text-xs font-bold font-mono text-zinc-550 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-zinc-750 transition active:scale-90"
+                                            title="Descontar 1 unidad"
+                                          >
+                                            -
+                                          </button>
+                                          <input
+                                            type="number"
+                                            value={p.stock}
+                                            onChange={(e) => handleQuickUpdateStock(p.id, Math.max(0, parseInt(e.target.value) || 0))}
+                                            className="w-10 text-center font-mono font-extrabold text-xs bg-transparent border-0 outline-none p-0 focus:ring-0 text-slate-900 dark:text-white"
+                                          />
+                                          <button
+                                            onClick={() => handleQuickUpdateStock(p.id, p.stock + 1)}
+                                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-750 text-xs font-bold font-mono text-zinc-550 hover:text-emerald-500 hover:bg-slate-100 dark:hover:bg-zinc-750 transition active:scale-90"
+                                            title="Sumar 1 unidad"
+                                          >
+                                            +
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+
+                    </div>
+                  </div>
+                )}
+
                 {/* 10. ACCESS SECURITY & CREDENTIALS CONFIG */}
                 {adminSection === "security" && (
                   <SecurityPanel
@@ -4507,7 +5071,8 @@ export default function App() {
                   </div>
                 </div>
               </div>
-            </div>
+              </div>
+            )}
           </main>
         </div>
       )}

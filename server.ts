@@ -169,17 +169,10 @@ const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_FILE = path.join(DATA_DIR, "store.json");
 
 // Module scope cache
-let currentStoreState: ShopState = process.env.DATABASE_URL
-  ? { ...DEFAULT_SHOP_STATE, products: [] }
-  : DEFAULT_SHOP_STATE;
+let currentStoreState: ShopState = DEFAULT_SHOP_STATE;
 
 // Helper to ensure data directory and file exist
 function initDataStore(): ShopState {
-  const isPostgresActive = !!process.env.DATABASE_URL;
-  if (isPostgresActive) {
-    // Si la base de datos PostgreSQL/Supabase externa está configurada, evitamos tocar o crear archivos locales.
-    return { ...DEFAULT_SHOP_STATE, products: [] };
-  }
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -189,9 +182,7 @@ function initDataStore(): ShopState {
       if (!content) {
         console.warn("El archivo de almacenamiento está vacío. Inicializando con el estado por defecto...");
         fs.writeFileSync(STORE_FILE, JSON.stringify(DEFAULT_SHOP_STATE, null, 2), "utf-8");
-        const defaultState = { ...DEFAULT_SHOP_STATE };
-        if (isPostgresActive) defaultState.products = [];
-        return defaultState;
+        return { ...DEFAULT_SHOP_STATE };
       }
 
       let parsed: ShopState;
@@ -200,9 +191,7 @@ function initDataStore(): ShopState {
       } catch (parseErr) {
         console.error("El archivo store.json contiene JSON inválido. Reconstruyendo con el estado por defecto...", parseErr);
         fs.writeFileSync(STORE_FILE, JSON.stringify(DEFAULT_SHOP_STATE, null, 2), "utf-8");
-        const defaultState = { ...DEFAULT_SHOP_STATE };
-        if (isPostgresActive) defaultState.products = [];
-        return defaultState;
+        return { ...DEFAULT_SHOP_STATE };
       }
       
       // Auto-migrate if its dynamic database models are empty or missing
@@ -243,26 +232,20 @@ function initDataStore(): ShopState {
         fs.writeFileSync(STORE_FILE, JSON.stringify(parsed, null, 2), "utf-8");
       }
 
-      if (isPostgresActive) {
-        parsed.products = [];
-      }
       return parsed;
     } else {
       fs.writeFileSync(STORE_FILE, JSON.stringify(DEFAULT_SHOP_STATE, null, 2), "utf-8");
-      const defaultState = { ...DEFAULT_SHOP_STATE };
-      if (isPostgresActive) defaultState.products = [];
-      return defaultState;
+      return { ...DEFAULT_SHOP_STATE };
     }
   } catch (err) {
     console.error("Error accessing data store, using defaults:", err);
-    const defaultState = { ...DEFAULT_SHOP_STATE };
-    if (isPostgresActive) defaultState.products = [];
-    return defaultState;
+    return { ...DEFAULT_SHOP_STATE };
   }
 }
 
 // PostgreSQL integration and lazy pool helper
 let dbPool: any = null;
+let dbUnavailable = false;
 
 function writeDiagnosticReport(errorMsg?: string) {
   try {
@@ -309,6 +292,9 @@ function writeDiagnosticReport(errorMsg?: string) {
 }
 
 function getDbPool() {
+  if (dbUnavailable) {
+    return null;
+  }
   if (!dbPool && process.env.DATABASE_URL) {
     let url = process.env.DATABASE_URL.trim();
     if (url.startsWith('"') && url.endsWith('"')) {
@@ -469,8 +455,13 @@ async function getDbState(): Promise<ShopState> {
       coupons,
       adminCredentials
     };
-  } catch (err) {
+  } catch (err: any) {
     console.error("Error reading relational DB tables:", err);
+    const msg = String(err.message || err).toLowerCase();
+    if (msg.includes("auth") || msg.includes("password") || msg.includes("connection") || msg.includes("econ") || msg.includes("timeout")) {
+      console.warn("⚠️ Error crítico de conexión. Desconectando de la base de datos temporalmente y usando almacenamiento local.");
+      dbUnavailable = true;
+    }
     return currentStoreState;
   }
 }
@@ -648,8 +639,13 @@ async function saveDbState(state: ShopState): Promise<boolean> {
     }
 
     return true;
-  } catch (err) {
+  } catch (err: any) {
     console.error("Error saving relational DB elements:", err);
+    const msg = String(err.message || err).toLowerCase();
+    if (msg.includes("auth") || msg.includes("password") || msg.includes("connection") || msg.includes("econ") || msg.includes("timeout")) {
+      console.warn("⚠️ Error crítico de conexión detectado al guardar. Usando almacenamiento local.");
+      dbUnavailable = true;
+    }
     return false;
   }
 }
@@ -665,6 +661,16 @@ async function initPostgresStore(): Promise<ShopState | null> {
 
   const pool = getDbPool();
   if (!pool) return null;
+
+  try {
+    // Probar la conexión ejecutando una simple consulta de prueba
+    await pool.query("SELECT 1;");
+  } catch (testErr: any) {
+    console.error("⛔️ Error al conectar a PostgreSQL/Supabase (DATABASE_URL probablemente inválida o inaccesible):", testErr.message || testErr);
+    dbUnavailable = true;
+    writeDiagnosticReport(testErr.message || String(testErr));
+    return null;
+  }
 
   try {
     // 1. Create global shop state tracker
@@ -929,9 +935,8 @@ async function startServer() {
         }
 
         try {
-          if (!process.env.DATABASE_URL) {
-            fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
-          } else {
+          fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+          if (process.env.DATABASE_URL) {
             await saveDbState(currentStoreState);
           }
         } catch (e) {}
@@ -1007,9 +1012,8 @@ async function startServer() {
     };
 
     try {
-      if (!process.env.DATABASE_URL) {
-        fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
-      } else {
+      fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+      if (process.env.DATABASE_URL) {
         await saveDbState(currentStoreState);
       }
       res.json({
@@ -1060,14 +1064,14 @@ async function startServer() {
         coupons: coupons || currentStoreState.coupons
       };
       
-      // Guardar en archivo local como respaldo o guardar en base de datos
-      if (!process.env.DATABASE_URL) {
-        try {
-          fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
-        } catch (fsErr) {
-          console.error("Error al escribir respaldo en archivo local:", fsErr);
-        }
-      } else {
+      // Guardar SIEMPRE en archivo local como respaldo y sincronizar con base de datos si existe
+      try {
+        fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+      } catch (fsErr) {
+        console.error("Error al escribir respaldo en archivo local:", fsErr);
+      }
+
+      if (process.env.DATABASE_URL) {
         const saved = await saveDbState(currentStoreState);
         if (saved) {
           // Re-load to get actual database-assigned auto-incremented integer IDs!
@@ -1092,7 +1096,7 @@ async function startServer() {
     });
   });
 
-  app.get("/api/debug-db", (req, res) => {
+  app.get("/api/debug-db", async (req, res) => {
     const rawUrl = process.env.DATABASE_URL || "";
     if (!rawUrl) {
       return res.json({
@@ -1139,6 +1143,20 @@ async function startServer() {
       parsedHost = `Error al parsear URL: ${e.message}`;
     }
 
+    const pool = getDbPool();
+    let queryTest = "not_attempted";
+    let queryError = null;
+    
+    if (pool) {
+      try {
+        await pool.query("SELECT 1;");
+        queryTest = "success";
+      } catch (testErr: any) {
+        queryTest = "failed";
+        queryError = testErr.message || String(testErr);
+      }
+    }
+
     res.json({
       exists: true,
       maskedUrl,
@@ -1146,6 +1164,8 @@ async function startServer() {
       parsedPort,
       parsedUser,
       parsedDb,
+      queryTest,
+      queryError,
       envKeys: Object.keys(process.env).filter(k => k.toLowerCase().includes("db") || k.toLowerCase().includes("postgres") || k.toLowerCase().includes("database") || k.toLowerCase().includes("url"))
     });
   });

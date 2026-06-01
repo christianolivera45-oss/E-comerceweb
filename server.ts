@@ -839,6 +839,13 @@ async function initPostgresStore(): Promise<ShopState | null> {
       );
     `);
 
+    // --- CREATE OPTIMIZED INDEXES FOR HIGH-PERFORMANCE CATALOGUE FETCHES ---
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_products_search ON public.products (active, featured, paused);
+      CREATE INDEX IF NOT EXISTS idx_products_category ON public.products (categoria_id, subcategoria_id);
+      CREATE INDEX IF NOT EXISTS idx_variants_product ON public.product_variants (product_id, active);
+    `);
+
     // --- SEED TABLES IF EMPTY ---
 
     // Seed categories

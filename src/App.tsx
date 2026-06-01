@@ -59,6 +59,108 @@ import { DashboardGeneral } from "./components/DashboardGeneral";
 import WhatsAppWidget from "./components/WhatsAppWidget";
 import ImageGalleryEditor from "./components/ImageGalleryEditor";
 
+
+export const normalizeText = (text: string): string => {
+  if (!text) return "";
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // remove accents
+    .replace(/[^a-z0-9 ]/g, " ")     // replace non-alphanumeric with space
+    .replace(/\s+/g, " ")            // collapse multi-spaces
+    .trim();
+};
+
+export const calculateRelevance = (
+  product: Product,
+  query: string,
+  dbCategories?: Category[],
+  dbSubcategories?: Subcategory[]
+): number => {
+  const normalizedQuery = normalizeText(query);
+  if (!normalizedQuery) return 0;
+
+  const normalizedName = normalizeText(product.name);
+  const normalizedDesc = normalizeText(product.description || "");
+  
+  // Resolve product category name
+  const mainCat = (dbCategories || []).find(c => c.id === product.categoria_id);
+  const mainCatName = mainCat ? normalizeText(mainCat.nombre) : "";
+  const fallbackCatName = product.category ? normalizeText(product.category) : "";
+  
+  // Resolve subcategory name
+  const subCat = (dbSubcategories || []).find(s => s.id === product.subcategoria_id);
+  const subCatName = subCat ? normalizeText(subCat.nombre) : "";
+
+  // Normalize colors and sizes to act as tags
+  const colorsStr = (product.colors || []).map(normalizeText).join(" ");
+  const sizesStr = (product.sizes || []).map(normalizeText).join(" ");
+
+  const queryTokens = normalizedQuery.split(" ").filter(t => t.length > 0);
+  if (queryTokens.length === 0) return 0;
+
+  let score = 0;
+
+  // 1. Exact Name match or name starts with query
+  if (normalizedName === normalizedQuery) {
+    score += 500;
+  } else if (normalizedName.startsWith(normalizedQuery)) {
+    score += 250;
+  } else if (normalizedName.includes(normalizedQuery)) {
+    score += 150;
+  }
+
+  // 2. Word tokens match in Name
+  queryTokens.forEach(token => {
+    const cleanToken = token.endsWith("s") && token.length > 3 ? token.slice(0, -1) : token;
+    
+    const matchedNameWords = normalizedName.split(" ").some(word => {
+      const cleanWord = word.endsWith("s") && word.length > 3 ? word.slice(0, -1) : word;
+      return cleanWord.includes(cleanToken) || cleanToken.includes(cleanWord);
+    });
+
+    if (matchedNameWords) {
+      score += 80;
+    } else if (normalizedName.includes(token)) {
+      score += 40;
+    }
+  });
+
+  // 3. Category & Subcategory match
+  if (mainCatName && (mainCatName.includes(normalizedQuery) || normalizedQuery.includes(mainCatName))) {
+    score += 100;
+  } else if (fallbackCatName && (fallbackCatName.includes(normalizedQuery) || normalizedQuery.includes(fallbackCatName))) {
+    score += 60;
+  }
+  if (subCatName && (subCatName.includes(normalizedQuery) || normalizedQuery.includes(subCatName))) {
+    score += 80;
+  }
+
+  queryTokens.forEach(token => {
+    if (mainCatName && mainCatName.includes(token)) score += 20;
+    if (fallbackCatName && fallbackCatName.includes(token)) score += 10;
+    if (subCatName && subCatName.includes(token)) score += 15;
+  });
+
+  // 4. Description match
+  if (normalizedDesc.includes(normalizedQuery)) {
+    score += 50;
+  }
+  queryTokens.forEach(token => {
+    if (normalizedDesc.includes(token)) {
+      score += 10;
+    }
+  });
+
+  // 5. Colors and Sizes matches (as tags)
+  queryTokens.forEach(token => {
+    if (colorsStr.includes(token)) score += 15;
+    if (sizesStr.includes(token)) score += 15;
+  });
+
+  return score;
+};
+
 const DEFAULT_SETTINGS: SiteSettings = {
   siteTitle: "Ventas Juem",
   siteSubtitle: "Moda, tecnología y accesorios con envío a todo el país.",
@@ -337,6 +439,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"storefront" | "admin">("storefront");
   const [adminSection, setAdminSection] = useState<"general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer">("dashboard");
   const [searchQuery, setSearchQuery] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [bannerProductSearch, setBannerProductSearch] = useState("");
   const [uploadingSlideIdx, setUploadingSlideIdx] = useState<number | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>("todos");
@@ -1380,8 +1483,11 @@ export default function App() {
   // Filtering products for listing
   const filteredProducts = store.products.filter((p) => {
     if (p.paused || p.active === false) return false;
-    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          p.description.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    let matchesSearch = true;
+    if (searchQuery.trim().length > 0) {
+      matchesSearch = calculateRelevance(p, searchQuery, store.dbCategories, store.dbSubcategories) > 0;
+    }
     
     let matchesCategory = true;
     if (selectedCategory !== "todos") {
@@ -1434,6 +1540,14 @@ export default function App() {
 
   // Apply sorting options
   const sortedProducts = [...filteredProducts].sort((a, b) => {
+    // If a search query is typed and default sort 'featured' is used, sort by relevance score first!
+    if (searchQuery.trim().length > 0 && sortBy === "featured") {
+      const scoreA = calculateRelevance(a, searchQuery, store.dbCategories, store.dbSubcategories);
+      const scoreB = calculateRelevance(b, searchQuery, store.dbCategories, store.dbSubcategories);
+      if (scoreA !== scoreB) {
+        return scoreB - scoreA;
+      }
+    }
     if (sortBy === "price-asc") {
       return a.price - b.price;
     }
@@ -1836,7 +1950,12 @@ export default function App() {
                     type="text"
                     placeholder="Buscar por nombre, descripción o marca..."
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setShowSuggestions(true);
+                    }}
+                    onFocus={() => setShowSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowSuggestions(false), 250)}
                     className={`w-full pl-9 pr-10 py-3 rounded-xl text-xs outline-none border transition-all ${
                       store.settings.themeMode === "dark"
                         ? "bg-zinc-900 border-zinc-800 text-white placeholder-zinc-500 focus:border-zinc-700 focus:bg-zinc-950"
@@ -1846,12 +1965,170 @@ export default function App() {
                   <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
                   {searchQuery && (
                     <button
-                      onClick={() => setSearchQuery("")}
+                      onClick={() => {
+                        setSearchQuery("");
+                        setShowSuggestions(false);
+                      }}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white text-xs font-bold font-mono cursor-pointer"
                     >
                       ×
                     </button>
                   )}
+
+                  {/* Autocomplete / Search Suggestions Popover */}
+                  {showSuggestions && searchQuery.trim().length >= 2 && (() => {
+                    const normQ = normalizeText(searchQuery);
+                    
+                    // 1. Match categories
+                    const matchingCats = (store.dbCategories || [])
+                      .filter(c => c.active !== false && normalizeText(c.nombre).includes(normQ));
+                    
+                    const matchingSubs = (store.dbSubcategories || [])
+                      .filter(s => s.active !== false && normalizeText(s.nombre).includes(normQ));
+
+                    // 2. Match products (top 5 matched)
+                    const matchingProds = store.products
+                      .filter(p => !p.paused && p.active !== false)
+                      .map(p => ({
+                        product: p,
+                        score: calculateRelevance(p, searchQuery, store.dbCategories, store.dbSubcategories)
+                      }))
+                      .filter(item => item.score > 0)
+                      .sort((a, b) => b.score - a.score)
+                      .slice(0, 5);
+
+                    const hasAnySuggestion = matchingCats.length > 0 || matchingSubs.length > 0 || matchingProds.length > 0;
+
+                    if (!hasAnySuggestion) {
+                      return (
+                        <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800/85 rounded-xl shadow-xl z-50 p-4 text-center">
+                          <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                            No se encontraron sugerencias para "<span className="font-semibold">{searchQuery}</span>"
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="absolute right-0 top-full mt-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800/85 rounded-xl shadow-xl z-50 overflow-hidden divide-y divide-slate-100 dark:divide-zinc-900 transition-all duration-200 w-[300px] sm:w-[360px] md:w-[400px]">
+                        
+                        {/* Render category direct link suggestions */}
+                        {(matchingCats.length > 0 || matchingSubs.length > 0) && (
+                          <div className="p-2 bg-slate-50/50 dark:bg-zinc-900/20">
+                            <span className="block text-[9px] font-extrabold uppercase text-slate-400 dark:text-zinc-550 px-2.5 py-1 tracking-wider">
+                              Categorías sugeridas
+                            </span>
+                            <div className="space-y-0.5">
+                              {matchingCats.map(cat => (
+                                <button
+                                  key={`cat-sug-${cat.id}`}
+                                  onClick={() => {
+                                    setSelectedCategory(cat.id);
+                                    setSelectedSubcategory("all");
+                                    setSearchQuery("");
+                                    setShowSuggestions(false);
+                                    // Smooth scroll to catalog
+                                    document.getElementById("catalog-view")?.scrollIntoView({ behavior: "smooth" });
+                                  }}
+                                  className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-700 dark:text-zinc-300 transition-colors flex items-center justify-between cursor-pointer border-0 bg-transparent"
+                                >
+                                  <span className="font-semibold text-indigo-650 dark:text-indigo-400">
+                                    {cat.nombre}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 font-mono">Ir a categoría ›</span>
+                                </button>
+                              ))}
+                              {matchingSubs.map(sub => {
+                                const parentCat = (store.dbCategories || []).find(c => c.id === sub.categoria_id);
+                                return (
+                                  <button
+                                    key={`sub-sug-${sub.id}`}
+                                    onClick={() => {
+                                      if (parentCat) {
+                                        setSelectedCategory(parentCat.id);
+                                      }
+                                      setSelectedSubcategory(sub.id);
+                                      setSearchQuery("");
+                                      setShowSuggestions(false);
+                                      document.getElementById("catalog-view")?.scrollIntoView({ behavior: "smooth" });
+                                    }}
+                                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-700 dark:text-zinc-300 transition-colors flex items-center justify-between cursor-pointer border-0 bg-transparent"
+                                  >
+                                    <span className="text-zinc-700 dark:text-zinc-300">
+                                      {parentCat?.nombre || "Otros"} › <span className="font-semibold text-indigo-650 dark:text-indigo-400">{sub.nombre}</span>
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 font-mono">Ir a subcategoría ›</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Render top matched products */}
+                        {matchingProds.length > 0 && (
+                          <div className="p-2">
+                            <span className="block text-[9px] font-extrabold uppercase text-slate-400 dark:text-zinc-550 px-2.5 py-1 tracking-wider">
+                              Artículos sugeridos
+                            </span>
+                            <div className="space-y-1">
+                              {matchingProds.map(item => {
+                                const p = item.product;
+                                return (
+                                  <button
+                                    key={`prod-sug-${p.id}`}
+                                    onClick={() => {
+                                      handleOpenProduct(p);
+                                      setShowSuggestions(false);
+                                    }}
+                                    className="w-full text-left p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-zinc-900 transition-colors flex items-center gap-3 cursor-pointer group border-0 bg-transparent"
+                                  >
+                                    <div className="relative w-10 h-10 rounded-md overflow-hidden bg-slate-100 dark:bg-zinc-800 shrink-0 border border-slate-150 dark:border-zinc-900">
+                                      <img
+                                        src={p.imageUrl}
+                                        alt={p.name}
+                                        referrerPolicy="no-referrer"
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                      />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <span className="block text-xs font-bold text-slate-800 dark:text-zinc-100 truncate group-hover:text-indigo-650 dark:group-hover:text-indigo-400 transition-colors">
+                                        {p.name}
+                                      </span>
+                                      <span className="block text-[10px] text-slate-450 dark:text-zinc-500 truncate">
+                                        {p.category} | {p.stock > 0 ? `${p.stock} dispo` : "Bajo demanda"}
+                                      </span>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                      <span className="text-xs font-black text-indigo-655 dark:text-indigo-400">
+                                        ${Math.round(p.price)}
+                                      </span>
+                                      {p.originalPrice && p.originalPrice > p.price && (
+                                        <span className="block text-[9px] text-slate-400 dark:text-zinc-500 line-through">
+                                          ${Math.round(p.originalPrice)}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="p-2 bg-slate-50 dark:bg-zinc-900/40 text-center">
+                          <button
+                            onClick={() => {
+                              setShowSuggestions(false);
+                            }}
+                            className="text-[10px] text-indigo-605 dark:text-indigo-400 font-bold hover:underline cursor-pointer border-0 bg-transparent"
+                          >
+                            Ver todos los resultados ({filteredProducts.length})
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Show elegant Filtros & Orden button ONLY when a category is selected */}

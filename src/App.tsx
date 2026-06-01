@@ -42,7 +42,9 @@ import {
   X,
   ChevronRight,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Upload,
+  Loader2
 } from "lucide-react";
 import { Product, SiteSettings, ShopState, CartItem, Category, Subcategory, ProductVariant } from "./types";
 import ThemeStyles from "./components/ThemeStyles";
@@ -335,6 +337,7 @@ export default function App() {
   const [adminSection, setAdminSection] = useState<"general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer">("dashboard");
   const [searchQuery, setSearchQuery] = useState("");
   const [bannerProductSearch, setBannerProductSearch] = useState("");
+  const [uploadingSlideIdx, setUploadingSlideIdx] = useState<number | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>("todos");
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>("all");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -543,7 +546,9 @@ export default function App() {
     category: "",
     imageUrl: "",
     stock: 10,
-    featured: false
+    featured: false,
+    categorias_adicionales: [],
+    subcategorias_adicionales: []
   });
   const [newProductErrors, setNewProductErrors] = useState<Record<string, string>>({});
 
@@ -930,6 +935,8 @@ export default function App() {
       category: actualCategory,
       categoria_id: actualCategoryId,
       subcategoria_id: newProduct.subcategoria_id || "all",
+      categorias_adicionales: newProduct.categorias_adicionales || [],
+      subcategorias_adicionales: newProduct.subcategorias_adicionales || [],
       imageUrl: newProduct.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80",
       stock: Math.floor(Number(newProduct.stock ?? 10)),
       featured: !!newProduct.featured,
@@ -953,6 +960,8 @@ export default function App() {
       category: (store.dbCategories || [])[0]?.nombre || "",
       categoria_id: (store.dbCategories || [])[0]?.id || "",
       subcategoria_id: "all",
+      categorias_adicionales: [],
+      subcategorias_adicionales: [],
       imageUrl: "",
       stock: 10,
       featured: false,
@@ -1146,7 +1155,11 @@ export default function App() {
     const catId = catObj ? catObj.id : catIdOrName;
     const catName = catObj ? catObj.nombre : catIdOrName;
 
-    const productsAssigned = store.products.some(p => p.categoria_id === catId || p.category === catName);
+    const productsAssigned = store.products.some(p => 
+      p.categoria_id === catId || 
+      p.category === catName ||
+      (p.categorias_adicionales && p.categorias_adicionales.includes(catId))
+    );
     if (productsAssigned) {
       showCustomAlert("Productos Asignados", `No se puede borrar la categoría "${catName}" porque existen productos asignados a ella. Realoca o elimina los productos primero.`);
       return;
@@ -1325,11 +1338,19 @@ export default function App() {
       const isMainCatMatch = (p.categoria_id && catId && p.categoria_id === catId) || 
                              (p.category && p.category.toLowerCase() === selectedCategory.toLowerCase());
       
-      if (!isMainCatMatch) {
+      const isAdditionalCatMatch = !!(p.categorias_adicionales && catId && p.categorias_adicionales.includes(catId));
+      const hasCatMatch = isMainCatMatch || isAdditionalCatMatch;
+      
+      if (!hasCatMatch) {
          matchesCategory = false;
       } else if (selectedSubcategory && selectedSubcategory !== "all") {
-        if (p.subcategoria_id && p.subcategoria_id !== "all") {
-          matchesCategory = p.subcategoria_id === selectedSubcategory;
+        const isMainSubMatch = p.subcategoria_id && p.subcategoria_id === selectedSubcategory;
+        const isAdditionalSubMatch = !!(p.subcategorias_adicionales && p.subcategorias_adicionales.includes(selectedSubcategory));
+        
+        if (isMainSubMatch || isAdditionalSubMatch) {
+          matchesCategory = true;
+        } else if (p.subcategoria_id && p.subcategoria_id !== "all") {
+          matchesCategory = false;
         } else {
           // Fallback to keyword search for backward compatibility
           const keywords = SUBCATEGORY_KEYWORDS[selectedSubcategory] || [];
@@ -1668,7 +1689,7 @@ export default function App() {
         <div className="flex-1 flex flex-col">
           {selectedProduct ? (
             <ProductDetails
-              product={selectedProduct}
+              product={store.products.find(p => p.id === selectedProduct.id) || selectedProduct}
               onClose={() => {
                 setSelectedProduct(null);
                 const catalogPath = getCatalogPath();
@@ -2007,7 +2028,8 @@ export default function App() {
                     const catProducts = store.products.filter(
                       (p) => 
                         p.categoria_id === catObj.id || 
-                        p.category?.toLowerCase() === catObj.nombre?.toLowerCase()
+                        p.category?.toLowerCase() === catObj.nombre?.toLowerCase() ||
+                        (p.categorias_adicionales && p.categorias_adicionales.includes(catObj.id))
                     );
                     
                     return (
@@ -2696,23 +2718,113 @@ export default function App() {
                               </div>
 
                               <div>
-                                <label className="block text-[9px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-1">Imagen URL</label>
-                                <div className="flex gap-2">
-                                  <input
-                                    type="text"
-                                    value={slide.imageUrl}
-                                    onChange={(e) => updateSlideField("imageUrl", e.target.value)}
-                                    className="flex-1 px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono"
-                                    placeholder="https://images.unsplash.com/photo-..."
-                                  />
-                                  {slide.imageUrl && (
-                                    <img 
-                                      src={slide.imageUrl} 
-                                      alt="mini previsualizacion de slide" 
-                                      className="h-8 w-12 object-cover rounded bg-zinc-800 border border-zinc-700"
-                                      referrerPolicy="no-referrer"
+                                <div className="flex items-center justify-between mb-1">
+                                  <label className="block text-[9px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-wider">
+                                    Imagen del Banner (URL o Subir)
+                                  </label>
+                                  <span className="text-[10px] text-[#5346ff] font-medium">
+                                    Recomendado: 1920x800 píxeles
+                                  </span>
+                                </div>
+                                
+                                <div className="space-y-2">
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="text"
+                                      value={slide.imageUrl}
+                                      onChange={(e) => updateSlideField("imageUrl", e.target.value)}
+                                      className="flex-1 px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono"
+                                      placeholder="URL de la imagen (ej: https://images.unsplash.com/...)"
                                     />
-                                  )}
+                                    {slide.imageUrl && (
+                                      <div className="relative group/mini duration-150 shrink-0">
+                                        <img 
+                                          src={slide.imageUrl} 
+                                          alt="mini previsualizacion de slide" 
+                                          className="h-8 w-16 object-cover rounded bg-zinc-800 border border-zinc-700/50"
+                                          referrerPolicy="no-referrer"
+                                        />
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/mini:opacity-100 transition-opacity rounded flex items-center justify-center">
+                                          <Eye 
+                                            className="w-3 h-3 text-white cursor-pointer" 
+                                            onClick={() => {
+                                              window.open(slide.imageUrl, "_blank");
+                                            }}
+                                          />
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between p-2 rounded-lg bg-slate-100/60 dark:bg-zinc-900/40 border border-slate-200 dark:border-zinc-800/40">
+                                    <div className="space-y-0.5 max-w-sm">
+                                      <p className="text-[10px] font-semibold text-slate-700 dark:text-zinc-350">
+                                        Subir directamente a Cloudinary:
+                                      </p>
+                                      <p className="text-[9px] text-slate-500 dark:text-zinc-450 leading-relaxed">
+                                        Las fotos grandes de paisajes (16:9 o 21:9) lucen más nítidas e impactantes. Te aconsejamos usar imágenes optimizadas de aproximadamente <strong>1920 x 800 píxeles</strong>.
+                                      </p>
+                                    </div>
+                                    
+                                    <div className="shrink-0 w-full sm:w-auto flex items-center justify-end">
+                                      {uploadingSlideIdx === idx ? (
+                                        <div className="flex items-center gap-1.5 text-xs text-zinc-500 font-medium py-1 px-2">
+                                          <Loader2 className="w-3.5 h-3.5 animate-spin text-[#5346ff]" />
+                                          <span className="text-[10px] font-mono">Subiendo...</span>
+                                        </div>
+                                      ) : (
+                                        <label className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-750 text-white font-medium text-[10px] cursor-pointer transition-colors shadow-sm select-none">
+                                          <Upload className="w-3 h-3" />
+                                          <span>Seleccionar Archivo</span>
+                                          <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={async (e) => {
+                                              if (e.target.files && e.target.files[0]) {
+                                                const file = e.target.files[0];
+                                                const formData = new FormData();
+                                                formData.append("image", file);
+                                                
+                                                try {
+                                                  setUploadingSlideIdx(idx);
+                                                  const uploadRes = await fetch("/api/cloudinary/upload", {
+                                                    method: "POST",
+                                                    body: formData,
+                                                  });
+                                                  
+                                                  const resText = await uploadRes.text();
+                                                  let parsedData: any = null;
+                                                  
+                                                  if (resText.trim().startsWith("<!doctype") || resText.trim().startsWith("<html")) {
+                                                    alert("El servidor de subidas no pudo procesar el archivo. Comprueba que tus ajustes de Cloudinary sean correctos.");
+                                                    return;
+                                                  }
+                                                  
+                                                  try {
+                                                    parsedData = JSON.parse(resText);
+                                                  } catch (pErr) {
+                                                    console.error("Error al parsear respuesta JSON:", pErr);
+                                                  }
+
+                                                  if (uploadRes.ok && parsedData && parsedData.success && parsedData.url) {
+                                                    updateSlideField("imageUrl", parsedData.url);
+                                                  } else {
+                                                    alert((parsedData && parsedData.message) || "Ocurrió un error al subir a Cloudinary.");
+                                                  }
+                                                } catch (err) {
+                                                  console.error(err);
+                                                  alert("Fallo al conectar con la API de Cloudinary.");
+                                                } finally {
+                                                  setUploadingSlideIdx(null);
+                                                }
+                                              }
+                                            }}
+                                          />
+                                        </label>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
                                 
                                 {/* Quick Unsplash selector for this slide */}
@@ -3214,6 +3326,24 @@ export default function App() {
                               </div>
                               <div className="flex items-center gap-2 mt-0.5 text-[10px] text-zinc-400">
                                 <span className="bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-400">{p.category}</span>
+                                {p.categorias_adicionales && p.categorias_adicionales.map(catId => {
+                                  const name = (store.dbCategories || []).find(c => c.id === catId)?.nombre;
+                                  if (!name) return null;
+                                  return (
+                                    <span key={catId} className="bg-[#5346ff]/10 text-[#5346ff] border border-[#5346ff]/20 px-1.5 py-0.5 rounded">
+                                      + {name}
+                                    </span>
+                                  );
+                                })}
+                                {p.subcategorias_adicionales && p.subcategorias_adicionales.map(subId => {
+                                  const name = (store.dbSubcategories || []).find(s => s.id === subId)?.nombre;
+                                  if (!name) return null;
+                                  return (
+                                    <span key={subId} className="bg-teal-550/10 text-teal-605 border border-teal-500/25 px-1.5 py-0.5 rounded dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/25">
+                                      + {name}
+                                    </span>
+                                  );
+                                })}
                                 <span>PVP: <strong>${p.price.toFixed(2)}</strong></span>
                                 <span>Stock: <strong className={p.stock === 0 ? "text-red-400" : "text-emerald-400"}>{p.stock} u</strong></span>
                               </div>
@@ -3378,6 +3508,119 @@ export default function App() {
                         </select>
                         {!newProduct.categoria_id && (
                           <p className="text-[9px] text-zinc-500 mt-1">Selecciona primero una categoría principal.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Categorías secundarias adicionales para Nuevo Producto */}
+                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60">
+                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">
+                        Categorías Adicionales / Secundarias <span className="text-zinc-400 dark:text-zinc-500 font-normal lowercase">(los artículos aparecerán en todas las categorías marcadas)</span>
+                      </label>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {(store.dbCategories || [])
+                          .sort((a,b) => (a.orden || 0) - (b.orden || 0))
+                          .filter(c => c.id !== newProduct.categoria_id)
+                          .map((c) => {
+                            const isChecked = !!(newProduct.categorias_adicionales && newProduct.categorias_adicionales.includes(c.id));
+                            return (
+                              <button
+                                type="button"
+                                key={c.id}
+                                onClick={() => {
+                                  const list = newProduct.categorias_adicionales || [];
+                                  const updated = list.includes(c.id)
+                                    ? list.filter(id => id !== c.id)
+                                    : [...list, c.id];
+                                  setNewProduct({
+                                    ...newProduct,
+                                    categorias_adicionales: updated
+                                  });
+                                }}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all cursor-pointer select-none active:scale-95 ${
+                                  isChecked
+                                    ? "bg-[#5346ff]/10 text-[#5346ff] border-[#5346ff]/40 dark:bg-[#5346ff]/20 dark:text-[#9086ff] dark:border-[#5346ff]/60"
+                                    : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-850 hover:bg-slate-100 dark:hover:bg-zinc-850"
+                                }`}
+                              >
+                                <span>{c.nombre}</span>
+                                {isChecked && <span className="text-[#5346ff] dark:text-[#9086ff]">✓</span>}
+                              </button>
+                            );
+                          })}
+                        {(store.dbCategories || []).filter(c => c.id !== newProduct.categoria_id).length === 0 && (
+                          <span className="text-[10px] text-zinc-400 italic">No hay otras categorías creadas para seleccionar.</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Subcategorías secundarias adicionales para Nuevo Producto */}
+                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60">
+                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                        <span>Subcategorías Adicionales / Secundarias</span>
+                        <span className="text-zinc-400 dark:text-zinc-500 font-normal lowercase">(haz clic para desplegar cada menú y marcar)</span>
+                      </label>
+                      <div className="space-y-2 mt-2">
+                        {(store.dbCategories || [])
+                          .sort((a,b) => (a.orden || 0) - (b.orden || 0))
+                          .map((cat) => {
+                            // Find subcategories belonging to this category
+                            const subs = (store.dbSubcategories || []).filter(
+                              s => s.categoria_id === cat.id && s.id !== newProduct.subcategoria_id
+                            );
+                            if (subs.length === 0) return null;
+
+                            const activeSubCount = subs.filter(
+                              s => !!(newProduct.subcategorias_adicionales && newProduct.subcategorias_adicionales.includes(s.id))
+                            ).length;
+                            
+                            return (
+                              <details key={cat.id} className="group border border-slate-200/50 dark:border-zinc-800/50 rounded-lg bg-white dark:bg-zinc-950/40 overflow-hidden" open={activeSubCount > 0}>
+                                <summary className="flex items-center justify-between px-3 py-2 text-[11px] text-slate-700 dark:text-zinc-300 font-extrabold cursor-pointer select-none hover:bg-slate-100/50 dark:hover:bg-zinc-900/50 duration-150 list-none [&::-webkit-details-marker]:hidden">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[9px] text-slate-400 dark:text-zinc-500 transition-transform duration-200 group-open:rotate-90">▶</span>
+                                    <span className="uppercase text-[10px] tracking-wider font-mono">{cat.nombre}</span>
+                                  </div>
+                                  {activeSubCount > 0 && (
+                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-[#5346ff]/10 text-[#5346ff] dark:bg-[#5346ff]/20 dark:text-[#9086ff]">
+                                      {activeSubCount} {activeSubCount === 1 ? "seleccionada" : "seleccionadas"}
+                                    </span>
+                                  )}
+                                </summary>
+                                <div className="p-2.5 border-t border-slate-100 dark:border-zinc-800/30 bg-slate-50/40 dark:bg-zinc-950/20 flex flex-wrap gap-1.5">
+                                  {subs.map((s) => {
+                                    const isChecked = !!(newProduct.subcategorias_adicionales && newProduct.subcategorias_adicionales.includes(s.id));
+                                    return (
+                                      <button
+                                        type="button"
+                                        key={s.id}
+                                        onClick={() => {
+                                          const list = newProduct.subcategorias_adicionales || [];
+                                          const updated = list.includes(s.id)
+                                            ? list.filter(id => id !== s.id)
+                                            : [...list, s.id];
+                                          setNewProduct({
+                                            ...newProduct,
+                                            subcategorias_adicionales: updated
+                                          });
+                                        }}
+                                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 border transition-all cursor-pointer select-none active:scale-95 ${
+                                          isChecked
+                                            ? "bg-[#5346ff]/10 text-[#5346ff] border-[#5346ff]/35 dark:bg-[#5346ff]/20 dark:text-[#9086ff] dark:border-[#5346ff]/50"
+                                            : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-850 hover:bg-slate-100 dark:hover:bg-zinc-850"
+                                        }`}
+                                      >
+                                        <span>{s.nombre}</span>
+                                        {isChecked && <span className="text-[#5346ff] dark:text-[#9086ff]">✓</span>}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </details>
+                            );
+                          })}
+                        {!(store.dbSubcategories && store.dbSubcategories.length > 0) && (
+                          <span className="text-[10px] text-zinc-400 italic">No hay subcategorías registradas en la tienda para seleccionar.</span>
                         )}
                       </div>
                     </div>
@@ -3607,7 +3850,7 @@ export default function App() {
                           <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">
                             Gestor de Stock de Variantes (Combinación Exacto)
                           </label>
-                          <p className="text-[9px] text-zinc-400 mt-0.5">Asigna inventarios individuales por talle y color</p>
+                          <p className="text-[9px] text-zinc-400 mt-0.5">Asigna inventarios individuales por talle y color, y un precio diferente por variante si lo requiere</p>
                         </div>
                         <button
                           type="button"
@@ -3723,6 +3966,8 @@ export default function App() {
                                 <th className="p-2">Talle</th>
                                 <th className="p-2">Color / Tono</th>
                                 <th className="p-2">Stock Disponible</th>
+                                <th className="p-2">Precio Diferente (Opcional)</th>
+                                <th className="p-2">Foto URL (Opcional)</th>
                                 <th className="p-2 text-right">Acciones</th>
                               </tr>
                             </thead>
@@ -3749,6 +3994,149 @@ export default function App() {
                                       }}
                                       className="w-16 px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none"
                                     />
+                                  </td>
+                                  <td className="p-2">
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-zinc-400 font-bold">$</span>
+                                      <input
+                                        type="number"
+                                        placeholder="Base"
+                                        value={v.price !== undefined ? v.price : ""}
+                                        onChange={(e) => {
+                                          const nextArr = JSON.parse(JSON.stringify(newProduct.variants || []));
+                                          const val = e.target.value;
+                                          if (val === "") {
+                                            delete nextArr[i].price;
+                                          } else {
+                                            nextArr[i].price = Math.max(0, Number(val));
+                                          }
+                                          setNewProduct({
+                                            ...newProduct,
+                                            variants: nextArr
+                                          });
+                                        }}
+                                        className="w-20 px-1 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none"
+                                      />
+                                    </div>
+                                  </td>
+                                  <td className="p-2">
+                                                                        {(() => {
+                                      const galleryImages = [newProduct.imageUrl, ...(newProduct.imagenes || [])].filter(Boolean);
+                                      return (
+                                        <div className="flex flex-col gap-1 max-w-[170px]">
+                                          {galleryImages.length > 0 ? (
+                                            <select
+                                              value={galleryImages.includes(v.imageUrl || "") ? v.imageUrl : (v.imageUrl ? "manual" : "")}
+                                              onChange={(e) => {
+                                                const val = e.target.value;
+                                                const nextArr = JSON.parse(JSON.stringify(newProduct.variants || []));
+                                                if (val === "manual") {
+                                                  if (galleryImages.includes(v.imageUrl || "")) {
+                                                    nextArr[i].imageUrl = "";
+                                                  }
+                                                } else {
+                                                  nextArr[i].imageUrl = val;
+                                                }
+                                                setNewProduct({
+                                                  ...newProduct,
+                                                  variants: nextArr
+                                                });
+                                              }}
+                                              className="px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-205 dark:border-zinc-800 rounded text-[11px] outline-none w-full text-slate-800 dark:text-zinc-200"
+                                            >
+                                              <option value="">-- Sin foto --</option>
+                                              {galleryImages.map((img, imgIdx) => (
+                                                <option key={imgIdx} value={img}>
+                                                  {imgIdx === 0 ? "Foto Principal" : `Foto Adicional ${imgIdx}`}
+                                                </option>
+                                              ))}
+                                              <option value="manual">Otro (Insertar URL)...</option>
+                                            </select>
+                                          ) : null}
+
+                                          {(galleryImages.length === 0 || !v.imageUrl || !galleryImages.includes(v.imageUrl)) && (
+                                            <div className="space-y-1">
+                                              <input
+                                                type="text"
+                                                placeholder="URL de foto..."
+                                                value={v.imageUrl || ""}
+                                                onChange={(e) => {
+                                                  const nextArr = JSON.parse(JSON.stringify(newProduct.variants || []));
+                                                  nextArr[i].imageUrl = e.target.value.trim();
+                                                  setNewProduct({
+                                                    ...newProduct,
+                                                    variants: nextArr
+                                                  });
+                                                }}
+                                                className="w-full px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-805 rounded text-[10px] outline-none font-mono"
+                                              />
+                                              <div className="flex items-center gap-1 mt-1">
+                                                <span className="text-[8px] text-zinc-400 font-bold uppercase shrink-0">Subir:</span>
+                                                <input
+                                                  type="file"
+                                                  accept="image/*"
+                                                  onChange={async (e) => {
+                                                    if (e.target.files && e.target.files[0]) {
+                                                      const file = e.target.files[0];
+                                                      const formData = new FormData();
+                                                      formData.append("image", file);
+                                                      try {
+                                                        const uploadRes = await fetch("/api/cloudinary/upload", {
+                                                          method: "POST",
+                                                          body: formData,
+                                                        });
+                                                        const resText = await uploadRes.text();
+                                                        let parsedData: any = null;
+                                                        
+                                                        if (resText.trim().startsWith("<!doctype") || resText.trim().startsWith("<html")) {
+                                                          alert("El servidor no pudo subir la imagen. Por favor, verifica que Cloudinary esté configurado en tus Ajustes o reinicia el servidor.");
+                                                          return;
+                                                        }
+                                                        
+                                                        try {
+                                                          parsedData = JSON.parse(resText);
+                                                        } catch (pErr) {
+                                                          console.error("Error al parsear respuesta JSON:", pErr);
+                                                        }
+
+                                                        if (uploadRes.ok && parsedData && parsedData.success && parsedData.url) {
+                                                          const nextArr = JSON.parse(JSON.stringify(newProduct.variants || []));
+                                                          nextArr[i].imageUrl = parsedData.url;
+                                                          setNewProduct({
+                                                            ...newProduct,
+                                                            variants: nextArr
+                                                          });
+                                                        } else {
+                                                          alert((parsedData && parsedData.message) || "Error al subir a Cloudinary.");
+                                                        }
+                                                      } catch (err) {
+                                                        console.error(err);
+                                                        alert("Error al conectar con la API de subida.");
+                                                      }
+                                                    }
+                                                  }}
+                                                  className="w-full text-[8px] text-zinc-550 dark:text-zinc-400 file:mr-1 file:py-0.5 file:px-1 file:rounded file:border-0 file:text-[8px] file:font-semibold file:bg-zinc-100 dark:file:bg-zinc-800 file:text-zinc-700 dark:file:text-zinc-350 hover:file:opacity-80 cursor-pointer"
+                                                />
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {v.imageUrl && (
+                                            <div className="flex items-center gap-1 mt-0.5 bg-slate-100/40 dark:bg-zinc-900/40 p-1 rounded border border-slate-200/50 dark:border-zinc-800/30">
+                                              <img 
+                                                src={v.imageUrl} 
+                                                alt="preview" 
+                                                className="w-6 h-6 object-cover rounded border border-zinc-700/20 shadow-xs shrink-0" 
+                                                onError={(e) => { e.target.style.display = 'none'; }} 
+                                              />
+                                              <span className="text-[9px] text-zinc-500 truncate max-w-[110px]" title={v.imageUrl}>
+                                                {v.imageUrl.includes('/') ? v.imageUrl.substring(v.imageUrl.lastIndexOf('/') + 1) : v.imageUrl}
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
                                   </td>
                                   <td className="p-2 text-right">
                                     <button
@@ -3882,6 +4270,119 @@ export default function App() {
                               </option>
                             ))}
                         </select>
+                      </div>
+                    </div>
+
+                    {/* Categorías secundarias adicionales para Editar Producto */}
+                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60">
+                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">
+                        Categorías Adicionales / Secundarias <span className="text-zinc-400 dark:text-zinc-500 font-normal lowercase">(los artículos aparecerán en todas las categorías marcadas)</span>
+                      </label>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {(store.dbCategories || [])
+                          .sort((a,b) => (a.orden || 0) - (b.orden || 0))
+                          .filter(c => c.id !== editingProduct.categoria_id)
+                          .map((c) => {
+                            const isChecked = !!(editingProduct.categorias_adicionales && editingProduct.categorias_adicionales.includes(c.id));
+                            return (
+                              <button
+                                type="button"
+                                key={c.id}
+                                onClick={() => {
+                                  const list = editingProduct.categorias_adicionales || [];
+                                  const updated = list.includes(c.id)
+                                    ? list.filter(id => id !== c.id)
+                                    : [...list, c.id];
+                                  setEditingProduct({
+                                    ...editingProduct,
+                                    categorias_adicionales: updated
+                                  });
+                                }}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all cursor-pointer select-none active:scale-95 ${
+                                  isChecked
+                                    ? "bg-[#5346ff]/10 text-[#5346ff] border-[#5346ff]/40 dark:bg-[#5346ff]/20 dark:text-[#9086ff] dark:border-[#5346ff]/60"
+                                    : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-850 hover:bg-slate-100 dark:hover:bg-zinc-850"
+                                }`}
+                              >
+                                <span>{c.nombre}</span>
+                                {isChecked && <span className="text-[#5346ff] dark:text-[#9086ff]">✓</span>}
+                              </button>
+                            );
+                          })}
+                        {(store.dbCategories || []).filter(c => c.id !== editingProduct.categoria_id).length === 0 && (
+                          <span className="text-[10px] text-zinc-400 italic">No hay otras categorías creadas para seleccionar.</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Subcategorías secundarias adicionales para Editar Producto */}
+                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60">
+                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                        <span>Subcategorías Adicionales / Secundarias</span>
+                        <span className="text-zinc-400 dark:text-zinc-500 font-normal lowercase">(haz clic para desplegar cada menú y marcar)</span>
+                      </label>
+                      <div className="space-y-2 mt-2">
+                        {(store.dbCategories || [])
+                          .sort((a,b) => (a.orden || 0) - (b.orden || 0))
+                          .map((cat) => {
+                            // Find subcategories belonging to this category
+                            const subs = (store.dbSubcategories || []).filter(
+                              s => s.categoria_id === cat.id && s.id !== editingProduct.subcategoria_id
+                            );
+                            if (subs.length === 0) return null;
+
+                            const activeSubCount = subs.filter(
+                              s => !!(editingProduct.subcategorias_adicionales && editingProduct.subcategorias_adicionales.includes(s.id))
+                            ).length;
+                            
+                            return (
+                              <details key={cat.id} className="group border border-slate-200/50 dark:border-zinc-800/50 rounded-lg bg-white dark:bg-zinc-950/40 overflow-hidden" open={activeSubCount > 0}>
+                                <summary className="flex items-center justify-between px-3 py-2 text-[11px] text-slate-700 dark:text-zinc-300 font-extrabold cursor-pointer select-none hover:bg-slate-100/50 dark:hover:bg-zinc-900/50 duration-150 list-none [&::-webkit-details-marker]:hidden">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[9px] text-slate-400 dark:text-zinc-500 transition-transform duration-200 group-open:rotate-90">▶</span>
+                                    <span className="uppercase text-[10px] tracking-wider font-mono">{cat.nombre}</span>
+                                  </div>
+                                  {activeSubCount > 0 && (
+                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-[#5346ff]/10 text-[#5346ff] dark:bg-[#5346ff]/20 dark:text-[#9086ff]">
+                                      {activeSubCount} {activeSubCount === 1 ? "seleccionada" : "seleccionadas"}
+                                    </span>
+                                  )}
+                                </summary>
+                                <div className="p-2.5 border-t border-slate-100 dark:border-zinc-800/30 bg-slate-50/40 dark:bg-zinc-950/20 flex flex-wrap gap-1.5">
+                                  {subs.map((s) => {
+                                    const isChecked = !!(editingProduct.subcategorias_adicionales && editingProduct.subcategorias_adicionales.includes(s.id));
+                                    return (
+                                      <button
+                                        type="button"
+                                        key={s.id}
+                                        onClick={() => {
+                                          const list = editingProduct.subcategorias_adicionales || [];
+                                          const updated = list.includes(s.id)
+                                            ? list.filter(id => id !== s.id)
+                                            : [...list, s.id];
+                                          setEditingProduct({
+                                            ...editingProduct,
+                                            subcategorias_adicionales: updated
+                                          });
+                                        }}
+                                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 border transition-all cursor-pointer select-none active:scale-95 ${
+                                          isChecked
+                                            ? "bg-[#5346ff]/10 text-[#5346ff] border-[#5346ff]/35 dark:bg-[#5346ff]/20 dark:text-[#9086ff] dark:border-[#5346ff]/50"
+                                            : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-850 hover:bg-slate-100 dark:hover:bg-zinc-850"
+                                        }`}
+                                      >
+                                        <span>{s.nombre}</span>
+                                        {isChecked && <span className="text-[#5346ff] dark:text-[#9086ff]">✓</span>}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </details>
+                            );
+                          })}
+                        {!(store.dbSubcategories && store.dbSubcategories.length > 0) && (
+                          <span className="text-[10px] text-zinc-400 italic">No hay subcategorías registradas en la tienda para seleccionar.</span>
+                        )}
                       </div>
                     </div>
 
@@ -4062,7 +4563,7 @@ export default function App() {
                           <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">
                             Gestor de Stock de Variantes (Combinación Exacto)
                           </label>
-                          <p className="text-[9px] text-zinc-400 mt-0.5 font-sans">Asigna inventarios individuales por talle y color</p>
+                          <p className="text-[9px] text-zinc-400 mt-0.5 font-sans">Asigna inventarios individuales por talle y color, y un precio diferente por variante si lo requiere</p>
                         </div>
                         <button
                           type="button"
@@ -4178,6 +4679,8 @@ export default function App() {
                                 <th className="p-2">Talle</th>
                                 <th className="p-2">Color / Tono</th>
                                 <th className="p-2">Stock Disponible</th>
+                                <th className="p-2">Precio Diferente (Opcional)</th>
+                                <th className="p-2">Foto URL (Opcional)</th>
                                 <th className="p-2 text-right">Acciones</th>
                               </tr>
                             </thead>
@@ -4205,6 +4708,149 @@ export default function App() {
                                       className="w-16 px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none"
                                     />
                                   </td>
+                                  <td className="p-2">
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-zinc-400 font-bold">$</span>
+                                      <input
+                                        type="number"
+                                        placeholder="Base"
+                                        value={v.price !== undefined ? v.price : ""}
+                                        onChange={(e) => {
+                                          const nextArr = JSON.parse(JSON.stringify(editingProduct.variants || []));
+                                          const val = e.target.value;
+                                          if (val === "") {
+                                            delete nextArr[i].price;
+                                          } else {
+                                            nextArr[i].price = Math.max(0, Number(val));
+                                          }
+                                          setEditingProduct({
+                                            ...editingProduct,
+                                            variants: nextArr
+                                          });
+                                        }}
+                                        className="w-20 px-1 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none"
+                                      />
+                                    </div>
+                                  </td>
+                                  <td className="p-2">
+                                                                        {(() => {
+                                      const galleryImages = [editingProduct.imageUrl, ...(editingProduct.imagenes || [])].filter(Boolean);
+                                      return (
+                                        <div className="flex flex-col gap-1 max-w-[170px]">
+                                          {galleryImages.length > 0 ? (
+                                            <select
+                                              value={galleryImages.includes(v.imageUrl || "") ? v.imageUrl : (v.imageUrl ? "manual" : "")}
+                                              onChange={(e) => {
+                                                const val = e.target.value;
+                                                const nextArr = JSON.parse(JSON.stringify(editingProduct.variants || []));
+                                                if (val === "manual") {
+                                                  if (galleryImages.includes(v.imageUrl || "")) {
+                                                    nextArr[i].imageUrl = "";
+                                                  }
+                                                } else {
+                                                  nextArr[i].imageUrl = val;
+                                                }
+                                                setEditingProduct({
+                                                  ...editingProduct,
+                                                  variants: nextArr
+                                                });
+                                              }}
+                                              className="px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-205 dark:border-zinc-800 rounded text-[11px] outline-none w-full text-slate-800 dark:text-zinc-200"
+                                            >
+                                              <option value="">-- Sin foto --</option>
+                                              {galleryImages.map((img, imgIdx) => (
+                                                <option key={imgIdx} value={img}>
+                                                  {imgIdx === 0 ? "Foto Principal" : `Foto Adicional ${imgIdx}`}
+                                                </option>
+                                              ))}
+                                              <option value="manual">Otro (Insertar URL)...</option>
+                                            </select>
+                                          ) : null}
+
+                                          {(galleryImages.length === 0 || !v.imageUrl || !galleryImages.includes(v.imageUrl)) && (
+                                            <div className="space-y-1">
+                                              <input
+                                                type="text"
+                                                placeholder="URL de foto..."
+                                                value={v.imageUrl || ""}
+                                                onChange={(e) => {
+                                                  const nextArr = JSON.parse(JSON.stringify(editingProduct.variants || []));
+                                                  nextArr[i].imageUrl = e.target.value.trim();
+                                                  setEditingProduct({
+                                                    ...editingProduct,
+                                                    variants: nextArr
+                                                  });
+                                                }}
+                                                className="w-full px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-805 rounded text-[10px] outline-none font-mono"
+                                              />
+                                              <div className="flex items-center gap-1 mt-1">
+                                                <span className="text-[8px] text-zinc-400 font-bold uppercase shrink-0">Subir:</span>
+                                                <input
+                                                  type="file"
+                                                  accept="image/*"
+                                                  onChange={async (e) => {
+                                                    if (e.target.files && e.target.files[0]) {
+                                                      const file = e.target.files[0];
+                                                      const formData = new FormData();
+                                                      formData.append("image", file);
+                                                      try {
+                                                        const uploadRes = await fetch("/api/cloudinary/upload", {
+                                                          method: "POST",
+                                                          body: formData,
+                                                        });
+                                                        const resText = await uploadRes.text();
+                                                        let parsedData: any = null;
+                                                        
+                                                        if (resText.trim().startsWith("<!doctype") || resText.trim().startsWith("<html")) {
+                                                          alert("El servidor no pudo subir la imagen. Por favor, verifica que Cloudinary esté configurado en tus Ajustes o reinicia el servidor.");
+                                                          return;
+                                                        }
+                                                        
+                                                        try {
+                                                          parsedData = JSON.parse(resText);
+                                                        } catch (pErr) {
+                                                          console.error("Error al parsear respuesta JSON:", pErr);
+                                                        }
+
+                                                        if (uploadRes.ok && parsedData && parsedData.success && parsedData.url) {
+                                                          const nextArr = JSON.parse(JSON.stringify(editingProduct.variants || []));
+                                                          nextArr[i].imageUrl = parsedData.url;
+                                                          setEditingProduct({
+                                                            ...editingProduct,
+                                                            variants: nextArr
+                                                          });
+                                                        } else {
+                                                          alert((parsedData && parsedData.message) || "Error al subir a Cloudinary.");
+                                                        }
+                                                      } catch (err) {
+                                                        console.error(err);
+                                                        alert("Error al conectar con la API de subida.");
+                                                      }
+                                                    }
+                                                  }}
+                                                  className="w-full text-[8px] text-zinc-550 dark:text-zinc-400 file:mr-1 file:py-0.5 file:px-1 file:rounded file:border-0 file:text-[8px] file:font-semibold file:bg-zinc-100 dark:file:bg-zinc-800 file:text-zinc-700 dark:file:text-zinc-350 hover:file:opacity-80 cursor-pointer"
+                                                />
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {v.imageUrl && (
+                                            <div className="flex items-center gap-1 mt-0.5 bg-slate-100/40 dark:bg-zinc-900/40 p-1 rounded border border-slate-200/50 dark:border-zinc-800/30">
+                                              <img 
+                                                src={v.imageUrl} 
+                                                alt="preview" 
+                                                className="w-6 h-6 object-cover rounded border border-zinc-700/20 shadow-xs shrink-0" 
+                                                onError={(e) => { e.target.style.display = 'none'; }} 
+                                              />
+                                              <span className="text-[9px] text-zinc-500 truncate max-w-[110px]" title={v.imageUrl}>
+                                                {v.imageUrl.includes('/') ? v.imageUrl.substring(v.imageUrl.lastIndexOf('/') + 1) : v.imageUrl}
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
+                                  </td>
                                   <td className="p-2 text-right">
                                     <button
                                       type="button"
@@ -4216,7 +4862,7 @@ export default function App() {
                                           stock: nextVariants.reduce((sum, item) => sum + item.stock, 0)
                                         });
                                       }}
-                                      className="text-red-500 hover:text-red-600 font-bold transition-all cursor-pointer"
+                                      className="text-red-500 hover:text-red-650 font-bold transition-all cursor-pointer"
                                     >
                                       Remover
                                     </button>
@@ -4946,6 +5592,24 @@ export default function App() {
                                       </div>
                                       <p className="text-[10px] text-zinc-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
                                         <span className="bg-slate-100 dark:bg-zinc-900 px-1.5 py-0.5 rounded font-bold uppercase">{p.category}</span>
+                                        {p.categorias_adicionales && p.categorias_adicionales.map(catId => {
+                                          const name = (store.dbCategories || []).find(c => c.id === catId)?.nombre;
+                                          if (!name) return null;
+                                          return (
+                                            <span key={catId} className="bg-[#5346ff]/10 text-[#5346ff] border border-[#5346ff]/25 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase">
+                                              + {name}
+                                            </span>
+                                          );
+                                        })}
+                                        {p.subcategorias_adicionales && p.subcategorias_adicionales.map(subId => {
+                                          const name = (store.dbSubcategories || []).find(s => s.id === subId)?.nombre;
+                                          if (!name) return null;
+                                          return (
+                                            <span key={subId} className="bg-teal-550/15 text-teal-605 border border-teal-500/25 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase dark:bg-teal-500/10 dark:text-teal-400">
+                                              + {name}
+                                            </span>
+                                          );
+                                        })}
                                         <span>Precio: <strong>${p.price.toFixed(2)}</strong></span>
                                         {hasVariants && (
                                           <span className="text-zinc-500">({p.variants?.length} combinaciones registradas)</span>
@@ -4976,7 +5640,7 @@ export default function App() {
                                         <div className="text-[9px] text-indigo-400 font-bold mt-1 font-mono">
                                           {p.variants?.map((v, idx) => (
                                             <span key={idx} className="block">
-                                              Talle {v.size} / {v.color}: {v.stock <= 0 ? "Agotado 🚫" : v.stock <= lowStockThresholdSetting ? `Bajo (${v.stock}u) ⚠` : `${v.stock}u` }
+                                              Talle {v.size} / {v.color}: {v.stock <= 0 ? "Agotado 🚫" : v.stock <= lowStockThresholdSetting ? `Bajo (${v.stock}u) ⚠` : `${v.stock}u` }{typeof v.price === "number" && v.price > 0 ? ` | Precio: $${v.price}` : ""}
                                             </span>
                                           ))}
                                         </div>

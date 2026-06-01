@@ -88,6 +88,9 @@ export default function ImageGalleryEditor({ images, onChange, isThemeDark }: Im
     setUploadProgress(true);
     const newUrls: string[] = [];
     let errorCount = 0;
+    let cloudinarySuccessCount = 0;
+    let fallbackCount = 0;
+    let serverFeedback = "";
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -96,25 +99,78 @@ export default function ImageGalleryEditor({ images, onChange, isThemeDark }: Im
         continue;
       }
       try {
+        // Try to upload to Cloudinary via server endpoint
+        const formData = new FormData();
+        formData.append("image", file);
+
+        const uploadRes = await fetch("/api/cloudinary/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        const responseText = await uploadRes.text();
+        let parsedData: any = null;
+        
+        if (responseText.trim().startsWith("<!doctype") || responseText.trim().startsWith("<html")) {
+          console.warn("Se recibió respuesta HTML en lugar de JSON. Usando fallback de almacenamiento local optimizado.");
+          serverFeedback = "Servidor no inicializado o ruta de API temporalmente no disponible.";
+        } else {
+          try {
+            parsedData = JSON.parse(responseText);
+          } catch (jsonErr) {
+            console.error("Error al parsear JSON:", jsonErr);
+          }
+        }
+
+        if (uploadRes.ok && parsedData && parsedData.success && parsedData.url) {
+          newUrls.push(parsedData.url);
+          cloudinarySuccessCount++;
+          continue;
+        }
+
+        if (parsedData && parsedData.message) {
+          serverFeedback = parsedData.message;
+        }
+
+        // Fallback to local optimized base64 representation
         const optimizedBase64 = await optimizeAndCompressImage(file);
         newUrls.push(optimizedBase64);
+        fallbackCount++;
       } catch (err) {
-        console.error(err);
-        errorCount++;
+        console.error("Cloudinary upload failed, using base64 fallback:", err);
+        try {
+          const optimizedBase64 = await optimizeAndCompressImage(file);
+          newUrls.push(optimizedBase64);
+          fallbackCount++;
+        } catch (fbErr) {
+          console.error(fbErr);
+          errorCount++;
+        }
       }
     }
 
     if (newUrls.length > 0) {
       onChange([...images, ...newUrls]);
-      showStatus(
-        files.length === 1 
-          ? "Imagen cargada y optimizada con éxito." 
-          : `${newUrls.length} imágenes añadidas y optimizadas.`
-      );
+      
+      if (cloudinarySuccessCount > 0 && fallbackCount === 0) {
+        showStatus(
+          files.length === 1 
+            ? "¡Imagen subida con éxito a Cloudinary! ✨" 
+            : `¡${cloudinarySuccessCount} imágenes subidas con éxito a Cloudinary! ✨`
+        );
+      } else if (fallbackCount > 0 && cloudinarySuccessCount === 0) {
+        showStatus(
+          serverFeedback 
+            ? `⚠️ Guardado en Base64 local (Cloudinary no configurado).` 
+            : `⚠️ Guardado localmente como Base64.`
+        );
+      } else {
+        showStatus(`Subida mixta: ${cloudinarySuccessCount} en Cloudinary, ${fallbackCount} locales.`);
+      }
     }
 
     if (errorCount > 0) {
-      showStatus("Algunos archivos no se pudieron procesar o no eran imágenes.", true);
+      showStatus("Algunos archivos no se pudieron procesar.", true);
     }
     setUploadProgress(false);
   };

@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { X, ShoppingCart, MessageSquare, ShieldCheck, Truck, RefreshCw, ChevronLeft, ChevronRight, AlertCircle, Share2 } from "lucide-react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { X, ShoppingCart, MessageSquare, ShieldCheck, Truck, RefreshCw, ChevronLeft, ChevronRight, AlertCircle, Share2, Maximize2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Product, SiteSettings } from "../types";
 import ProductCard from "./ProductCard";
@@ -59,13 +59,13 @@ export default function ProductDetails({
       ? ["Negro mate", "Plata espacial", "Azul cobalto"] 
       : ["Estándar"]));
 
-  // Pre-initialize selectors
+  // Pre-initialize selectors (only auto-select if there is exactly 1 option, otherwise start unselected)
   const [selectedSize, setSelectedSize] = useState(() => {
-    return sizes.length > 0 ? sizes[0] : "";
+    return sizes.length === 1 ? sizes[0] : "";
   });
 
   const [selectedColor, setSelectedColor] = useState(() => {
-    return colors.length > 0 ? colors[0] : "";
+    return colors.length === 1 ? colors[0] : "";
   });
 
   const [quantity, setQuantity] = useState(1);
@@ -81,21 +81,64 @@ export default function ProductDetails({
     matchedVariant = variants.find(v => v.size === selectedSize && v.color === selectedColor);
     if (matchedVariant) {
       currentStock = matchedVariant.stock;
-      dynamicPrice = product.price + (matchedVariant.priceDelta || 0);
+      dynamicPrice = typeof matchedVariant.price === "number" && matchedVariant.price > 0
+        ? matchedVariant.price
+        : product.price + (matchedVariant.priceDelta || 0);
     } else {
       currentStock = 0; // This specific combo isn't defined or holds 0 stock
     }
   }
 
   // Dynamic Image carousels
-  const allImages = [product.imageUrl, ...(product.imagenes || [])].filter(Boolean);
-  const [activeImgIndex, setActiveImgIndex] = useState(0);
+  const allImages = useMemo(() => {
+    return [product.imageUrl, ...(product.imagenes || [])].filter(Boolean);
+  }, [product.imageUrl, product.imagenes]);
 
-  // Scroll to the top of the page when the product loaded changes, and reset the active image index
+  const [activeImgIndex, setActiveImgIndex] = useState(0);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+
+  // Keep track of the last color that triggered an automatic image transition
+  const autoSwitchedColorRef = useRef("");
+
+  // Scroll to the top of the page when the product loaded changes, and reset the active image index and state
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
     setActiveImgIndex(0);
-  }, [product.id]);
+    setSelectedSize(sizes.length === 1 ? sizes[0] : "");
+    setSelectedColor(colors.length === 1 ? colors[0] : "");
+    setQuantity(1);
+    autoSwitchedColorRef.current = ""; // Reset matched color on product change
+  }, [product.id, sizes.length, colors.length]);
+
+  // Automatically update activeImgIndex when selectedColor changes
+  useEffect(() => {
+    if (selectedColor && selectedColor !== autoSwitchedColorRef.current) {
+      autoSwitchedColorRef.current = selectedColor;
+      const lowerColor = selectedColor.toLowerCase().trim();
+      // Strategy 1: Check if any variant has a specific variant imageUrl
+      const matchedV = (variants || []).find(v => v.color && v.color.toLowerCase().trim() === lowerColor && v.imageUrl);
+      if (matchedV && matchedV.imageUrl) {
+        const idx = allImages.indexOf(matchedV.imageUrl);
+        if (idx !== -1) {
+          setActiveImgIndex(idx);
+          return;
+        }
+      }
+
+      // Strategy 2: Check standard image URLs for a substring containing the color name
+      const matchesUrl = allImages.findIndex(img => {
+        try {
+          const decoded = decodeURIComponent(img).toLowerCase();
+          return decoded.includes(lowerColor);
+        } catch {
+          return img.toLowerCase().includes(lowerColor);
+        }
+      });
+      if (matchesUrl !== -1) {
+        setActiveImgIndex(matchesUrl);
+      }
+    }
+  }, [selectedColor, product.id, variants, allImages]);
 
   const handlePrevImg = () => {
     setActiveImgIndex((prev) => (prev === 0 ? allImages.length - 1 : prev - 1));
@@ -110,7 +153,11 @@ export default function ProductDetails({
       alert("Por favor selecciona un talle.");
       return;
     }
-    const colorToPass = colors.length > 0 ? selectedColor || colors[0] : undefined;
+    if (colors.length > 0 && !selectedColor) {
+      alert("Por favor selecciona un color.");
+      return;
+    }
+    const colorToPass = colors.length > 0 ? selectedColor : undefined;
     
     // Safety check quantity boundaries
     const finalQty = Math.min(quantity, currentStock);
@@ -180,7 +227,11 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
             isThemeDark ? "bg-[#0c0c0e]/30" : "bg-[#fcfbfc]"
           }`}>
             
-            <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
+            <div 
+              onClick={() => setIsLightboxOpen(true)}
+              className="relative w-full h-full flex items-center justify-center overflow-hidden cursor-zoom-in group/main-img"
+              title="Haz clic para ampliar la imagen"
+            >
               <AnimatePresence mode="wait">
                 <motion.img
                   key={activeImgIndex}
@@ -190,10 +241,15 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 1.03 }}
                   transition={{ duration: 0.22, ease: "easeOut" }}
-                  className="max-h-full max-w-full object-contain select-none"
+                  className="max-h-full max-w-full object-contain select-none transition-transform duration-300 group-hover/main-img:scale-[1.015]"
                   referrerPolicy="no-referrer"
                 />
               </AnimatePresence>
+
+              {/* Floating expand indicator */}
+              <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md rounded-full p-2 text-white/90 opacity-0 group-hover/main-img:opacity-100 transition-all duration-300 z-10 shadow-lg hover:scale-105 hover:bg-black/80">
+                <Maximize2 className="w-3.5 h-3.5" />
+              </div>
             </div>
             
             {isDiscounted && (
@@ -369,7 +425,12 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
                 <h4 className={`text-[10px] font-bold tracking-[0.15em] uppercase ${
                   isThemeDark ? "text-zinc-400" : "text-zinc-500"
                 }`}>
-                  TALLA SELECCIONADA:
+                  TALLE SELECCIONADO:{" "}
+                  {selectedSize ? (
+                    <span className="text-[#5346ff] font-extrabold">{selectedSize}</span>
+                  ) : (
+                    <span className="text-red-500 font-bold dark:text-red-400 animate-pulse text-[9px]">(Por favor selecciona un talle)</span>
+                  )}
                 </h4>
                 <div className="flex flex-wrap gap-2">
                   {sizes.map((sz) => (
@@ -401,7 +462,12 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
                 <h4 className={`text-[10px] font-bold tracking-[0.15em] uppercase ${
                   isThemeDark ? "text-zinc-400" : "text-zinc-500"
                 }`}>
-                  COLOR SELECCIONADO:
+                  COLOR SELECCIONADO:{" "}
+                  {selectedColor ? (
+                    <span className="text-[#5346ff] font-extrabold">{selectedColor}</span>
+                  ) : (
+                    <span className="text-red-500 font-bold dark:text-red-400 animate-pulse text-[9px]">(Por favor selecciona un color)</span>
+                  )}
                 </h4>
                 <div className="flex flex-wrap gap-2">
                   {colors.map((col) => {
@@ -520,6 +586,97 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
           </div>
         </div>
       )}
+
+      {/* Immersive Lightbox Modal */}
+      <AnimatePresence>
+        {isLightboxOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/95 backdrop-blur-md p-4 sm:p-6 text-white"
+            onClick={() => setIsLightboxOpen(false)}
+          >
+            {/* Upper control strip */}
+            <div className="absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-none z-[110]">
+              <span className="text-white/60 font-mono text-xs font-semibold bg-black/45 backdrop-blur-md px-3 py-1.5 rounded-full select-none">
+                {activeImgIndex + 1} / {allImages.length}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsLightboxOpen(false)}
+                className="pointer-events-auto p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer shadow-lg border border-white/10"
+                title="Cerrar vista ampliada"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Main content viewport */}
+            <div 
+              className="relative w-full max-w-5xl h-[70vh] sm:h-[80vh] flex items-center justify-center"
+              onClick={(e) => e.stopPropagation()} // Prevent clicking the image from closing the lightbox
+            >
+              <AnimatePresence mode="wait">
+                <motion.img
+                  key={activeImgIndex}
+                  src={allImages[activeImgIndex] || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80"}
+                  alt={product.name}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 1.05 }}
+                  transition={{ duration: 0.22, ease: "easeOut" }}
+                  className="max-h-full max-w-full object-contain rounded-xl select-none"
+                  referrerPolicy="no-referrer"
+                />
+              </AnimatePresence>
+
+              {/* Prev/Next inside lightbox */}
+              {allImages.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); handlePrevImg(); }}
+                    className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 p-3 sm:p-4 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white transition-all cursor-pointer z-50 shadow-md border border-white/5"
+                  >
+                    <ChevronLeft className="h-6 w-6 stroke-[2.5]" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); handleNextImg(); }}
+                    className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 p-3 sm:p-4 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white transition-all cursor-pointer z-50 shadow-md border border-white/5"
+                  >
+                    <ChevronRight className="h-6 w-6 stroke-[2.5]" />
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Bottom thumbnail selector inside fullscreen overlay */}
+            {allImages.length > 1 && (
+              <div 
+                className="mt-6 flex flex-wrap gap-2.5 justify-center max-w-full overflow-x-auto no-scrollbar py-2 shrink-0 relative z-[110]"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {allImages.map((imgUrl, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setActiveImgIndex(idx)}
+                    className={`relative w-12 h-12 sm:w-16 sm:h-16 rounded-xl overflow-hidden border-2 transition-all duration-300 shrink-0 cursor-pointer ${
+                      activeImgIndex === idx 
+                        ? "border-[#5346ff] scale-[1.05] shadow-lg bg-zinc-900" 
+                        : "border-white/10 bg-black/40 hover:border-white/30 opacity-70 hover:opacity-100"
+                    }`}
+                  >
+                    <img src={imgUrl} className="w-full h-full object-contain p-0.5" referrerPolicy="no-referrer" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -7,6 +7,12 @@ import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import { ShopState } from "./src/types";
 import pg from "pg";
+import { v2 as cloudinary } from "cloudinary";
+import multer from "multer";
+
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
+
 const { Pool } = pg;
 
 // Initial Shop Data
@@ -428,7 +434,7 @@ async function getDbState(): Promise<ShopState> {
     // Fetch product variants
     const productVariantsMap: Record<number, any[]> = {};
     try {
-      const variantsRes = await pool.query("SELECT id, product_id, size_value, color_name, color_code, additional_price, stock FROM public.product_variants WHERE active = true;");
+      const variantsRes = await pool.query("SELECT id, product_id, size_value, color_name, color_code, additional_price, stock, image_url, price FROM public.product_variants WHERE active = true;");
       for (const vRow of variantsRes.rows) {
         const pid = vRow.product_id;
         if (!productVariantsMap[pid]) {
@@ -440,7 +446,9 @@ async function getDbState(): Promise<ShopState> {
           color: vRow.color_name || "",
           colorCode: vRow.color_code || "",
           priceDelta: vRow.additional_price ? Number(vRow.additional_price) : 0,
-          stock: vRow.stock ? Number(vRow.stock) : 0
+          stock: vRow.stock ? Number(vRow.stock) : 0,
+          imageUrl: vRow.image_url || "",
+          price: vRow.price !== null && vRow.price !== undefined ? Number(vRow.price) : undefined
         });
       }
     } catch (varErr) {
@@ -644,9 +652,10 @@ async function saveDbState(state: ShopState): Promise<boolean> {
         if (Array.isArray(prod.variants) && prod.variants.length > 0) {
           for (const variant of prod.variants) {
             const sku = variant.sku || `SKU-${prodId}-${variant.size}-${variant.color}-${Math.floor(Math.random() * 10000)}`;
+            const variantPrice = typeof variant.price === "number" && variant.price > 0 ? variant.price : null;
             await pool.query(`
-              INSERT INTO public.product_variants (product_id, sku, size_value, color_name, color_code, additional_price, stock, active)
-              VALUES ($1, $2, $3, $4, $5, $6, $7, true);
+              INSERT INTO public.product_variants (product_id, sku, size_value, color_name, color_code, additional_price, stock, image_url, price, active)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true);
             `, [
               prodId,
               sku,
@@ -654,7 +663,9 @@ async function saveDbState(state: ShopState): Promise<boolean> {
               variant.color,
               variant.colorCode || "",
               Number(variant.priceDelta || 0),
-              Math.floor(Number(variant.stock || 0))
+              Math.floor(Number(variant.stock || 0)),
+              variant.imageUrl || null,
+              variantPrice
             ]);
           }
         }
@@ -760,12 +771,19 @@ async function initPostgresStore(): Promise<ShopState | null> {
         additional_price NUMERIC(10, 2) DEFAULT 0.00,
         stock INTEGER NOT NULL DEFAULT 0,
         active BOOLEAN DEFAULT true,
+        image_url TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
     await pool.query(`
       ALTER TABLE public.product_variants ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    `);
+    await pool.query(`
+      ALTER TABLE public.product_variants ADD COLUMN IF NOT EXISTS image_url TEXT;
+    `);
+    await pool.query(`
+      ALTER TABLE public.product_variants ADD COLUMN IF NOT EXISTS price NUMERIC(10, 2);
     `);
 
     // 4. Create categories
@@ -1051,6 +1069,48 @@ async function startServer() {
       console.error("Error al actualizar credenciales:", err);
       res.status(500).json({ success: false, message: "No se pudieron persistir las credenciales en la base de datos." });
     }
+  });
+
+  // POST upload to Cloudinary (Full-stack API proxy for credentials safety)
+  app.post("/api/cloudinary/upload", upload.single("image"), (req, res) => {
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+    if (!cloudName || !apiKey || !apiSecret) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Configuración de Cloudinary incompleta en el servidor. Por favor, define CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY y CLOUDINARY_API_SECRET en tus variables de entorno." 
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "No se proporcionó ningún archivo de imagen para subir." });
+    }
+
+    // Configure cloudinary connection lazily
+    cloudinary.config({
+      cloud_name: cloudName,
+      api_key: apiKey,
+      api_secret: apiSecret
+    });
+
+    // Create stream and feed binary packet
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: "ventas_juem_cloudinary",
+        resource_type: "auto"
+      },
+      (error, result) => {
+        if (error) {
+          console.error("Error al subir a Cloudinary:", error);
+          return res.status(500).json({ success: false, message: "Error al subir a Cloudinary.", detail: error.message });
+        }
+        res.json({ success: true, url: result?.secure_url });
+      }
+    );
+
+    uploadStream.end(req.file.buffer);
   });
 
   // GET store state

@@ -22,6 +22,25 @@ export default function ProductCard({
 
   const lowStockThreshold = typeof settings?.lowStockThreshold === 'number' ? settings.lowStockThreshold : 5;
 
+  const getPriceDisplay = () => {
+    if (!product.variants || product.variants.length === 0) {
+      return `$${Math.round(product.price)}`;
+    }
+    const prices = product.variants.map((v) => {
+      if (typeof v.price === "number" && v.price > 0) {
+        return v.price;
+      }
+      return product.price + (v.priceDelta || 0);
+    });
+    prices.push(product.price);
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    if (min === max) {
+      return `$${Math.round(min)}`;
+    }
+    return `$${Math.round(min)} - $${Math.round(max)}`;
+  };
+
   return (
     <div
       className={`group relative flex flex-col rounded-2xl border overflow-hidden transition-all duration-300 hover:shadow-xl hover:shadow-black/20 ${
@@ -113,7 +132,7 @@ export default function ProductCard({
               </span>
             )}
             <span className="text-sm sm:text-base font-bold theme-text-primary">
-              ${Math.round(product.price)}
+              {getPriceDisplay()}
             </span>
           </div>
 

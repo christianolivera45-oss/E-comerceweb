@@ -6,6 +6,8 @@ export interface ProductVariant {
   colorCode?: string; // e.g. '#2563eb'
   priceDelta?: number;
   stock: number;
+  imageUrl?: string; // Image associated with this color/variant
+  price?: number; // Custom override price
 }
 
 export interface Product {
@@ -17,6 +19,8 @@ export interface Product {
   category: string; // Keep for fallback compatibility
   categoria_id?: string; // Main Category ID
   subcategoria_id?: string; // Subcategory ID
+  categorias_adicionales?: string[]; // Additional Category IDs
+  subcategorias_adicionales?: string[]; // Additional Subcategory IDs
   imageUrl: string;
   imagenes?: string[]; // List of multiple product images
   variants?: ProductVariant[]; // Advanced dyn sub-variants with stock

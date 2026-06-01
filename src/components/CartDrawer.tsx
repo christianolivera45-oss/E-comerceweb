@@ -31,9 +31,24 @@ export default function CartDrawer({
   const [appliedDiscount, setAppliedDiscount] = useState(0); // in percentage
   const [promoStatus, setPromoStatus] = useState<"none" | "success" | "invalid">("none");
 
+  // Helper to resolve actual item price (checking variants for overriding price or delta)
+  const getItemPrice = (item: CartItem): number => {
+    const p = item.product;
+    if (p.variants && p.variants.length > 0 && item.selectedSize && item.selectedColor) {
+      const match = p.variants.find(v => v.size === item.selectedSize && v.color === item.selectedColor);
+      if (match) {
+        if (typeof match.price === "number" && match.price > 0) {
+          return match.price;
+        }
+        return p.price + (match.priceDelta || 0);
+      }
+    }
+    return p.price;
+  };
+
   // Calculate prices
   const subtotal = cartItems.reduce(
-    (sum, item) => sum + item.product.price * item.quantity,
+    (sum, item) => sum + getItemPrice(item) * item.quantity,
     0
   );
 
@@ -104,9 +119,10 @@ export default function CartDrawer({
       if (item.selectedColor) options.push(`Color: ${item.selectedColor}`);
       const optionsStr = options.length > 0 ? ` (${options.join(", ")})` : "";
       
+      const itemPrice = getItemPrice(item);
       message += `${index + 1}. *${item.product.name}*${optionsStr}\n`;
-      message += `   👉 ${item.quantity} x $${Math.round(item.product.price)} = *$${Math.round(
-        item.product.price * item.quantity
+      message += `   👉 ${item.quantity} x $${Math.round(itemPrice)} = *$${Math.round(
+        itemPrice * item.quantity
       )}*\n\n`;
     });
 
@@ -245,12 +261,12 @@ export default function CartDrawer({
                           {/* Price */}
                           <div className="text-right">
                             <span className="text-xs text-zinc-500 block line-through">
-                              {item.product.originalPrice && item.product.originalPrice > item.product.price && (
+                              {item.product.originalPrice && item.product.originalPrice > getItemPrice(item) && (
                                 `$${Math.round(item.product.originalPrice * item.quantity)}`
                               )}
                             </span>
                             <span className="text-sm font-bold theme-text-primary">
-                              ${Math.round(item.product.price * item.quantity)}
+                              ${Math.round(getItemPrice(item) * item.quantity)}
                             </span>
                           </div>
                         </div>

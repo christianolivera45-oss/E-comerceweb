@@ -137,8 +137,11 @@ export default function CartDrawer({
         const immediateQty = Math.min(item.quantity, Math.max(0, immediateStock));
         const onDemandQty = Math.max(0, item.quantity - immediateStock);
         
+        const rawVal = item.product.hoursPerUnit;
+        const delayDays = (rawVal === undefined || rawVal === null) ? 1 : (rawVal === 8 ? 1 : (rawVal === 24 ? 2 : (rawVal === 48 ? 3 : rawVal)));
+        const totalDelayDays = onDemandQty * delayDays;
         message += `   ⚡ _Stock inmediato:_ ${immediateQty} un.\n`;
-        message += `   🛠️ _A fabricar:_ ${onDemandQty} un. (est. ${(item.product.hoursPerUnit || 8) * onDemandQty} hs de impresión)\n`;
+        message += `   🛠️ _A fabricar:_ ${onDemandQty} un. (demora est. ${totalDelayDays} ${totalDelayDays === 1 ? "día" : "días"})\n`;
       }
       
       message += `   👉 ${item.quantity} x $${Math.round(itemPrice)} = *$${Math.round(

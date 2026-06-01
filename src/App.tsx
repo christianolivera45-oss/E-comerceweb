@@ -3798,7 +3798,7 @@ export default function App() {
                               category: match ? match.nombre : "",
                               subcategoria_id: "all", // reset subcategory on parent change
                               is3D: isCategory3D ? true : newProduct.is3D,
-                              hoursPerUnit: isCategory3D ? (newProduct.hoursPerUnit || 8) : newProduct.hoursPerUnit,
+                              hoursPerUnit: isCategory3D ? (newProduct.hoursPerUnit || 1) : newProduct.hoursPerUnit,
                               sizes: needsDefaultMaterials ? ["PLA", "PETG", "ABS", "TPU"] : currentSizes
                             });
                             if (newProductErrors.category) {
@@ -4556,13 +4556,13 @@ export default function App() {
                       )}
                     </div>
 
-                     <div className="flex flex-col gap-3.5 p-4 rounded-xl bg-zinc-900/60 border border-zinc-800">
+                      <div className="flex flex-col gap-3.5 p-4 rounded-xl bg-zinc-900/60 border border-zinc-800">
                       <div className="flex items-center gap-2">
                         <input
                           type="checkbox"
                           id="newProductIs3D"
                           checked={!!newProduct.is3D}
-                          onChange={(e) => setNewProduct({ ...newProduct, is3D: e.target.checked, hoursPerUnit: e.target.checked ? (newProduct.hoursPerUnit || 8) : undefined })}
+                          onChange={(e) => setNewProduct({ ...newProduct, is3D: e.target.checked, hoursPerUnit: e.target.checked ? (newProduct.hoursPerUnit || 1) : undefined })}
                           className="rounded border-zinc-750 bg-zinc-950 text-indigo-500 focus:ring-0 cursor-pointer h-4 w-4"
                         />
                         <label htmlFor="newProductIs3D" className="text-xs text-zinc-300 select-none cursor-pointer font-bold flex items-center gap-1.5 text-indigo-400">
@@ -4574,19 +4574,19 @@ export default function App() {
                       {newProduct.is3D && (
                         <div className="pl-6 animate-fade-in space-y-2">
                           <label htmlFor="newProductHours" className="block text-[10px] font-extrabold uppercase text-zinc-400 tracking-wider">
-                            Tiempo estimado de impresión por unidad (en horas):
+                            Demora de fabricación estimada por unidad (en días):
                           </label>
                           <div className="flex items-center gap-2.5">
                             <input
                               type="number"
                               id="newProductHours"
                               min="1"
-                              max="200"
-                              value={newProduct.hoursPerUnit || 8}
+                              max="100"
+                              value={newProduct.hoursPerUnit || 1}
                               onChange={(e) => setNewProduct({ ...newProduct, hoursPerUnit: Math.max(1, Number(e.target.value)) })}
                               className="w-24 px-2.5 py-1.5 rounded bg-zinc-950 text-white border border-zinc-800 text-xs font-mono font-bold focus:outline-none focus:ring-1 focus:ring-[#5346ff]"
                             />
-                            <span className="text-[11px] text-zinc-500">horas de tiempo activo en máquina.</span>
+                            <span className="text-[11px] text-zinc-500">día(s) de demora.</span>
                           </div>
                         </div>
                       )}
@@ -4675,7 +4675,7 @@ export default function App() {
                               category: match ? match.nombre : "",
                               subcategoria_id: "all", // Reset subcategory selection
                               is3D: isCategory3D ? true : editingProduct.is3D,
-                              hoursPerUnit: isCategory3D ? (editingProduct.hoursPerUnit || 8) : editingProduct.hoursPerUnit,
+                              hoursPerUnit: isCategory3D ? (editingProduct.hoursPerUnit || 1) : editingProduct.hoursPerUnit,
                               sizes: needsDefaultMaterials ? ["PLA", "PETG", "ABS", "TPU"] : currentSizes
                             });
                           }}
@@ -5363,13 +5363,13 @@ export default function App() {
                       )}
                     </div>
 
-                     <div className="flex flex-col gap-3.5 p-4 rounded-xl bg-zinc-900/60 border border-zinc-800">
+                      <div className="flex flex-col gap-3.5 p-4 rounded-xl bg-zinc-900/60 border border-zinc-800">
                       <div className="flex items-center gap-2">
                         <input
                           type="checkbox"
                           id="editProductIs3D"
                           checked={!!editingProduct.is3D}
-                          onChange={(e) => setEditingProduct({ ...editingProduct, is3D: e.target.checked, hoursPerUnit: e.target.checked ? (editingProduct.hoursPerUnit || 8) : undefined })}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, is3D: e.target.checked, hoursPerUnit: e.target.checked ? (editingProduct.hoursPerUnit || 1) : undefined })}
                           className="rounded border-zinc-750 bg-zinc-950 text-indigo-500 focus:ring-0 cursor-pointer h-4 w-4"
                         />
                         <label htmlFor="editProductIs3D" className="text-xs text-zinc-300 select-none cursor-pointer font-bold flex items-center gap-1.5 text-indigo-400">
@@ -5381,19 +5381,19 @@ export default function App() {
                       {editingProduct.is3D && (
                         <div className="pl-6 animate-fade-in space-y-2">
                           <label htmlFor="editProductHours" className="block text-[10px] font-extrabold uppercase text-zinc-400 tracking-wider">
-                            Tiempo estimado de impresión por unidad (en horas):
+                            Demora de fabricación estimada por unidad (en días):
                           </label>
                           <div className="flex items-center gap-2.5">
                             <input
                               type="number"
                               id="editProductHours"
                               min="1"
-                              max="200"
-                              value={editingProduct.hoursPerUnit || 8}
+                              max="100"
+                              value={editingProduct.hoursPerUnit || 1}
                               onChange={(e) => setEditingProduct({ ...editingProduct, hoursPerUnit: Math.max(1, Number(e.target.value)) })}
                               className="w-24 px-2.5 py-1.5 rounded bg-zinc-950 text-white border border-zinc-800 text-xs font-mono font-bold focus:outline-none focus:ring-1 focus:ring-[#5346ff]"
                             />
-                            <span className="text-[11px] text-zinc-500">horas de tiempo activo en máquina.</span>
+                            <span className="text-[11px] text-zinc-500">día(s) de demora.</span>
                           </div>
                         </div>
                       )}

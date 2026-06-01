@@ -121,6 +121,15 @@ export default function ProductDetails({
     }
   }
 
+  const getDelayInDays = (prod: any): number => {
+    const val = prod.hoursPerUnit;
+    if (val === undefined || val === null) return 1;
+    if (val === 8) return 1;
+    if (val === 24) return 2;
+    if (val === 48) return 3;
+    return val;
+  };
+
   const getEstimatedDeliveryString = (days: number) => {
     if (days === 0) return "Inmediata (en stock)";
     const date = new Date();
@@ -221,12 +230,14 @@ export default function ProductDetails({
     if (is3D) {
       const immediateQty = Math.min(quantity, Math.max(0, currentStock));
       const onDemandQty = Math.max(0, quantity - currentStock);
+      const delayDays = getDelayInDays(product);
+      const totalDelayDays = onDemandQty * delayDays;
       specText = `👉 Material seleccionado: ${selectedSize}
 👉 Color deseado: ${selectedColor}
 👉 Cantidad: ${quantity} un.
    - Entrega inmediata: ${immediateQty} un.
    - A fabricar bajo demanda: ${onDemandQty} un.
-${onDemandQty > 0 ? `👉 Tiempo estimado de fabricación: ${(quantity - currentStock) * (product.hoursPerUnit || 8)} horas\n` : ""}`;
+${onDemandQty > 0 ? `👉 Tiempo estimado de fabricación: ${totalDelayDays} ${totalDelayDays === 1 ? "día" : "días"}\n` : ""}`;
     } else {
       specText = `${selectedSize ? `👉 Talle seleccionado: ${selectedSize}\n` : ""}${selectedColor ? `👉 Color deseado: ${selectedColor}\n` : ""}`;
     }
@@ -478,18 +489,22 @@ Me gustaría coordinar stock, fabricación y envío.`;
                     </div>
                   </div>
 
-                  {quantity > currentStock && (
-                    <div className="mt-3.5 pt-3.5 border-t border-zinc-500/10 space-y-2 text-zinc-500 dark:text-zinc-400">
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-amber-500 shrink-0" />
-                        <span>Fabricación Estimada: <strong className="text-zinc-800 dark:text-zinc-200">{(quantity - currentStock) * (product.hoursPerUnit || 8)} Horas</strong> ({Math.ceil(((quantity - currentStock) * (product.hoursPerUnit || 8)) / 18)} {Math.ceil(((quantity - currentStock) * (product.hoursPerUnit || 8)) / 18) === 1 ? "Día hábil" : "Días hábiles"} de impresora activa)</span>
+                  {quantity > currentStock && (() => {
+                    const delayInDays = getDelayInDays(product);
+                    const totalDelayDays = Math.max(0, quantity - currentStock) * delayInDays;
+                    return (
+                      <div className="mt-3.5 pt-3.5 border-t border-zinc-500/10 space-y-2 text-zinc-500 dark:text-zinc-400">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+                          <span>Fabricación Estimada: <strong className="text-zinc-800 dark:text-zinc-200">{totalDelayDays} {totalDelayDays === 1 ? "Día" : "Días"}</strong> ({totalDelayDays === 1 ? "Día hábil" : "Días hábiles"} de producción)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-4 h-4 text-emerald-500 shrink-0" />
+                          <span>Fecha estimada de entrega: <strong className="text-zinc-800 dark:text-zinc-200">{getEstimatedDeliveryString(totalDelayDays)}</strong></span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-emerald-500 shrink-0" />
-                        <span>Fecha estimada de entrega: <strong className="text-zinc-800 dark:text-zinc-200">{getEstimatedDeliveryString(Math.ceil(((quantity - currentStock) * (product.hoursPerUnit || 8)) / 18))}</strong></span>
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               )}
 

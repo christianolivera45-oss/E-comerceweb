@@ -940,6 +940,34 @@ export default function App() {
     };
   }, []);
 
+  // Dynamic Tab Title and Favicon Synchronization based on admin settings
+  useEffect(() => {
+    if (!store.settings) return;
+
+    // 1. Sync Document Title
+    const currentTitle = store.settings.siteTitle || "Ventas Juem";
+    document.title = currentTitle;
+
+    // 2. Sync Favicon Link
+    let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      document.getElementsByTagName("head")[0].appendChild(link);
+    }
+
+    if (store.settings.logoType === "image" && store.settings.logoImageUrl) {
+      link.href = store.settings.logoImageUrl;
+    } else {
+      // Create an elegant SVG-based Favicon automatically with the company's initials matching the primary theme color!
+      const initials = (store.settings.logoText || "J").substring(0, 2).toUpperCase();
+      const primaryColor = store.settings.primaryColor || "#5346ff";
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="${primaryColor}"/><text x="50%" y="58%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-family="system-ui, sans-serif" font-weight="900" font-size="16">${initials}</text></svg>`;
+      const base64Svg = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+      link.href = base64Svg;
+    }
+  }, [store.settings]);
+
   const handleOpenProduct = (prod: Product) => {
     setSelectedProduct(prod);
     const newUrl = `/producto/${prod.id}`;

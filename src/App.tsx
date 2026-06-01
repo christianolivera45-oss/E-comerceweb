@@ -45,7 +45,30 @@ import {
   TrendingUp,
   TrendingDown,
   Upload,
-  Loader2
+  Loader2,
+  Coffee,
+  Gamepad2,
+  Wrench,
+  Gift,
+  Crown,
+  Heart,
+  Footprints,
+  BookOpen,
+  Scissors,
+  Gem,
+  Flame,
+  Lightbulb,
+  Smile,
+  Printer,
+  Music,
+  Dumbbell,
+  Glasses,
+  Baby,
+  Wine,
+  Tv,
+  HardDrive,
+  Headphones,
+  Sofa
 } from "lucide-react";
 import { Product, SiteSettings, ShopState, CartItem, Category, Subcategory, ProductVariant, is3DProduct } from "./types";
 import ThemeStyles from "./components/ThemeStyles";
@@ -206,31 +229,92 @@ const DEFAULT_SETTINGS: SiteSettings = {
   footerCopyright: "Desarrollado con tecnología de punta responsive. Reservados todos los derechos."
 };
 
+const ICON_LABELS: Record<string, string> = {
+  Shirt: "👕 Ropa / Remeras",
+  Smartphone: "📱 Celulares",
+  Laptop: "💻 Computadoras / Laptops",
+  Printer: "🖨️ Impresiones 3D",
+  Coffee: "☕ Mate / Bazar",
+  Gamepad2: "🎮 Gaming / Consolas",
+  Wrench: "🔧 Herramientas",
+  Glasses: "👓 Lentes / Gafas",
+  Watch: "⌚ Relojes / Smartwatch",
+  Tv: "📺 Tecnología / Pantallas",
+  Home: "🏠 Hogar / Decoración",
+  Sofa: "🛋️ Muebles / Living",
+  Gem: "💎 Joyería / Accesorios",
+  Gift: "🎁 Regalos",
+  Smile: "🧸 Peluches / Juguetes",
+  Dumbbell: "🏋️ Deportes / Fit",
+  Music: "🎵 Música / Parlantes",
+  Sparkles: "✨ Destacados / Novedades",
+  Percent: "🏷️ Ofertas / Liquidaciones",
+  Palette: "🎨 Diseño / Personalizado",
+  BookOpen: "📖 Librería / Libros",
+  Compass: "🧭 Aventura",
+  Flame: "🔥 Tendencias",
+  Heart: "❤️ Favoritos",
+  Box: "📦 Otros"
+};
+
 const getCategoryIcon = (categoryOrIcon: string) => {
   const cat = (categoryOrIcon || "").toLowerCase();
   
   if (cat === "todos" || cat === "grid") return <Grid className="h-5 w-5 animate-pulse" />;
   if (cat === "shirt" || cat === "ropa") return <Shirt className="h-5 w-5" />;
   if (cat === "smartphone" || cat === "celular" || cat === "celulares") return <Smartphone className="h-5 w-5" />;
-  if (cat === "sparkles" || cat === "destacado") return <Sparkles className="h-5 w-5" />;
+  if (cat === "sparkles" || cat === "destacado" || cat === "destacados") return <Sparkles className="h-5 w-5" />;
   if (cat === "home" || cat === "hogar") return <Home className="h-5 w-5" />;
   if (cat === "watch" || cat === "relojes") return <Watch className="h-5 w-5" />;
   if (cat === "percent" || cat === "descuentos") return <Percent className="h-5 w-5" />;
   if (cat === "laptop" || cat === "pc") return <Laptop className="h-5 w-5" />;
   if (cat === "palette" || cat === "diseno") return <Palette className="h-5 w-5" />;
-  if (cat === "tag" || cat === "promos") return <Tag className="h-5 w-5" />;
-  if (cat === "box") return <Box className="h-5 w-5" />;
-  
-  // Ropa / Moda / Vestimenta keyword check
+  if (cat === "tag" || cat === "promos" || cat === "etiqueta") return <Tag className="h-5 w-5" />;
+  if (cat === "box" || cat === "paquete") return <Box className="h-5 w-5" />;
+  if (cat === "coffee" || cat === "mate") return <Coffee className="h-5 w-5" />;
+  if (cat === "gamepad2" || cat === "gaming") return <Gamepad2 className="h-5 w-5" />;
+  if (cat === "wrench" || cat === "herramientas") return <Wrench className="h-5 w-5" />;
+  if (cat === "gift" || cat === "regalos" || cat === "regalo") return <Gift className="h-5 w-5" />;
+  if (cat === "crown" || cat === "premium") return <Crown className="h-5 w-5" />;
+  if (cat === "heart" || cat === "favoritos") return <Heart className="h-5 w-5" />;
+  if (cat === "footprints" || cat === "calzado" || cat === "zapatillas" || cat === "zapatos") return <Footprints className="h-5 w-5" />;
+  if (cat === "bookopen" || cat === "libreria" || cat === "libros" || cat === "agenda") return <BookOpen className="h-5 w-5" />;
+  if (cat === "scissors" || cat === "manualidades" || cat === "costura") return <Scissors className="h-5 w-5" />;
+  if (cat === "gem" || cat === "joyas" || cat === "joyeria" || cat === "accesorios") return <Gem className="h-5 w-5" />;
+  if (cat === "flame" || cat === "hot" || cat === "tendencia") return <Flame className="h-5 w-5" />;
+  if (cat === "lightbulb" || cat === "iluminacion" || cat === "lamparas") return <Lightbulb className="h-5 w-5" />;
+  if (cat === "smile" || cat === "juguetes" || cat === "ninos") return <Smile className="h-5 w-5" />;
+  if (cat === "printer" || cat === "impresora" || cat === "impresiones") return <Printer className="h-5 w-5" />;
+  if (cat === "music" || cat === "musica") return <Music className="h-5 w-5" />;
+  if (cat === "dumbbell" || cat === "deportes" || cat === "deporte" || cat === "fitness") return <Dumbbell className="h-5 w-5" />;
+  if (cat === "glasses" || cat === "lentes" || cat === "gafas") return <Glasses className="h-5 w-5" />;
+  if (cat === "baby" || cat === "bebe" || cat === "bebes") return <Baby className="h-5 w-5" />;
+  if (cat === "wine" || cat === "bazar" || cat === "copas" || cat === "vajilla") return <Wine className="h-5 w-5" />;
+  if (cat === "tv" || cat === "televisores" || cat === "pantallas") return <Tv className="h-5 w-5" />;
+  if (cat === "harddrive" || cat === "discos" || cat === "almacenamiento") return <HardDrive className="h-5 w-5" />;
+  if (cat === "headphones" || cat === "auriculares") return <Headphones className="h-5 w-5" />;
+  if (cat === "sofa" || cat === "muebles" || cat === "deco" || cat === "decoracion") return <Sofa className="h-5 w-5" />;
+  if (cat === "cpu" || cat === "computacion" || cat === "hardware") return <Cpu className="h-5 w-5" />;
+
+  // 1. Impresiones / 3D keyword check
+  if (
+    cat.includes("impresio") ||
+    cat.includes("3d") ||
+    cat.includes("filamento") ||
+    cat.includes("pla") ||
+    cat.includes("llaver")
+  ) {
+    return <Printer className="h-5 w-5" />;
+  }
+
+  // 2. Ropa / Moda / Vestimenta keyword check
   if (
     cat.includes("ropa") ||
     cat.includes("vest") ||
     cat.includes("moda") ||
-    cat.includes("calza") ||
     cat.includes("prend") ||
     cat.includes("remera") ||
     cat.includes("abrigo") ||
-    cat.includes("calzado") ||
     cat.includes("buzo") ||
     cat.includes("jean") ||
     cat.includes("panta") ||
@@ -238,8 +322,19 @@ const getCategoryIcon = (categoryOrIcon: string) => {
   ) {
     return <Shirt className="h-5 w-5" />;
   }
-  
-  // Electrónica / Tecnología / Artículos electrónicos keyword check
+
+  // 3. Calzado / Zapatillas
+  if (
+    cat.includes("calza") ||
+    cat.includes("zapat") ||
+    cat.includes("bota") ||
+    cat.includes("sandalia") ||
+    cat.includes("foot")
+  ) {
+    return <Footprints className="h-5 w-5" />;
+  }
+
+  // 4. Electrónica / Tecnología / Artículos electrónicos keyword check
   if (
     cat.includes("electron") ||
     cat.includes("tecno") ||
@@ -256,20 +351,36 @@ const getCategoryIcon = (categoryOrIcon: string) => {
   ) {
     return <Laptop className="h-5 w-5" />;
   }
-  
-  // Hogar / Decoración / Casa keyword check
+
+  // 5. Hogar / Decoración / Casa / Sofa keyword check
   if (
     cat.includes("hogar") ||
     cat.includes("casa") ||
     cat.includes("mueble") ||
     cat.includes("decor") ||
     cat.includes("jardin") ||
-    cat.includes("cocina")
+    cat.includes("sofa")
   ) {
     return <Home className="h-5 w-5" />;
   }
-  
-  // Accesorios / Relojes / Bolsos keyword check
+
+  // 6. Bazar / Mate / Cocina / Copas / Vasos
+  if (
+    cat.includes("bazar") ||
+    cat.includes("cocina") ||
+    cat.includes("mate") ||
+    cat.includes("cafe") ||
+    cat.includes("taza") ||
+    cat.includes("termo") ||
+    cat.includes("vaso") ||
+    cat.includes("copa") ||
+    cat.includes("vajilla") ||
+    cat.includes("wine")
+  ) {
+    return <Coffee className="h-5 w-5" />;
+  }
+
+  // 7. Accesorios / Relojes / Bolsos keyword check
   if (
     cat.includes("accesor") ||
     cat.includes("joya") ||
@@ -277,12 +388,37 @@ const getCategoryIcon = (categoryOrIcon: string) => {
     cat.includes("bols") ||
     cat.includes("mochila") ||
     cat.includes("cartera") ||
-    cat.includes("watch")
+    cat.includes("watch") ||
+    cat.includes("gem")
   ) {
     return <Watch className="h-5 w-5" />;
   }
-  
-  // Ofertas / Descuentos / Liquidación / Sale keyword check
+
+  // 8. Gaming
+  if (
+    cat.includes("game") ||
+    cat.includes("juego") ||
+    cat.includes("consola") ||
+    cat.includes("playstation") ||
+    cat.includes("xbox") ||
+    cat.includes("nintendo")
+  ) {
+    return <Gamepad2 className="h-5 w-5" />;
+  }
+
+  // 9. Regalos / Juguetes
+  if (
+    cat.includes("regal") ||
+    cat.includes("gift") ||
+    cat.includes("juguet") ||
+    cat.includes("peluch") ||
+    cat.includes("smile") ||
+    cat.includes("nino")
+  ) {
+    return <Gift className="h-5 w-5" />;
+  }
+
+  // 10. Ofertas / Descuentos / Liquidación / Sale keyword check
   if (
     cat.includes("oferta") ||
     cat.includes("promoc") ||
@@ -293,7 +429,7 @@ const getCategoryIcon = (categoryOrIcon: string) => {
   ) {
     return <Percent className="h-5 w-5" />;
   }
-  
+
   // Otros / Caja / Estrellas / Predeterminado
   return <Box className="h-5 w-5" />;
 };
@@ -5469,8 +5605,10 @@ export default function App() {
                                   onChange={(e) => setEditingCategory({ ...editingCategory, icono: e.target.value })}
                                   className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white font-semibold"
                                 >
-                                  {["Shirt", "Smartphone", "Watch", "Tv", "Home", "Gem", "Glasses", "Gift", "Music", "Sparkles", "Package", "BookOpen", "Compass", "Palette"].map((ico) => (
-                                    <option key={ico} value={ico}>{ico}</option>
+                                  {Object.keys(ICON_LABELS).map((ico) => (
+                                    <option key={ico} value={ico}>
+                                      {ICON_LABELS[ico]}
+                                    </option>
                                   ))}
                                 </select>
                               </div>
@@ -5529,8 +5667,10 @@ export default function App() {
                                   onChange={(e) => setNewCategoryIcon(e.target.value)}
                                   className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white font-semibold"
                                 >
-                                  {["Shirt", "Smartphone", "Watch", "Tv", "Home", "Gem", "Glasses", "Gift", "Music", "Sparkles", "Package", "BookOpen", "Compass", "Palette"].map((ico) => (
-                                    <option key={ico} value={ico}>{ico}</option>
+                                  {Object.keys(ICON_LABELS).map((ico) => (
+                                    <option key={ico} value={ico}>
+                                      {ICON_LABELS[ico]}
+                                    </option>
                                   ))}
                                 </select>
                               </div>

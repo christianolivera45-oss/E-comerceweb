@@ -1,20 +1,27 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, ShoppingCart, MessageSquare, ShieldCheck, Truck, RefreshCw, ChevronLeft, ChevronRight, AlertCircle, Share2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Product, SiteSettings } from "../types";
+import ProductCard from "./ProductCard";
 
 interface ProductDetailsProps {
   product: Product;
   onClose: () => void;
   onAddToCart: (product: Product, size?: string, color?: string, quantity?: number) => void;
   settings: SiteSettings;
+  allProducts?: Product[];
+  dbCategories?: any[];
+  onViewProduct?: (product: Product) => void;
 }
 
 export default function ProductDetails({
   product,
   onClose,
   onAddToCart,
-  settings
+  settings,
+  allProducts = [],
+  dbCategories = [],
+  onViewProduct = () => {}
 }: ProductDetailsProps) {
   const isThemeDark = settings.themeMode === "dark";
   const isClothing = product.category.toLowerCase() === "ropa" || (product.sizes && product.sizes.length > 0);
@@ -23,6 +30,22 @@ export default function ProductDetails({
   // Dynamic variants logic
   const variants = product.variants || [];
   const hasVariants = variants.length > 0;
+
+  // Filter related products
+  let relatedProducts = allProducts
+    ? allProducts.filter((p) => p.id !== product.id && p.active !== false && p.paused !== true && (
+        String(p.categoria_id) === String(product.categoria_id) || 
+        p.category?.toLowerCase() === product.category?.toLowerCase()
+      ))
+    : [];
+
+  if (relatedProducts.length < 4 && allProducts) {
+    const ids = new Set(relatedProducts.map(p => p.id));
+    const extra = allProducts.filter(
+      (p) => p.id !== product.id && p.active !== false && p.paused !== true && !ids.has(p.id)
+    );
+    relatedProducts = [...relatedProducts, ...extra].slice(0, 4);
+  }
 
   const sizes = product.sizes && product.sizes.length > 0 
     ? product.sizes 
@@ -68,6 +91,12 @@ export default function ProductDetails({
   const allImages = [product.imageUrl, ...(product.imagenes || [])].filter(Boolean);
   const [activeImgIndex, setActiveImgIndex] = useState(0);
 
+  // Scroll to the top of the page when the product loaded changes, and reset the active image index
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    setActiveImgIndex(0);
+  }, [product.id]);
+
   const handlePrevImg = () => {
     setActiveImgIndex((prev) => (prev === 0 ? allImages.length - 1 : prev - 1));
   };
@@ -101,7 +130,7 @@ export default function ProductDetails({
   const handleImmediateWhatsAppQuery = () => {
     const text = `Hola ${settings.siteTitle || "Ventas Juem"}! Me interesa obtener más información sobre este artículo:
 *${product.name}*
-${selectedSize ? `👉 Talle seleccionado: ${selectedSize}\n` : ""}${selectedColor ? `👉 Color deseado: ${selectedColor}\n` : ""}Precio actual del catálogo: $${dynamicPrice.toFixed(2)}
+${selectedSize ? `👉 Talle seleccionado: ${selectedSize}\n` : ""}${selectedColor ? `👉 Color deseado: ${selectedColor}\n` : ""}Precio actual del catálogo: $${Math.round(dynamicPrice)}
 Me gustaría saber disponibilidad de stock y métodos de envío.`;
 
     const cleanPhone = settings.whatsappNumber.replace(/[^0-9]/g, "");
@@ -112,7 +141,7 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
   const isDiscounted = product.originalPrice && product.originalPrice > dynamicPrice;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-3 md:p-6 backdrop-blur-xs">
+    <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-10 animate-fade-in">
       <style>{`
         .no-scrollbar::-webkit-scrollbar {
           display: none !important;
@@ -124,25 +153,32 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
           scrollbar-width: none !important; /* Firefox */
         }
       `}</style>
+
+
+
       <div
-        className={`relative w-[96vw] md:w-[92vw] max-w-5xl rounded-[32px] overflow-hidden flex flex-col md:grid md:grid-cols-[63%_37%] h-auto max-h-[92vh] md:h-[620px] shadow-2xl transition-all duration-300 ${
-          isThemeDark ? "bg-[#0a0a0a] border border-zinc-850 text-white" : "bg-white text-zinc-900 border border-gray-150"
+        className={`relative w-full rounded-[32px] overflow-hidden flex flex-col md:grid md:grid-cols-[58%_42%] shadow-2xl transition-all duration-300 ${
+          isThemeDark ? "bg-[#09090b] text-white" : "bg-white text-zinc-900"
         }`}
       >
-        {/* Close Button: Luxurious, circular with backdrop dark glass */}
+        {/* Close Button: Luxurious, circular, shown mostly on small screens */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 z-50 rounded-full p-2 bg-black/40 text-zinc-400 hover:text-white hover:bg-black/60 border border-zinc-800/45 transition duration-200 cursor-pointer"
-          title="Cerrar vista rápida"
+          className="absolute top-4 right-4 z-50 rounded-full p-2 bg-black/40 text-zinc-400 hover:text-white hover:bg-black/60 border border-zinc-800/45 transition duration-200 cursor-pointer sm:hidden animate-fade-in"
+          title="Volver"
         >
           <X className="h-4 w-4" />
         </button>
  
-        {/* Left Column: Image Area with soft light gray background, clean white inner card holding the product picture */}
-        <div className="flex flex-col bg-[#f5f5f7] dark:bg-zinc-900/10 p-4 sm:p-5 md:p-6 lg:p-7 justify-between items-center relative gap-4 border-b md:border-b-0 md:border-r border-slate-200/30 overflow-hidden shrink-0 h-auto md:h-full w-full">
+        {/* Left Column: Image Area without separating borders for unified visual integration */}
+        <div className={`flex flex-col p-4 sm:p-5 md:p-6 justify-start items-center relative gap-3.5 sm:gap-4 overflow-hidden w-full shrink-0 ${
+          isThemeDark ? "bg-[#09090b]" : "bg-white"
+        }`}>
           
           {/* Main card for product details */}
-          <div className="relative w-full h-[240px] sm:h-[310px] md:h-[430px] bg-white dark:bg-zinc-900/35 rounded-[28px] shadow-xs border border-slate-200/30 dark:border-zinc-805/50 flex items-center justify-center p-4 sm:p-6 select-none overflow-hidden">
+          <div className={`relative w-full h-[280px] sm:h-[360px] md:h-[460px] rounded-[24px] flex items-center justify-center p-4 sm:p-5 select-none overflow-hidden ${
+            isThemeDark ? "bg-[#0c0c0e]/30" : "bg-[#fcfbfc]"
+          }`}>
             
             <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
               <AnimatePresence mode="wait">
@@ -171,17 +207,32 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
               <>
                 <button
                   onClick={(e) => { e.stopPropagation(); handlePrevImg(); }}
-                  className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-md border border-slate-100 dark:border-zinc-850 hover:scale-105 active:scale-95 transition-all cursor-pointer z-10"
+                  className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-black/50 hover:bg-black/75 text-white border border-white/10 hover:scale-105 active:scale-95 transition-all cursor-pointer z-10 shadow-md"
                 >
                   <ChevronLeft className="h-4 w-4 stroke-[2.5]" />
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleNextImg(); }}
-                  className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-md border border-slate-100 dark:border-zinc-850 hover:scale-105 active:scale-95 transition-all cursor-pointer z-10"
+                  className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-black/50 hover:bg-black/75 text-white border border-white/10 hover:scale-105 active:scale-95 transition-all cursor-pointer z-10 shadow-md"
                 >
                   <ChevronRight className="h-4 w-4 stroke-[2.5]" />
                 </button>
               </>
+            )}
+
+            {/* Dots indicator inside the image area */}
+            {allImages.length > 1 && (
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10 select-none bg-black/30 backdrop-blur-xs px-3.5 py-1.5 rounded-full">
+                {allImages.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={(e) => { e.stopPropagation(); setActiveImgIndex(idx); }}
+                    className={`h-2 w-2 rounded-full transition-all duration-300 ${
+                      activeImgIndex === idx ? "bg-white w-4" : "bg-white/40 hover:bg-white/70"
+                    }`}
+                  />
+                ))}
+              </div>
             )}
           </div>
 
@@ -196,7 +247,7 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
                     activeImgIndex === idx 
                       ? "border-[#5346ff] scale-[1.04] shadow-md shadow-[#5346ff]/15 bg-white dark:bg-zinc-900/60" 
                       : isThemeDark
-                      ? "border-zinc-805 bg-zinc-900/30 hover:border-zinc-700 opacity-80"
+                      ? "border-zinc-800 bg-[#0c0c0e]/40 hover:border-zinc-700 opacity-80"
                       : "border-slate-205 bg-white hover:border-slate-350 opacity-85"
                   }`}
                 >
@@ -208,40 +259,94 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
         </div>
 
         {/* Details Form Section: Apple/Zara premium styling */}
-        <div className={`p-6 sm:p-7 md:p-8 flex flex-col justify-between overflow-y-auto flex-1 h-full no-scrollbar ${
-          isThemeDark ? "bg-[#0a0a0a] text-white" : "bg-white text-zinc-900"
+        <div className={`p-6 sm:p-8 md:p-10 flex flex-col justify-between gap-8 ${
+          isThemeDark ? "bg-[#09090b] text-white" : "bg-white text-zinc-900"
         }`}>
           <div className="space-y-4">
             <div>
               {/* Title */}
-              <h2 className={`text-xl sm:text-2xl font-bold font-sans tracking-tight mb-2 leading-tight ${
-                isThemeDark ? "text-zinc-100" : "text-zinc-850"
+              <h2 className={`text-2xl sm:text-3xl font-extrabold font-sans tracking-tight mb-3 leading-tight ${
+                isThemeDark ? "text-white" : "text-zinc-900"
               }`}>
                 {product.name}
               </h2>
 
-              {/* Price */}
-              <div className="flex items-baseline gap-2 mb-3">
-                <span className="text-xl sm:text-2xl font-bold text-[#5346ff] tracking-tight">
-                  ${dynamicPrice.toFixed(2)}
-                </span>
-                {isDiscounted && (
-                  <span className={`text-xs line-through ${
-                    isThemeDark ? "text-zinc-500" : "text-zinc-400"
+              {/* Row with Price, Quantity Selector and "Comprar" Button */}
+              <div className="flex items-center gap-3 sm:gap-4 mb-6 pb-3 flex-wrap sm:flex-nowrap border-b border-zinc-900/10 dark:border-zinc-800/30">
+                <div className="flex flex-col">
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl sm:text-3xl font-extrabold text-[#5346ff] tracking-tight">
+                      ${Math.round(dynamicPrice)}
+                    </span>
+                    {isDiscounted && (
+                      <span className={`text-[11px] sm:text-xs line-through font-light ${
+                        isThemeDark ? "text-zinc-500" : "text-zinc-400"
+                      }`}>
+                        ${Math.round(product.originalPrice || 0)}
+                      </span>
+                    )}
+                  </div>
+                  {/* Subtle Stock Label */}
+                  <span className={`text-[9px] font-semibold mt-0.5 ${
+                    currentStock > 0 
+                      ? (isThemeDark ? "text-zinc-400" : "text-zinc-500")
+                      : "text-red-500 font-bold"
                   }`}>
-                    ${product.originalPrice?.toFixed(2)}
+                    Stock: {currentStock > 0 ? `${currentStock} un.` : "Agotado"}
                   </span>
+                </div>
+
+                {currentStock > 0 ? (
+                  <div className="flex items-center gap-2">
+                    {/* Quantity Selector immediately to the right of the price */}
+                    <div className={`flex items-center rounded-lg border p-0.5 select-none ${
+                      isThemeDark ? "border-zinc-800 bg-zinc-900/60 text-white" : "border-gray-205 bg-gray-50 text-zinc-800"
+                    }`}>
+                      <button
+                        type="button"
+                        onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                        disabled={quantity <= 1}
+                        className="w-7 h-7 flex items-center justify-center text-zinc-400 hover:text-white disabled:opacity-30 transition cursor-pointer font-bold text-sm"
+                      >
+                        -
+                      </button>
+                      <span className="w-6 text-center font-mono font-bold text-xs select-none">{quantity}</span>
+                      <button
+                        type="button"
+                        onClick={() => setQuantity(Math.min(currentStock, quantity + 1))}
+                        disabled={quantity >= currentStock}
+                        className="w-7 h-7 flex items-center justify-center text-zinc-400 hover:text-white disabled:opacity-30 transition cursor-pointer font-bold text-sm"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    {/* Buy Button */}
+                    <button
+                      type="button"
+                      onClick={handleAddToCart}
+                      className="flex items-center justify-center gap-1.5 py-2 px-3.5 sm:px-4 rounded-lg font-bold text-xs bg-[#5346ff] hover:bg-[#4336f5] hover:bg-opacity-90 active:scale-95 text-white tracking-wide shadow-md cursor-pointer transition select-none shrink-0"
+                    >
+                      <ShoppingCart className="h-3.5 w-3.5" />
+                      <span>Comprar (${Math.round(dynamicPrice * quantity)})</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-[10px] text-red-500 font-bold bg-red-500/10 px-3 py-2 rounded-lg flex items-center gap-1 border border-red-500/20 shrink-0">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>Sin Stock disponible</span>
+                  </div>
                 )}
               </div>
 
               {/* Description Details Block */}
-              <h4 className={`text-[10px] font-bold tracking-[0.15em] uppercase mb-1.5 ${
+              <h4 className={`text-[10px] font-bold tracking-[0.18em] uppercase mb-2 ${
                 isThemeDark ? "text-zinc-500" : "text-zinc-400"
               }`}>
                 DETALLES
               </h4>
               <div 
-                className={`text-xs max-h-20 overflow-y-auto pr-1 leading-relaxed no-scrollbar font-sans ${
+                className={`text-[13px] sm:text-sm pr-3 leading-relaxed font-sans font-light max-h-[165px] overflow-y-auto custom-description-scrollbar ${
                   isThemeDark ? "text-zinc-400" : "text-zinc-650"
                 }`}
                 style={{
@@ -249,14 +354,14 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
                   overflowWrap: "anywhere"
                 }}
               >
-                <p className="whitespace-pre-line">
+                <p className="whitespace-pre-line leading-relaxed">
                   {product.description || "Sin descripción de catálogo disponible."}
                 </p>
               </div>
             </div>
 
-            {/* Separator Line */}
-            <div className={`h-[1px] w-full ${isThemeDark ? "bg-zinc-850" : "bg-gray-100"}`} />
+            {/* Subtle spacer instead of a separator line */}
+            <div className="h-3" />
 
             {/* Sizes selector matching design ovals */}
             {sizes.length > 0 && (
@@ -325,110 +430,59 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
               </div>
             )}
 
-            {/* Quantity select counter with stock badge */}
-            <div className="space-y-2">
-              <h4 className={`text-[10px] font-bold tracking-[0.15em] uppercase ${
-                isThemeDark ? "text-zinc-400" : "text-zinc-500"
-              }`}>
-                CANTIDAD
-              </h4>
-              <div className="flex items-center gap-4">
-                {currentStock > 0 ? (
-                  <div className={`flex items-center rounded-lg border px-1 py-0.5 select-none ${
-                    isThemeDark ? "border-zinc-800 bg-zinc-900 text-white" : "border-gray-205 bg-gray-50 text-zinc-800"
-                  }`}>
-                    <button
-                      type="button"
-                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                      disabled={quantity <= 1}
-                      className="w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-white disabled:opacity-30 transition cursor-pointer font-bold text-sm"
-                    >
-                      -
-                    </button>
-                    <span className="w-8 text-center font-mono font-bold text-xs select-none">{quantity}</span>
-                    <button
-                      type="button"
-                      onClick={() => setQuantity(Math.min(currentStock, quantity + 1))}
-                      disabled={quantity >= currentStock}
-                      className="w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-white disabled:opacity-30 transition cursor-pointer font-bold text-sm"
-                    >
-                      +
-                    </button>
-                  </div>
-                ) : (
-                  <div className="text-[10px] text-red-500 font-bold bg-red-500/10 p-1.5 rounded-lg flex items-center gap-1 border border-red-500/20">
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                    <span>Sin stock momentáneamente</span>
-                  </div>
-                )}
 
-                {currentStock > 0 && (
-                  <div className={`text-xs flex items-center gap-2 font-medium ${
-                    isThemeDark ? "text-zinc-400" : "text-zinc-500"
-                  }`}>
-                    <span>Disponibles:</span>
-                    <span className={`font-mono text-[11px] font-bold px-2 py-0.5 rounded ${
-                      isThemeDark ? "bg-white text-zinc-950" : "bg-zinc-900 text-white"
-                    }`}>
-                      {currentStock} un.
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
 
-          {/* Premium call actions: solid add-to-cart button and elegant green outline whatsapp button */}
-          <div className="space-y-3 pt-4 border-t border-zinc-900 mt-4">
-            {currentStock > 0 ? (
+          {/* Premium call actions: Horizontal 3-column button grid */}
+          <div className="space-y-3 pt-4 mt-4">
+            <div className="grid grid-cols-3 gap-2 w-full">
               <button
                 type="button"
-                onClick={handleAddToCart}
-                className="w-full flex items-center justify-center gap-2 py-3.5 px-5 rounded-xl font-bold text-xs bg-[#5346ff] hover:bg-[#4336f5] text-white tracking-wide shadow-md cursor-pointer transform hover:-translate-y-0.5 transition active:translate-y-0 select-none"
+                onClick={handleImmediateWhatsAppQuery}
+                className="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 py-2.5 px-1 rounded-lg font-bold text-[10px] sm:text-xs uppercase tracking-wider bg-[#25D366] hover:bg-[#20ba56] text-white duration-200 shadow-xs select-none cursor-pointer transition-all shrink-0"
+                title="Consultar por WhatsApp"
               >
-                <ShoppingCart className="h-4 w-4" />
-                Añadir al Carrito (${(dynamicPrice * quantity).toFixed(2)})
+                <svg className="h-4 w-4 shrink-0 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.725 1.45 5.234 0 9.492-4.254 9.495-9.489.002-2.536-.983-4.919-2.775-6.713C16.3 2.608 13.924 1.623 11.393 1.623c-5.239 0-9.5 4.255-9.502 9.49 0 1.651.436 3.262 1.262 4.694l-.99 3.614 3.7-.97c1.37.848 2.76 1.284 4.194 1.285zm12.524-7.23c-.104-.173-.388-.277-.813-.49-.425-.21-2.515-1.24-2.903-1.382-.388-.141-.672-.213-.956.213-.284.425-1.098 1.381-1.347 1.664-.25.282-.499.318-.924.106-.425-.212-1.79-.663-3.41-2.11-1.258-1.124-2.107-2.514-2.355-2.938-.247-.424-.026-.654.186-.865.19-.19.425-.495.637-.743.213-.248.284-.424.425-.707.142-.283.07-.531-.035-.743-.106-.212-.956-2.301-1.31-3.15-.345-.828-.696-.716-.957-.73-.248-.013-.531-.015-.814-.015-.283 0-.743.106-1.134.531-.39.424-1.488 1.454-1.488 3.546 0 2.093 1.524 4.11 1.737 4.393.213.284 3.001 4.581 7.271 6.425 1.015.439 1.808.7 2.425.897 1.02.324 1.95.278 2.684.17.818-.12 2.516-1.026 2.87-2.016.353-.99.353-1.84.247-2.017z" />
+                </svg>
+                <span className="text-[9px] sm:text-[11px]">WhatsApp</span>
               </button>
-            ) : (
-              <div className="w-full text-center py-2 px-3 rounded-xl font-bold bg-zinc-800/80 text-zinc-555 cursor-not-allowed text-[10px] uppercase tracking-widest border border-zinc-800">
-                Sin Stock Disponible
-              </div>
-            )}
 
-            <button
-              type="button"
-              onClick={handleImmediateWhatsAppQuery}
-              className={`w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl font-bold text-xs border cursor-pointer transition-all duration-200 select-none ${
-                isThemeDark 
-                  ? "border-[#00c26f]/30 text-[#00c26f] hover:bg-[#00c26f]/5 hover:border-[#00c26f]" 
-                  : "border-emerald-200 text-emerald-600 hover:bg-emerald-50 bg-white"
-              }`}
-              style={{
-                color: isThemeDark ? "#00c26f" : undefined,
-                borderColor: isThemeDark ? "rgba(0, 194, 111, 0.3)" : undefined
-              }}
-            >
-              <MessageSquare className="h-4 w-4 text-emerald-500" />
-              Consultar disponibilidad por WhatsApp
-            </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 py-2.5 px-1 rounded-lg font-bold text-[10px] sm:text-xs uppercase tracking-wider border transition-all duration-200 select-none cursor-pointer ${
+                  isThemeDark 
+                    ? "border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-900/40 bg-zinc-950/20" 
+                    : "border-slate-200 text-zinc-650 hover:bg-slate-50 bg-white"
+                }`}
+                title="Volver al Catálogo"
+              >
+                <ChevronLeft className="h-4 w-4 stroke-[2.5]" />
+                <span className="text-[9px] sm:text-[11px]">Volver</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                const url = `${window.location.origin}?product=${product.id}`;
-                navigator.clipboard.writeText(url);
-                setCopiedShare(true);
-                setTimeout(() => setCopiedShare(false), 2500);
-              }}
-              className={`w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl font-bold text-xs border cursor-pointer transition-all duration-200 select-none ${
-                isThemeDark 
-                  ? "border-zinc-800 text-zinc-300 hover:bg-zinc-850 hover:border-zinc-700 bg-zinc-900" 
-                  : "border-slate-200 text-zinc-650 hover:bg-slate-50 bg-white"
-              }`}
-            >
-              <Share2 className="h-4 w-4 text-sky-500" />
-              {copiedShare ? "¡Enlace de Producto Copiado!" : "Compartir / Copiar enlace"}
-            </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const url = `${window.location.origin}/producto/${product.id}`;
+                  navigator.clipboard.writeText(url);
+                  setCopiedShare(true);
+                  setTimeout(() => setCopiedShare(false), 2500);
+                }}
+                className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 py-2.5 px-1 rounded-lg font-bold text-[10px] sm:text-xs uppercase tracking-wider border transition-all duration-200 select-none cursor-pointer ${
+                  isThemeDark 
+                    ? "border-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-900/20" 
+                    : "border-slate-100 text-zinc-550 hover:bg-slate-50/50"
+                }`}
+                title="Compartir o copiar enlace"
+              >
+                <Share2 className="h-4 w-4 text-sky-500" />
+                <span className="text-[9px] sm:text-[11px] truncate">
+                  {copiedShare ? "Copiado!" : "Compartir"}
+                </span>
+              </button>
+            </div>
 
             {addedMessage && (
               <p className="text-xs text-green-500 dark:text-green-400 font-bold text-center animate-pulse">
@@ -438,6 +492,34 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
           </div>
         </div>
       </div>
+
+      {/* SECCIÓN DE PRODUCTOS RELACIONADOS */}
+      {relatedProducts.length > 0 && (
+        <div className="mt-16 sm:mt-24 border-t border-slate-200/50 dark:border-zinc-800/60 pt-12">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className={`text-lg sm:text-xl font-extrabold tracking-tight ${
+              isThemeDark ? "text-white" : "text-zinc-900"
+            }`}>
+              Productos Relacionados
+            </h3>
+            <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#5346ff]">
+              Te puede interesar
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
+            {relatedProducts.map((p) => (
+              <ProductCard
+                key={p.id}
+                product={p}
+                settings={settings}
+                onAddToCart={(prod, sz, col) => onAddToCart(prod, sz, col, 1)}
+                onViewProduct={onViewProduct}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

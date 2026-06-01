@@ -291,8 +291,33 @@ function writeDiagnosticReport(errorMsg?: string) {
   }
 }
 
-function getDbPool() {
-  if (dbUnavailable) {
+let lastDatabaseUrl = process.env.DATABASE_URL || "";
+
+function getDbPool(force = false) {
+  const currentUrl = process.env.DATABASE_URL || "";
+  if (currentUrl.trim() !== lastDatabaseUrl.trim()) {
+    console.log("🔄 DATABASE_URL cambiada de manera dinámica. Restableciendo conexión pool...");
+    if (dbPool) {
+      try {
+        dbPool.end();
+      } catch (e) {}
+    }
+    dbPool = null;
+    dbUnavailable = false;
+    lastDatabaseUrl = currentUrl;
+  }
+
+  if (force) {
+    dbUnavailable = false;
+    if (dbPool) {
+      try {
+        dbPool.end();
+      } catch (e) {}
+      dbPool = null;
+    }
+  }
+
+  if (dbUnavailable && !force) {
     return null;
   }
   if (!dbPool && process.env.DATABASE_URL) {
@@ -1030,7 +1055,16 @@ async function startServer() {
 
   // GET store state
   app.get("/api/store", async (req, res) => {
+    // Evitar almacenamiento en caché por el navegador o CDN
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+
     if (process.env.DATABASE_URL) {
+      if (dbUnavailable) {
+        console.log("🔄 Reintentando conectar con PostgreSQL...");
+        getDbPool(true); // Forzar la reactivación del pool limpiando la bandera 'dbUnavailable'
+      }
       try {
         const dbState = await getDbState();
         currentStoreState = dbState;
@@ -1143,7 +1177,7 @@ async function startServer() {
       parsedHost = `Error al parsear URL: ${e.message}`;
     }
 
-    const pool = getDbPool();
+    const pool = getDbPool(true);
     let queryTest = "not_attempted";
     let queryError = null;
     

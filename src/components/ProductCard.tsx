@@ -109,11 +109,11 @@ export default function ProductCard({
           <div className="flex flex-col">
             {isDiscounted && (
               <span className="text-[10px] sm:text-xs text-zinc-500 line-through">
-                ${product.originalPrice?.toFixed(2)}
+                ${Math.round(product.originalPrice || 0)}
               </span>
             )}
             <span className="text-sm sm:text-base font-bold theme-text-primary">
-              ${product.price.toFixed(2)}
+              ${Math.round(product.price)}
             </span>
           </div>
 

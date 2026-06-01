@@ -105,17 +105,17 @@ export default function CartDrawer({
       const optionsStr = options.length > 0 ? ` (${options.join(", ")})` : "";
       
       message += `${index + 1}. *${item.product.name}*${optionsStr}\n`;
-      message += `   👉 ${item.quantity} x $${item.product.price.toFixed(2)} = *$${(
+      message += `   👉 ${item.quantity} x $${Math.round(item.product.price)} = *$${Math.round(
         item.product.price * item.quantity
-      ).toFixed(2)}*\n\n`;
+      )}*\n\n`;
     });
 
     message += `┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n`;
-    message += `🔹 *Subtotal:* $${subtotal.toFixed(2)}\n`;
+    message += `🔹 *Subtotal:* $${Math.round(subtotal)}\n`;
     if (appliedDiscount > 0) {
-      message += `🔹 *Descuento (${appliedDiscount}%):* -$${discountAmount.toFixed(2)}\n`;
+      message += `🔹 *Descuento (${appliedDiscount}%):* -$${Math.round(discountAmount)}\n`;
     }
-    message += `🔥 *TOTAL NETO:* *$${total.toFixed(2)}*\n\n`;
+    message += `🔥 *TOTAL NETO:* *$${Math.round(total)}*\n\n`;
     message += `🙌 _Quiero coordinar la entrega y el pago con ustedes de este pedido._`;
 
     // Encode text and open link
@@ -246,11 +246,11 @@ export default function CartDrawer({
                           <div className="text-right">
                             <span className="text-xs text-zinc-500 block line-through">
                               {item.product.originalPrice && item.product.originalPrice > item.product.price && (
-                                `$${(item.product.originalPrice * item.quantity).toFixed(2)}`
+                                `$${Math.round(item.product.originalPrice * item.quantity)}`
                               )}
                             </span>
                             <span className="text-sm font-bold theme-text-primary">
-                              ${(item.product.price * item.quantity).toFixed(2)}
+                              ${Math.round(item.product.price * item.quantity)}
                             </span>
                           </div>
                         </div>
@@ -306,18 +306,18 @@ export default function CartDrawer({
                 <div className="space-y-1.5 text-xs font-sans">
                   <div className="flex justify-between text-zinc-400">
                     <span>Subtotal</span>
-                    <span className="font-mono">${subtotal.toFixed(2)}</span>
+                    <span className="font-mono">${Math.round(subtotal)}</span>
                   </div>
                   {appliedDiscount > 0 && (
                     <div className="flex justify-between text-green-400 font-medium">
                       <span>Descuento ({appliedDiscount}%)</span>
-                      <span className="font-mono">-${discountAmount.toFixed(2)}</span>
+                      <span className="font-mono">-${Math.round(discountAmount)}</span>
                     </div>
                   )}
                   <div className="flex justify-between items-center text-sm font-bold pt-1.5 border-t border-dashed border-zinc-800">
                     <span>Total Estimado</span>
                     <span className="text-base font-mono theme-text-primary">
-                      ${total.toFixed(2)}
+                      ${Math.round(total)}
                     </span>
                   </div>
                 </div>

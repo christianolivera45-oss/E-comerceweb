@@ -379,11 +379,31 @@ export default function App() {
   };
 
   // URL routing helpers
-  const parseRoute = (currentCategories?: any[]) => {
+  const parseRoute = (currentCategories?: any[], currentProducts?: any[]) => {
     const categoriesList = currentCategories || store.dbCategories || [];
     const subcategoriesList = store.dbSubcategories || [];
+    const productsList = currentProducts || store.products || [];
     const path = window.location.pathname.toLowerCase().replace(/\/$/, ""); // remove trailing slash
     const segments = path.split("/").filter(Boolean); // e.g. ["ropa", "hombre"]
+
+    const urlParams = new URLSearchParams(window.location.search);
+    let prodId: string | null = null;
+    if (segments[0] === "producto" && segments[1]) {
+      prodId = segments[1];
+    } else {
+      prodId = urlParams.get("product");
+    }
+
+    if (prodId) {
+      const prod = productsList.find(p => String(p.id) === String(prodId));
+      if (prod) {
+        setSelectedProduct(prod);
+      } else {
+        setSelectedProduct(null);
+      }
+    } else {
+      setSelectedProduct(null);
+    }
 
     if (segments[0] === "admin") {
       setActiveTab("admin");
@@ -448,6 +468,7 @@ export default function App() {
   };
 
   const navigateToProductRoute = (category: string, subcategory: string) => {
+    setSelectedProduct(null);
     let path = "/";
     if (category !== "todos") {
       const catObj = store.dbCategories?.find(c => c.nombre === category || c.id === category);
@@ -462,6 +483,20 @@ export default function App() {
     window.history.pushState(null, "", path);
     setSelectedCategory(category);
     setSelectedSubcategory(subcategory);
+  };
+
+  const getCatalogPath = () => {
+    let path = "/";
+    if (selectedCategory !== "todos") {
+      const catObj = store.dbCategories?.find(c => c.nombre === selectedCategory || c.id === selectedCategory);
+      if (catObj) {
+        path = `/${catObj.id}`;
+        if (selectedSubcategory && selectedSubcategory !== "all") {
+          path += `/${selectedSubcategory}`;
+        }
+      }
+    }
+    return path;
   };
   
   // Cart state
@@ -662,7 +697,7 @@ export default function App() {
 
   const handleOpenProduct = (prod: Product) => {
     setSelectedProduct(prod);
-    const newUrl = `${window.location.pathname}?product=${prod.id}`;
+    const newUrl = `/producto/${prod.id}`;
     window.history.pushState(null, "", newUrl);
   };
 
@@ -678,13 +713,20 @@ export default function App() {
       if (data.dbCategories && data.dbCategories.length > 0) {
         setNewSubcategoryParent(data.dbCategories[0].id);
       }
-      parseRoute(data.dbCategories);
+      parseRoute(data.dbCategories, data.products);
       
-      // Auto-open product details modal if query parameter is present
-      const urlParams = new URLSearchParams(window.location.search);
-      const prodId = urlParams.get("product");
+      // Auto-open product details page if path or query parameter is present
+      const currentPath = window.location.pathname.toLowerCase().replace(/\/$/, "");
+      const segments = currentPath.split("/").filter(Boolean);
+      let prodId: string | null = null;
+      if (segments[0] === "producto" && segments[1]) {
+        prodId = segments[1];
+      } else {
+        const urlParams = new URLSearchParams(window.location.search);
+        prodId = urlParams.get("product");
+      }
       if (prodId && data.products) {
-        const prod = data.products.find(p => p.id === prodId);
+        const prod = data.products.find(p => String(p.id) === String(prodId));
         if (prod) {
           setSelectedProduct(prod);
         }
@@ -1624,8 +1666,29 @@ export default function App() {
       {/* RENDER STOREFRONT OPTION */}
       {activeTab === "storefront" && (
         <div className="flex-1 flex flex-col">
-          
-          {/* Interactive Hero Slider Showcase */}
+          {selectedProduct ? (
+            <ProductDetails
+              product={selectedProduct}
+              onClose={() => {
+                setSelectedProduct(null);
+                const catalogPath = getCatalogPath();
+                window.history.pushState(null, "", catalogPath);
+              }}
+              onAddToCart={(p, sz, col, qty) => {
+                handleAddToCart(p, sz, col, qty);
+              }}
+              settings={store.settings}
+              allProducts={store.products}
+              dbCategories={store.dbCategories || []}
+              onViewProduct={(p) => {
+                setSelectedProduct(p);
+                window.history.pushState(null, "", `/producto/${p.id}`);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+            />
+          ) : (
+            <>
+              {/* Interactive Hero Slider Showcase */}
           {selectedCategory === "todos" && !searchQuery && (
             <HeroSlider
               settings={store.settings}
@@ -2037,6 +2100,8 @@ export default function App() {
               )}
             </div>
           </footer>
+        </>
+      )}
         </div>
       )}
 
@@ -5360,24 +5425,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Product Details View element */}
-      {selectedProduct && (
-        <ProductDetails
-          product={selectedProduct}
-          onClose={() => {
-            setSelectedProduct(null);
-            const newUrl = window.location.pathname;
-            window.history.pushState(null, "", newUrl);
-          }}
-          onAddToCart={(p, sz, col, qty) => {
-            handleAddToCart(p, sz, col, qty);
-            setSelectedProduct(null);
-            const newUrl = window.location.pathname;
-            window.history.pushState(null, "", newUrl);
-          }}
-          settings={store.settings}
-        />
-      )}
+
 
       {/* Elegantes Alertas y Confirmaciones Personalizadas (Elimina bloqueos de iframe/sandboxing de alert/confirm) */}
       {customAlert && customAlert.show && (

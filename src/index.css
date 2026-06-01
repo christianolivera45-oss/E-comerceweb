@@ -10,3 +10,31 @@
     -moz-osx-font-smoothing: grayscale;
   }
 }
+
+/* Custom scrollbar to ensure it is always beautifully visible */
+.custom-description-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-description-scrollbar::-webkit-scrollbar-track {
+  background: rgba(120, 120, 120, 0.08);
+  border-radius: 9999px;
+}
+
+.custom-description-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(120, 120, 120, 0.35);
+  border-radius: 9999px;
+  transition: all 0.2s ease;
+}
+
+.custom-description-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 120, 120, 0.55);
+}
+
+/* Firefox compatibility */
+.custom-description-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 120, 120, 0.35) rgba(120, 120, 120, 0.08);
+}
+

@@ -11,6 +11,7 @@ import {
   Plus,
   Edit,
   Trash2,
+  Cpu,
   Save,
   Grid,
   Sparkles,
@@ -46,7 +47,7 @@ import {
   Upload,
   Loader2
 } from "lucide-react";
-import { Product, SiteSettings, ShopState, CartItem, Category, Subcategory, ProductVariant } from "./types";
+import { Product, SiteSettings, ShopState, CartItem, Category, Subcategory, ProductVariant, is3DProduct } from "./types";
 import ThemeStyles from "./components/ThemeStyles";
 import ProductCard from "./components/ProductCard";
 import ProductSlider from "./components/ProductSlider";
@@ -1155,32 +1156,73 @@ export default function App() {
     const catId = catObj ? catObj.id : catIdOrName;
     const catName = catObj ? catObj.nombre : catIdOrName;
 
-    const productsAssigned = store.products.some(p => 
+    const assignedProducts = store.products.filter(p => 
       p.categoria_id === catId || 
       p.category === catName ||
       (p.categorias_adicionales && p.categorias_adicionales.includes(catId))
     );
-    if (productsAssigned) {
-      showCustomAlert("Productos Asignados", `No se puede borrar la categoría "${catName}" porque existen productos asignados a ella. Realoca o elimina los productos primero.`);
-      return;
+    const hasProducts = assignedProducts.length > 0;
+
+    // We'll also find any subcategories of this category that will be deleted
+    const subcatsToDelete = (store.dbSubcategories || []).filter(s => s.categoria_id === catId);
+    const subcatIds = subcatsToDelete.map(s => s.id);
+
+    let confirmMsg = `¿Estás seguro de que deseas eliminar la categoría "${catName}"? Esto eliminará también todas sus subcategorías asociadas de forma irreversible.`;
+    if (hasProducts) {
+      confirmMsg = `La categoría "${catName}" tiene ${assignedProducts.length} producto(s) asignado(s). Si la eliminas, estos productos se desvincularán automáticamente de esta categoría y de sus subcategorías asociadas. ¿Deseas continuar?`;
     }
 
     showCustomConfirm(
       "Eliminar Categoría",
-      `¿Estás seguro de que deseas eliminar la categoría "${catName}"? Esto eliminará también todas sus subcategorías asociadas de forma irreversible.`,
+      confirmMsg,
       () => {
+        // Disassociate products from this category and its deleted subcategories
+        const updatedProducts = store.products.map(p => {
+          let updated = { ...p };
+          let changed = false;
+
+          // Main category
+          if (p.categoria_id === catId || p.category === catName) {
+            updated.categoria_id = "";
+            updated.category = "";
+            changed = true;
+          }
+
+          // Additional categories array
+          if (p.categorias_adicionales && p.categorias_adicionales.includes(catId)) {
+            updated.categorias_adicionales = p.categorias_adicionales.filter(id => id !== catId);
+            changed = true;
+          }
+
+          // Main subcategory
+          if (p.subcategoria_id && subcatIds.includes(p.subcategoria_id)) {
+            updated.subcategoria_id = "all";
+            changed = true;
+          }
+
+          // Additional subcategories array
+          if (p.subcategorias_adicionales && p.subcategorias_adicionales.some(id => subcatIds.includes(id))) {
+            updated.subcategorias_adicionales = p.subcategorias_adicionales.filter(id => !subcatIds.includes(id));
+            changed = true;
+          }
+
+          return changed ? updated : p;
+        });
+
         const updatedDbCategories = (store.dbCategories || []).filter(c => c.id !== catId);
         const updatedDbSubcategories = (store.dbSubcategories || []).filter(s => s.categoria_id !== catId);
         const updatedCategories = store.categories.filter(c => c !== catName);
 
         const updatedState = {
           ...store,
+          products: updatedProducts,
           categories: updatedCategories,
           dbCategories: updatedDbCategories,
           dbSubcategories: updatedDbSubcategories
         };
 
         saveStateToServer(updatedState);
+        showAdminToast("¡Categoría y subcategorías asociadas eliminadas correctamente!", "success");
       }
     );
   };
@@ -1272,21 +1314,34 @@ export default function App() {
     const subObj = (store.dbSubcategories || []).find(s => s.id === subId);
     const subName = subObj ? subObj.nombre : subId;
 
-    const assignedProducts = store.products.filter(p => p.subcategoria_id === subId);
+    const assignedProducts = store.products.filter(p => 
+      p.subcategoria_id === subId ||
+      (p.subcategorias_adicionales && p.subcategorias_adicionales.includes(subId))
+    );
     const hasProducts = assignedProducts.length > 0;
 
     let confirmMsg = `¿Estás seguro de que deseas eliminar la subcategoría "${subName}"?`;
     if (hasProducts) {
-      confirmMsg = `La subcategoría "${subName}" tiene ${assignedProducts.length} producto(s) asignado(s). Si la eliminas, estos productos se reasignarán automáticamente a 'Sin subcategoría'. ¿Deseas continuar?`;
+      confirmMsg = `La subcategoría "${subName}" tiene ${assignedProducts.length} producto(s) asignado(s). Si la eliminas, estos productos se desvincularán automáticamente de esta subcategoría. ¿Deseas continuar?`;
     }
 
     showCustomConfirm("Eliminar Subcategoría", confirmMsg, () => {
       // Disassociate products
       const updatedProducts = store.products.map(p => {
+        let updated = { ...p };
+        let changed = false;
+
         if (p.subcategoria_id === subId) {
-          return { ...p, subcategoria_id: "all" };
+          updated.subcategoria_id = "all";
+          changed = true;
         }
-        return p;
+
+        if (p.subcategorias_adicionales && p.subcategorias_adicionales.includes(subId)) {
+          updated.subcategorias_adicionales = p.subcategorias_adicionales.filter(id => id !== subId);
+          changed = true;
+        }
+
+        return changed ? updated : p;
       });
 
       const updatedDbSubcategories = (store.dbSubcategories || []).filter(s => s.id !== subId);
@@ -1930,17 +1985,15 @@ export default function App() {
                   <h3 className="text-xl font-bold tracking-tight">Especiales Destacados</h3>
                   <span className="text-[10px] uppercase font-bold text-yellow-400 animate-pulse">¡Los más buscados!</span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
-                  {featuredProducts.slice(0, 4).map((p) => (
-                    <ProductCard
-                      key={p.id}
-                      product={p}
-                      settings={store.settings}
-                      onAddToCart={(prod, sz, col) => handleAddToCart(prod, sz, col)}
-                      onViewProduct={(prod) => handleOpenProduct(prod)}
-                    />
-                  ))}
-                </div>
+                <ProductSlider
+                  products={featuredProducts}
+                  settings={store.settings}
+                  onAddToCart={(prod, sz, col) => handleAddToCart(prod, sz, col)}
+                  onViewProduct={(prod) => handleOpenProduct(prod)}
+                  emptyIcon={<ShoppingBag className="h-6 w-6" />}
+                  emptyText="No hay productos destacados activos."
+                  emptySubtext=""
+                />
               </div>
             )}
 
@@ -2035,21 +2088,23 @@ export default function App() {
                     return (
                       <div key={catObj.id} className="scroll-mt-24">
                         <div className="flex items-center justify-between border-b border-zinc-100/10 dark:border-zinc-850 pb-3 mb-6">
-                          <div className="flex items-center gap-2">
-                            <div className="w-1.5 h-6 rounded-full" style={{ backgroundColor: store.settings.primaryColor }}></div>
-                            <span className="p-1.5 rounded-lg flex items-center justify-center [&_svg]:h-4 [&_svg]:w-4" style={{ color: store.settings.primaryColor, backgroundColor: `${store.settings.primaryColor}15` }}>
-                              {getCategoryIcon(catObj.icono || catObj.nombre)}
-                            </span>
-                            <h3 className="text-xl font-extrabold tracking-tight">{catObj.nombre}</h3>
-                          </div>
-                          
                           <button
                             onClick={() => navigateToProductRoute(catObj.id, "all")}
-                            className="text-xs font-bold hover:underline transition-all cursor-pointer flex items-center gap-1"
-                            style={{ color: store.settings.primaryColor }}
+                            className="flex items-center gap-2 text-left group cursor-pointer focus:outline-none"
                           >
-                            <span>Explorar {catObj.nombre}</span>
-                            <span>&rarr;</span>
+                            <div className="w-1.5 h-6 rounded-full transition-transform duration-300 group-hover:scale-y-125" style={{ backgroundColor: store.settings.primaryColor }}></div>
+                            <span className="p-1.5 rounded-lg flex items-center justify-center [&_svg]:h-4 [&_svg]:w-4 transition-transform duration-300 group-hover:scale-110" style={{ color: store.settings.primaryColor, backgroundColor: `${store.settings.primaryColor}15` }}>
+                              {getCategoryIcon(catObj.icono || catObj.nombre)}
+                            </span>
+                            <h3 className="text-xl font-extrabold tracking-tight flex items-center gap-1.5">
+                              <span className="group-hover:underline">{catObj.nombre}</span>
+                              <span 
+                                className="text-sm opacity-0 group-hover:opacity-100 transition-all duration-300 transform -translate-x-1 group-hover:translate-x-0"
+                                style={{ color: store.settings.primaryColor }}
+                              >
+                                &rarr;
+                              </span>
+                            </h3>
                           </button>
                         </div>
 
@@ -3451,11 +3506,23 @@ export default function App() {
                           onChange={(e) => {
                             const val = e.target.value;
                             const match = (store.dbCategories || []).find(c => c.id === val);
+                            const isCategory3D = !!match && (
+                              match.nombre.toLowerCase().includes("3d") ||
+                              match.nombre.toLowerCase().includes("impresión") ||
+                              match.nombre.toLowerCase().includes("impresion") ||
+                              match.nombre.toLowerCase().includes("impreción") ||
+                              match.nombre.toLowerCase().includes("imprecion")
+                            );
+                            const currentSizes = newProduct.sizes || [];
+                            const needsDefaultMaterials = isCategory3D && (currentSizes.length === 0 || currentSizes.includes("S") || currentSizes.includes("M") || currentSizes.includes("L") || currentSizes.includes("Único"));
                             setNewProduct({
                               ...newProduct,
                               categoria_id: val,
                               category: match ? match.nombre : "",
-                              subcategoria_id: "all" // reset subcategory on parent change
+                              subcategoria_id: "all", // reset subcategory on parent change
+                              is3D: isCategory3D ? true : newProduct.is3D,
+                              hoursPerUnit: isCategory3D ? (newProduct.hoursPerUnit || 8) : newProduct.hoursPerUnit,
+                              sizes: needsDefaultMaterials ? ["PLA", "PETG", "ABS", "TPU"] : currentSizes
                             });
                             if (newProductErrors.category) {
                               setNewProductErrors(prev => {
@@ -3763,43 +3830,89 @@ export default function App() {
                     {/* Talles y Colores Configuration Panel */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border border-indigo-500/10 p-4 rounded-xl bg-slate-50/50 dark:bg-zinc-900/40">
                       <div>
-                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1">Talles / Tamaños Disponibles</label>
-                        <input
-                          type="text"
-                          value={(newProduct.sizes || []).join(", ")}
-                          onChange={(e) => {
-                            const arr = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
-                            setNewProduct({ ...newProduct, sizes: arr });
-                          }}
-                          placeholder="p.ej. S, M, L, XL (Separados por comas)"
-                          className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
-                        />
-                        <div className="flex flex-wrap gap-1.5">
-                          <span className="text-[9px] text-zinc-500 mr-1 self-center">Preajustes rápidos:</span>
-                          {["S", "M", "L", "XL", "XXL", "Único"].map((sz) => {
-                            const isSelected = (newProduct.sizes || []).includes(sz);
-                            return (
-                              <button
-                                type="button"
-                                key={sz}
-                                onClick={() => {
-                                  const current = newProduct.sizes || [];
-                                  const next = current.includes(sz)
-                                    ? current.filter(x => x !== sz)
-                                    : [...current, sz];
-                                  setNewProduct({ ...newProduct, sizes: next });
-                                }}
-                                className={`text-[9.5px] font-mono px-2 py-0.5 rounded cursor-pointer transition-all ${
-                                  isSelected 
-                                    ? "bg-indigo-600 text-white font-bold" 
-                                    : "bg-slate-200 hover:bg-slate-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300"
-                                }`}
-                              >
-                                {sz}
-                              </button>
-                            );
-                          })}
-                        </div>
+                        {newProduct.is3D || is3DProduct(newProduct as Product) ? (
+                          <div>
+                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1">
+                              Materiales 3D Disponibles
+                            </label>
+                            <input
+                              type="text"
+                              value={(newProduct.sizes || []).join(", ")}
+                              onChange={(e) => {
+                                const arr = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
+                                setNewProduct({ ...newProduct, sizes: arr });
+                              }}
+                              placeholder="p.ej. PLA, PETG, ABS, TPU (Separados por comas)"
+                              className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
+                            />
+                            <div className="flex flex-wrap gap-1.5">
+                              <span className="text-[9px] text-zinc-500 mr-1 self-center">Preajustes rápidos:</span>
+                              {["PLA", "PETG", "ABS", "TPU"].map((mat) => {
+                                const isSelected = (newProduct.sizes || []).includes(mat);
+                                return (
+                                  <button
+                                    type="button"
+                                    key={mat}
+                                    onClick={() => {
+                                      const current = newProduct.sizes || [];
+                                      const next = current.includes(mat)
+                                        ? current.filter(x => x !== mat)
+                                        : [...current, mat];
+                                      setNewProduct({ ...newProduct, sizes: next });
+                                    }}
+                                    className={`text-[9.5px] font-mono px-2 py-0.5 rounded cursor-pointer transition-all ${
+                                      isSelected 
+                                        ? "bg-indigo-600 text-white font-bold" 
+                                        : "bg-slate-200 hover:bg-slate-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300"
+                                    }`}
+                                  >
+                                    {mat}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1">Talles / Tamaños Disponibles</label>
+                            <input
+                              type="text"
+                              value={(newProduct.sizes || []).join(", ")}
+                              onChange={(e) => {
+                                const arr = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
+                                setNewProduct({ ...newProduct, sizes: arr });
+                              }}
+                              placeholder="p.ej. S, M, L, XL (Separados por comas)"
+                              className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
+                            />
+                            <div className="flex flex-wrap gap-1.5">
+                              <span className="text-[9px] text-zinc-500 mr-1 self-center">Preajustes rápidos:</span>
+                              {["S", "M", "L", "XL", "XXL", "Único"].map((sz) => {
+                                const isSelected = (newProduct.sizes || []).includes(sz);
+                                return (
+                                  <button
+                                    type="button"
+                                    key={sz}
+                                    onClick={() => {
+                                      const current = newProduct.sizes || [];
+                                      const next = current.includes(sz)
+                                        ? current.filter(x => x !== sz)
+                                        : [...current, sz];
+                                      setNewProduct({ ...newProduct, sizes: next });
+                                    }}
+                                    className={`text-[9.5px] font-mono px-2 py-0.5 rounded cursor-pointer transition-all ${
+                                      isSelected 
+                                        ? "bg-indigo-600 text-white font-bold" 
+                                        : "bg-slate-200 hover:bg-slate-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300"
+                                    }`}
+                                  >
+                                    {sz}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div>
@@ -4166,6 +4279,42 @@ export default function App() {
                       )}
                     </div>
 
+                     <div className="flex flex-col gap-3.5 p-4 rounded-xl bg-zinc-900/60 border border-zinc-800">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="newProductIs3D"
+                          checked={!!newProduct.is3D}
+                          onChange={(e) => setNewProduct({ ...newProduct, is3D: e.target.checked, hoursPerUnit: e.target.checked ? (newProduct.hoursPerUnit || 8) : undefined })}
+                          className="rounded border-zinc-750 bg-zinc-950 text-indigo-500 focus:ring-0 cursor-pointer h-4 w-4"
+                        />
+                        <label htmlFor="newProductIs3D" className="text-xs text-zinc-300 select-none cursor-pointer font-bold flex items-center gap-1.5 text-indigo-400">
+                          <Cpu className="w-4 h-4 shrink-0" />
+                          <span>Habilitar Fabricación y Stock 3D Bajo Demanda</span>
+                        </label>
+                      </div>
+
+                      {newProduct.is3D && (
+                        <div className="pl-6 animate-fade-in space-y-2">
+                          <label htmlFor="newProductHours" className="block text-[10px] font-extrabold uppercase text-zinc-400 tracking-wider">
+                            Tiempo estimado de impresión por unidad (en horas):
+                          </label>
+                          <div className="flex items-center gap-2.5">
+                            <input
+                              type="number"
+                              id="newProductHours"
+                              min="1"
+                              max="200"
+                              value={newProduct.hoursPerUnit || 8}
+                              onChange={(e) => setNewProduct({ ...newProduct, hoursPerUnit: Math.max(1, Number(e.target.value)) })}
+                              className="w-24 px-2.5 py-1.5 rounded bg-zinc-950 text-white border border-zinc-800 text-xs font-mono font-bold focus:outline-none focus:ring-1 focus:ring-[#5346ff]"
+                            />
+                            <span className="text-[11px] text-zinc-500">horas de tiempo activo en máquina.</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="flex items-center gap-2">
                       <input
                         type="checkbox"
@@ -4234,11 +4383,23 @@ export default function App() {
                           onChange={(e) => {
                             const val = e.target.value;
                             const match = (store.dbCategories || []).find(c => c.id === val);
+                            const isCategory3D = !!match && (
+                              match.nombre.toLowerCase().includes("3d") ||
+                              match.nombre.toLowerCase().includes("impresión") ||
+                              match.nombre.toLowerCase().includes("impresion") ||
+                              match.nombre.toLowerCase().includes("impreción") ||
+                              match.nombre.toLowerCase().includes("imprecion")
+                            );
+                            const currentSizes = editingProduct.sizes || [];
+                            const needsDefaultMaterials = isCategory3D && (currentSizes.length === 0 || currentSizes.includes("S") || currentSizes.includes("M") || currentSizes.includes("L") || currentSizes.includes("Único"));
                             setEditingProduct({ 
                               ...editingProduct, 
                               categoria_id: val, 
                               category: match ? match.nombre : "",
-                              subcategoria_id: "all" // Reset subcategory selection
+                              subcategoria_id: "all", // Reset subcategory selection
+                              is3D: isCategory3D ? true : editingProduct.is3D,
+                              hoursPerUnit: isCategory3D ? (editingProduct.hoursPerUnit || 8) : editingProduct.hoursPerUnit,
+                              sizes: needsDefaultMaterials ? ["PLA", "PETG", "ABS", "TPU"] : currentSizes
                             });
                           }}
                           className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white font-bold"
@@ -4476,43 +4637,89 @@ export default function App() {
                     {/* Talles y Colores Configuration Panel */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border border-indigo-500/10 p-4 rounded-xl bg-slate-50/50 dark:bg-zinc-900/40">
                       <div>
-                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1">Talles / Tamaños Disponibles</label>
-                        <input
-                          type="text"
-                          value={(editingProduct.sizes || []).join(", ")}
-                          onChange={(e) => {
-                            const arr = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
-                            setEditingProduct({ ...editingProduct, sizes: arr });
-                          }}
-                          placeholder="p.ej. S, M, L, XL (Separados por comas)"
-                          className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
-                        />
-                        <div className="flex flex-wrap gap-1.5">
-                          <span className="text-[9px] text-zinc-500 mr-1 self-center">Preajustes rápidos:</span>
-                          {["S", "M", "L", "XL", "XXL", "Único"].map((sz) => {
-                            const isSelected = (editingProduct.sizes || []).includes(sz);
-                            return (
-                              <button
-                                type="button"
-                                key={sz}
-                                onClick={() => {
-                                  const current = editingProduct.sizes || [];
-                                  const next = current.includes(sz)
-                                    ? current.filter(x => x !== sz)
-                                    : [...current, sz];
-                                  setEditingProduct({ ...editingProduct, sizes: next });
-                                }}
-                                className={`text-[9.5px] font-mono px-2 py-0.5 rounded cursor-pointer transition-all ${
-                                  isSelected 
-                                    ? "bg-indigo-600 text-white font-bold" 
-                                    : "bg-slate-200 hover:bg-slate-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300"
-                                }`}
-                              >
-                                {sz}
-                              </button>
-                            );
-                          })}
-                        </div>
+                        {editingProduct.is3D || is3DProduct(editingProduct) ? (
+                          <div>
+                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1">
+                              Materiales 3D Disponibles
+                            </label>
+                            <input
+                              type="text"
+                              value={(editingProduct.sizes || []).join(", ")}
+                              onChange={(e) => {
+                                const arr = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
+                                setEditingProduct({ ...editingProduct, sizes: arr });
+                              }}
+                              placeholder="p.ej. PLA, PETG, ABS, TPU (Separados por comas)"
+                              className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
+                            />
+                            <div className="flex flex-wrap gap-1.5">
+                              <span className="text-[9px] text-zinc-500 mr-1 self-center">Preajustes rápidos:</span>
+                              {["PLA", "PETG", "ABS", "TPU"].map((mat) => {
+                                const isSelected = (editingProduct.sizes || []).includes(mat);
+                                return (
+                                  <button
+                                    type="button"
+                                    key={mat}
+                                    onClick={() => {
+                                      const current = editingProduct.sizes || [];
+                                      const next = current.includes(mat)
+                                        ? current.filter(x => x !== mat)
+                                        : [...current, mat];
+                                      setEditingProduct({ ...editingProduct, sizes: next });
+                                    }}
+                                    className={`text-[9.5px] font-mono px-2 py-0.5 rounded cursor-pointer transition-all ${
+                                      isSelected 
+                                        ? "bg-indigo-600 text-white font-bold" 
+                                        : "bg-slate-200 hover:bg-slate-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300"
+                                    }`}
+                                  >
+                                    {mat}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1">Talles / Tamaños Disponibles</label>
+                            <input
+                              type="text"
+                              value={(editingProduct.sizes || []).join(", ")}
+                              onChange={(e) => {
+                                const arr = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
+                                setEditingProduct({ ...editingProduct, sizes: arr });
+                              }}
+                              placeholder="p.ej. S, M, L, XL (Separados por comas)"
+                              className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
+                            />
+                            <div className="flex flex-wrap gap-1.5">
+                              <span className="text-[9px] text-zinc-500 mr-1 self-center">Preajustes rápidos:</span>
+                              {["S", "M", "L", "XL", "XXL", "Único"].map((sz) => {
+                                const isSelected = (editingProduct.sizes || []).includes(sz);
+                                return (
+                                  <button
+                                    type="button"
+                                    key={sz}
+                                    onClick={() => {
+                                      const current = editingProduct.sizes || [];
+                                      const next = current.includes(sz)
+                                        ? current.filter(x => x !== sz)
+                                        : [...current, sz];
+                                      setEditingProduct({ ...editingProduct, sizes: next });
+                                    }}
+                                    className={`text-[9.5px] font-mono px-2 py-0.5 rounded cursor-pointer transition-all ${
+                                      isSelected 
+                                        ? "bg-indigo-600 text-white font-bold" 
+                                        : "bg-slate-200 hover:bg-slate-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300"
+                                    }`}
+                                  >
+                                    {sz}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div>
@@ -4875,6 +5082,42 @@ export default function App() {
                       ) : (
                         <div className="p-3 text-center text-zinc-500 text-[11px] bg-slate-100/30 dark:bg-zinc-950 rounded-lg border border-dashed border-slate-200 dark:border-zinc-800">
                           Sin combinaciones registradas. Se usará el stock físico general definido arriba. Puedes autogenerarlas o añadirlas manualmente.
+                        </div>
+                      )}
+                    </div>
+
+                     <div className="flex flex-col gap-3.5 p-4 rounded-xl bg-zinc-900/60 border border-zinc-800">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="editProductIs3D"
+                          checked={!!editingProduct.is3D}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, is3D: e.target.checked, hoursPerUnit: e.target.checked ? (editingProduct.hoursPerUnit || 8) : undefined })}
+                          className="rounded border-zinc-750 bg-zinc-950 text-indigo-500 focus:ring-0 cursor-pointer h-4 w-4"
+                        />
+                        <label htmlFor="editProductIs3D" className="text-xs text-zinc-300 select-none cursor-pointer font-bold flex items-center gap-1.5 text-indigo-400">
+                          <Cpu className="w-4 h-4 shrink-0" />
+                          <span>Habilitar Fabricación y Stock 3D Bajo Demanda</span>
+                        </label>
+                      </div>
+
+                      {editingProduct.is3D && (
+                        <div className="pl-6 animate-fade-in space-y-2">
+                          <label htmlFor="editProductHours" className="block text-[10px] font-extrabold uppercase text-zinc-400 tracking-wider">
+                            Tiempo estimado de impresión por unidad (en horas):
+                          </label>
+                          <div className="flex items-center gap-2.5">
+                            <input
+                              type="number"
+                              id="editProductHours"
+                              min="1"
+                              max="200"
+                              value={editingProduct.hoursPerUnit || 8}
+                              onChange={(e) => setEditingProduct({ ...editingProduct, hoursPerUnit: Math.max(1, Number(e.target.value)) })}
+                              className="w-24 px-2.5 py-1.5 rounded bg-zinc-950 text-white border border-zinc-800 text-xs font-mono font-bold focus:outline-none focus:ring-1 focus:ring-[#5346ff]"
+                            />
+                            <span className="text-[11px] text-zinc-500">horas de tiempo activo en máquina.</span>
+                          </div>
                         </div>
                       )}
                     </div>

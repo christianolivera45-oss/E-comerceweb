@@ -26,8 +26,10 @@ export default function ProductSlider({
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
-  // Take up to 10 products maximum
-  const displayedProducts = products.slice(0, 10);
+  const [isPaused, setIsPaused] = useState(false);
+
+  // Render all products provided
+  const displayedProducts = products;
 
   const checkScrollState = () => {
     const el = containerRef.current;
@@ -53,6 +55,29 @@ export default function ProductSlider({
       window.removeEventListener("resize", checkScrollState);
     };
   }, [displayedProducts]);
+
+  // Autoplay auto-scrolling effect
+  useEffect(() => {
+    if (displayedProducts.length <= 1 || isPaused) return;
+
+    const interval = setInterval(() => {
+      const el = containerRef.current;
+      if (el) {
+        const maxScroll = el.scrollWidth - el.clientWidth;
+        if (el.scrollLeft >= maxScroll - 5) {
+          // Wrap around to start smoothly
+          el.scrollTo({ left: 0, behavior: "smooth" });
+        } else {
+          // Scroll by one card width + gap
+          const firstCard = el.querySelector(".flex-shrink-0");
+          const scrollAmount = firstCard ? firstCard.clientWidth + 24 : 324;
+          el.scrollBy({ left: scrollAmount, behavior: "smooth" });
+        }
+      }
+    }, 4000); // Transitions every 4 seconds
+
+    return () => clearInterval(interval);
+  }, [displayedProducts, isPaused]);
 
   const scroll = (direction: "left" | "right") => {
     const el = containerRef.current;
@@ -82,7 +107,13 @@ export default function ProductSlider({
   }
 
   return (
-    <div className="relative group/slider">
+    <div 
+      className="relative group/slider"
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+      onTouchStart={() => setIsPaused(true)}
+      onTouchEnd={() => setIsPaused(false)}
+    >
       {/* Left Arrow Button */}
       {canScrollLeft && (
         <button

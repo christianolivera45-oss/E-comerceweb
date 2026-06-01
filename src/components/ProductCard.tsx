@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Product, SiteSettings } from "../types";
 import { ShoppingCart, Eye, Tag } from "lucide-react";
 
@@ -22,23 +23,45 @@ export default function ProductCard({
 
   const lowStockThreshold = typeof settings?.lowStockThreshold === 'number' ? settings.lowStockThreshold : 5;
 
-  const getPriceDisplay = () => {
-    if (!product.variants || product.variants.length === 0) {
-      return `$${Math.round(product.price)}`;
-    }
-    const prices = product.variants.map((v) => {
-      if (typeof v.price === "number" && v.price > 0) {
-        return v.price;
+  // Find the cheapest option (either a specific variant or the base product price)
+  const cheapestOption = useMemo(() => {
+    let price = product.price;
+    let imageUrl = product.imageUrl;
+
+    if (product.variants && product.variants.length > 0) {
+      const resolvedVariants = product.variants.map((v) => {
+        const vPrice = typeof v.price === "number" && v.price > 0
+          ? v.price
+          : product.price + (v.priceDelta || 0);
+        return {
+          price: vPrice,
+          imageUrl: v.imageUrl || product.imageUrl,
+        };
+      });
+
+      const allOptions = [
+        { price: product.price, imageUrl: product.imageUrl },
+        ...resolvedVariants,
+      ];
+
+      let minOption = allOptions[0];
+      for (let i = 1; i < allOptions.length; i++) {
+        if (allOptions[i].price < minOption.price) {
+          minOption = allOptions[i];
+        } else if (allOptions[i].price === minOption.price && (!minOption.imageUrl || minOption.imageUrl === product.imageUrl) && allOptions[i].imageUrl) {
+          // If prices are equal but one has a specific variant image, use that image
+          minOption = allOptions[i];
+        }
       }
-      return product.price + (v.priceDelta || 0);
-    });
-    prices.push(product.price);
-    const min = Math.min(...prices);
-    const max = Math.max(...prices);
-    if (min === max) {
-      return `$${Math.round(min)}`;
+      price = minOption.price;
+      imageUrl = minOption.imageUrl;
     }
-    return `$${Math.round(min)} - $${Math.round(max)}`;
+
+    return { price, imageUrl };
+  }, [product]);
+
+  const getPriceDisplay = () => {
+    return `$${Math.round(cheapestOption.price)}`;
   };
 
   return (
@@ -55,7 +78,7 @@ export default function ProductCard({
         className="relative aspect-square overflow-hidden bg-zinc-950/25 cursor-pointer"
       >
         <img
-          src={product.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80"}
+          src={cheapestOption.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80"}
           alt={product.name}
           className="h-full w-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-105"
           referrerPolicy="no-referrer"

@@ -410,7 +410,7 @@ async function getDbState(): Promise<ShopState> {
 
     // 6. Fetch products where active = true (logical soft delete)
     const prodRes = await pool.query(`
-      SELECT id, name, price, stock, category, featured, image_url, created_at, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors 
+      SELECT id, name, price, stock, category, featured, image_url, created_at, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors, is_3d, hours_per_unit 
       FROM public.products 
       WHERE active = true 
       ORDER BY id DESC;
@@ -475,7 +475,9 @@ async function getDbState(): Promise<ShopState> {
         sizes: Array.isArray(row.sizes) ? row.sizes : [],
         colors: Array.isArray(row.colors) ? row.colors : [],
         imagenes: productImagesMap[pid] || [],
-        variants: productVariantsMap[pid] || []
+        variants: productVariantsMap[pid] || [],
+        is3D: row.is_3d === true,
+        hoursPerUnit: row.hours_per_unit !== null && row.hours_per_unit !== undefined ? Number(row.hours_per_unit) : undefined
       };
     });
 
@@ -510,14 +512,14 @@ async function saveDbState(state: ShopState): Promise<boolean> {
       [JSON.stringify(state.settings)]
     );
 
-    // 2. Categories soft delete logic & upsert
+    // 2. Categories hard delete logic & upsert
     const existingCatsRes = await pool.query("SELECT id FROM categories;");
     const existingCatIds = existingCatsRes.rows.map(r => r.id);
     const incomingCatIds = (state.dbCategories || []).map(c => c.id);
 
     const deletedCatIds = existingCatIds.filter(id => !incomingCatIds.includes(id));
     if (deletedCatIds.length > 0) {
-      await pool.query("UPDATE categories SET active = false WHERE id = ANY($1);", [deletedCatIds]);
+      await pool.query("DELETE FROM categories WHERE id = ANY($1);", [deletedCatIds]);
     }
 
     for (const cat of state.dbCategories || []) {
@@ -528,14 +530,14 @@ async function saveDbState(state: ShopState): Promise<boolean> {
       );
     }
 
-    // 3. Subcategories soft delete logic & upsert
+    // 3. Subcategories hard delete logic & upsert
     const existingSubsRes = await pool.query("SELECT id FROM subcategories;");
     const existingSubIds = existingSubsRes.rows.map(r => r.id);
     const incomingSubIds = (state.dbSubcategories || []).map(s => s.id);
 
     const deletedSubIds = existingSubIds.filter(id => !incomingSubIds.includes(id));
     if (deletedSubIds.length > 0) {
-      await pool.query("UPDATE subcategories SET active = false WHERE id = ANY($1);", [deletedSubIds]);
+      await pool.query("DELETE FROM subcategories WHERE id = ANY($1);", [deletedSubIds]);
     }
 
     for (const sub of state.dbSubcategories || []) {
@@ -546,14 +548,14 @@ async function saveDbState(state: ShopState): Promise<boolean> {
       );
     }
 
-    // 4. Coupons soft delete logic & upsert
+    // 4. Coupons hard delete logic & upsert
     const existingCouponsRes = await pool.query("SELECT code FROM coupons;");
     const existingCodes = existingCouponsRes.rows.map(r => r.code);
     const incomingCodes = (state.coupons || []).map(c => c.code);
 
     const deletedCodes = existingCodes.filter(c => !incomingCodes.includes(c));
     if (deletedCodes.length > 0) {
-      await pool.query("UPDATE coupons SET active = false WHERE code = ANY($1);", [deletedCodes]);
+      await pool.query("DELETE FROM coupons WHERE code = ANY($1);", [deletedCodes]);
     }
 
     for (const coupon of state.coupons || []) {
@@ -599,18 +601,20 @@ async function saveDbState(state: ShopState): Promise<boolean> {
       const pausedVal = !!prod.paused;
       const sizesVal = Array.isArray(prod.sizes) ? prod.sizes : [];
       const colorsVal = Array.isArray(prod.colors) ? prod.colors : [];
+      const is3DVal = !!prod.is3D;
+      const hoursPerUnitVal = prod.hoursPerUnit ? Math.floor(prod.hoursPerUnit) : null;
 
       let prodId: number;
       if (isNew) {
         const insertRes = await pool.query(`
           INSERT INTO public.products (
-            name, price, stock, category, featured, image_url, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13)
+            name, price, stock, category, featured, image_url, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors, is_3d, hours_per_unit
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13, $14, $15)
           RETURNING id;
         `, [
           prod.name, priceVal, stockVal, prod.category, featuredVal, prod.imageUrl,
           prod.description || "", prod.categoria_id, originalPriceVal, prod.subcategoria_id,
-          pausedVal, sizesVal, colorsVal
+          pausedVal, sizesVal, colorsVal, is3DVal, hoursPerUnitVal
         ]);
         prodId = insertRes.rows[0].id;
         prod.id = String(prodId);
@@ -619,12 +623,13 @@ async function saveDbState(state: ShopState): Promise<boolean> {
         await pool.query(`
           UPDATE public.products SET
             name = $1, price = $2, stock = $3, category = $4, featured = $5, image_url = $6, description = $7,
-            categoria_id = $8, original_price = $9, subcategoria_id = $10, active = true, paused = $11, sizes = $12, colors = $13
-          WHERE id = $14;
+            categoria_id = $8, original_price = $9, subcategoria_id = $10, active = true, paused = $11, sizes = $12, colors = $13,
+            is_3d = $14, hours_per_unit = $15
+          WHERE id = $16;
         `, [
           prod.name, priceVal, stockVal, prod.category, featuredVal, prod.imageUrl,
           prod.description || "", prod.categoria_id, originalPriceVal, prod.subcategoria_id,
-          pausedVal, sizesVal, colorsVal, prodId
+          pausedVal, sizesVal, colorsVal, is3DVal, hoursPerUnitVal, prodId
         ]);
       }
 
@@ -745,6 +750,8 @@ async function initPostgresStore(): Promise<ShopState | null> {
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS original_price NUMERIC(10, 2);
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS subcategoria_id TEXT;
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS categoria_id TEXT;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS is_3d BOOLEAN DEFAULT false;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS hours_per_unit INTEGER;
     `);
 
     // Create product_images table if not exists
@@ -1153,9 +1160,9 @@ async function startServer() {
         products, 
         categories, 
         settings,
-        dbCategories: dbCategories || currentStoreState.dbCategories,
-        dbSubcategories: dbSubcategories || currentStoreState.dbSubcategories,
-        coupons: coupons || currentStoreState.coupons
+        dbCategories: Array.isArray(dbCategories) ? dbCategories : currentStoreState.dbCategories,
+        dbSubcategories: Array.isArray(dbSubcategories) ? dbSubcategories : currentStoreState.dbSubcategories,
+        coupons: Array.isArray(coupons) ? coupons : currentStoreState.coupons
       };
       
       // Guardar SIEMPRE en archivo local como respaldo y sincronizar con base de datos si existe

@@ -31,6 +31,8 @@ export interface Product {
   colors?: string[];
   active?: boolean; // Logical soft delete
   paused?: boolean; // Pause in eCommerce store front
+  is3D?: boolean; // Is a 3D printed product with custom logic
+  hoursPerUnit?: number; // Hours needed to 3D print one unit
 }
 
 export interface HeroSlide {
@@ -112,4 +114,27 @@ export interface CartItem {
   quantity: number;
   selectedSize?: string;
   selectedColor?: string;
+}
+
+export function is3DProduct(product: Product): boolean {
+  if (!product) return false;
+  if (product.is3D === true) return true;
+  
+  const name = (product.name || "").toLowerCase();
+  const desc = (product.description || "").toLowerCase();
+  const cat = (product.category || "").toLowerCase();
+  const catId = (product.categoria_id || "").toLowerCase();
+
+  const matchesText = (txt: string) => {
+    return (
+      txt.includes("3d") || 
+      txt.includes("3 d") ||
+      txt.includes("impresión") || 
+      txt.includes("impresion") ||
+      txt.includes("impreción") ||
+      txt.includes("imprecion")
+    );
+  };
+
+  return matchesText(name) || matchesText(desc) || matchesText(cat) || matchesText(catId);
 }

@@ -1,6 +1,6 @@
 import { useState, FormEvent } from "react";
 import { X, ShoppingBag, Trash2, Plus, Minus, ArrowRight } from "lucide-react";
-import { CartItem, SiteSettings, Coupon } from "../types";
+import { CartItem, SiteSettings, Coupon, is3DProduct } from "../types";
 import { motion, AnimatePresence } from "motion/react";
 
 interface CartDrawerProps {
@@ -34,8 +34,13 @@ export default function CartDrawer({
   // Helper to resolve actual item price (checking variants for overriding price or delta)
   const getItemPrice = (item: CartItem): number => {
     const p = item.product;
-    if (p.variants && p.variants.length > 0 && item.selectedSize && item.selectedColor) {
-      const match = p.variants.find(v => v.size === item.selectedSize && v.color === item.selectedColor);
+    if (p.variants && p.variants.length > 0 && item.selectedSize) {
+      const exactMatch = item.selectedColor 
+        ? p.variants.find(v => v.size === item.selectedSize && v.color === item.selectedColor)
+        : null;
+      const sizeMatch = p.variants.find(v => v.size === item.selectedSize);
+      const match = exactMatch || sizeMatch;
+      
       if (match) {
         if (typeof match.price === "number" && match.price > 0) {
           return match.price;
@@ -114,13 +119,28 @@ export default function CartDrawer({
     message += `┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n`;
 
     cartItems.forEach((item, index) => {
+      const is3D = is3DProduct(item.product);
       const options = [];
-      if (item.selectedSize) options.push(`Talle: ${item.selectedSize}`);
-      if (item.selectedColor) options.push(`Color: ${item.selectedColor}`);
+      if (item.selectedSize) {
+        options.push(is3D ? `Material: ${item.selectedSize}` : `Talle: ${item.selectedSize}`);
+      }
+      if (item.selectedColor) {
+        options.push(`Color: ${item.selectedColor}`);
+      }
       const optionsStr = options.length > 0 ? ` (${options.join(", ")})` : "";
       
       const itemPrice = getItemPrice(item);
       message += `${index + 1}. *${item.product.name}*${optionsStr}\n`;
+      
+      if (is3D) {
+        const immediateStock = item.product.stock || 0;
+        const immediateQty = Math.min(item.quantity, Math.max(0, immediateStock));
+        const onDemandQty = Math.max(0, item.quantity - immediateStock);
+        
+        message += `   ⚡ _Stock inmediato:_ ${immediateQty} un.\n`;
+        message += `   🛠️ _A fabricar:_ ${onDemandQty} un. (est. ${(item.product.hoursPerUnit || 8) * onDemandQty} hs de impresión)\n`;
+      }
+      
       message += `   👉 ${item.quantity} x $${Math.round(itemPrice)} = *$${Math.round(
         itemPrice * item.quantity
       )}*\n\n`;
@@ -224,7 +244,9 @@ export default function CartDrawer({
                         {(item.selectedSize || item.selectedColor) && (
                           <div className="flex flex-wrap gap-1.5 mt-1 font-mono text-[10px] text-zinc-400">
                             {item.selectedSize && (
-                              <span className="px-1.5 py-0.5 rounded bg-zinc-800/80">Talle: {item.selectedSize}</span>
+                              <span className="px-1.5 py-0.5 rounded bg-zinc-800/80">
+                                {is3DProduct(item.product) ? "Material" : "Talle"}: {item.selectedSize}
+                              </span>
                             )}
                             {item.selectedColor && (
                               <span className="px-1.5 py-0.5 rounded bg-zinc-800/80">Color: {item.selectedColor}</span>

@@ -1,8 +1,15 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { X, ShoppingCart, MessageSquare, ShieldCheck, Truck, RefreshCw, ChevronLeft, ChevronRight, AlertCircle, Share2, Maximize2 } from "lucide-react";
+import { X, ShoppingCart, MessageSquare, ShieldCheck, Truck, RefreshCw, ChevronLeft, ChevronRight, AlertCircle, Share2, Maximize2, Cpu, Wrench, Clock, Calendar } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { Product, SiteSettings } from "../types";
+import { Product, SiteSettings, is3DProduct } from "../types";
 import ProductCard from "./ProductCard";
+
+export const PRINT_MATERIALS = [
+  { id: "PLA", name: "PLA", priceMultiplier: 1.0, description: "Biodegradable, excelente acabado estético y variedad de colores." },
+  { id: "PETG", name: "PETG", priceMultiplier: 1.15, description: "Mayor resistencia física, química y térmica." },
+  { id: "ABS", name: "ABS", priceMultiplier: 1.20, description: "Gran resistencia mecánica y resistencia al impacto." },
+  { id: "TPU", name: "TPU / Flex", priceMultiplier: 1.30, description: "Material flexible y elástico como la goma." }
+];
 
 interface ProductDetailsProps {
   product: Product;
@@ -24,8 +31,9 @@ export default function ProductDetails({
   onViewProduct = () => {}
 }: ProductDetailsProps) {
   const isThemeDark = settings.themeMode === "dark";
-  const isClothing = product.category.toLowerCase() === "ropa" || (product.sizes && product.sizes.length > 0);
-  const isElectronics = product.category.toLowerCase() === "artículos electrónicos";
+  const is3D = is3DProduct(product);
+  const isClothing = !is3D && (product.category.toLowerCase() === "ropa" || (product.sizes && product.sizes.length > 0));
+  const isElectronics = !is3D && product.category.toLowerCase() === "artículos electrónicos";
 
   // Dynamic variants logic
   const variants = product.variants || [];
@@ -47,20 +55,25 @@ export default function ProductDetails({
     relatedProducts = [...relatedProducts, ...extra].slice(0, 4);
   }
 
-  const sizes = product.sizes && product.sizes.length > 0 
-    ? product.sizes 
-    : (hasVariants ? Array.from(new Set(variants.map(v => v.size))) : (isClothing ? ["S", "M", "L", "XL"] : []));
+  const sizes = is3D
+    ? (product.sizes && product.sizes.length > 0 ? product.sizes : ["PLA", "PETG", "ABS", "TPU"])
+    : (product.sizes && product.sizes.length > 0 
+      ? product.sizes 
+      : (hasVariants ? Array.from(new Set(variants.map(v => v.size))) : (isClothing ? ["S", "M", "L", "XL"] : [])));
 
   const colors = product.colors && product.colors.length > 0
     ? product.colors
-    : (hasVariants ? Array.from(new Set(variants.map(v => v.color))) : (isClothing 
-      ? ["Negro", "Gris", "Blanco"] 
-      : isElectronics 
-      ? ["Negro mate", "Plata espacial", "Azul cobalto"] 
-      : ["Estándar"]));
+    : (is3D 
+      ? ["Negro mate", "Blanco tiza", "Gris plata", "Rojo fuego", "Azul cobalto", "Verde bosque", "Naranja", "Amarillo sol"]
+      : (hasVariants ? Array.from(new Set(variants.map(v => v.color))) : (isClothing 
+        ? ["Negro", "Gris", "Blanco"] 
+        : isElectronics 
+        ? ["Negro mate", "Plata espacial", "Azul cobalto"] 
+        : ["Estándar"])));
 
   // Pre-initialize selectors (only auto-select if there is exactly 1 option, otherwise start unselected)
   const [selectedSize, setSelectedSize] = useState(() => {
+    if (is3D) return sizes.includes("PLA") ? "PLA" : (sizes[0] || "");
     return sizes.length === 1 ? sizes[0] : "";
   });
 
@@ -77,7 +90,26 @@ export default function ProductDetails({
   let dynamicPrice = product.price;
   let matchedVariant: any = null;
 
-  if (hasVariants && selectedSize && selectedColor) {
+  if (hasVariants && selectedSize) {
+    const exactMatch = selectedColor 
+      ? variants.find(v => v.size === selectedSize && v.color === selectedColor)
+      : null;
+    const sizeMatch = variants.find(v => v.size === selectedSize);
+    matchedVariant = exactMatch || sizeMatch;
+    
+    if (matchedVariant) {
+      if (selectedColor && exactMatch) {
+        currentStock = matchedVariant.stock;
+      } else {
+        currentStock = variants.filter(v => v.size === selectedSize).reduce((sum, v) => sum + v.stock, 0);
+      }
+      dynamicPrice = typeof matchedVariant.price === "number" && matchedVariant.price > 0
+        ? matchedVariant.price
+        : product.price + (matchedVariant.priceDelta || 0);
+    } else {
+      currentStock = 0;
+    }
+  } else if (!is3D && hasVariants && selectedSize && selectedColor) {
     matchedVariant = variants.find(v => v.size === selectedSize && v.color === selectedColor);
     if (matchedVariant) {
       currentStock = matchedVariant.stock;
@@ -88,6 +120,15 @@ export default function ProductDetails({
       currentStock = 0; // This specific combo isn't defined or holds 0 stock
     }
   }
+
+  const getEstimatedDeliveryString = (days: number) => {
+    if (days === 0) return "Inmediata (en stock)";
+    const date = new Date();
+    date.setDate(date.getDate() + days + 1); // +1 day for processing/packaging
+    const options: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' };
+    const formatted = date.toLocaleDateString('es-ES', options);
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+  };
 
   // Dynamic Image carousels
   const allImages = useMemo(() => {
@@ -104,11 +145,11 @@ export default function ProductDetails({
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
     setActiveImgIndex(0);
-    setSelectedSize(sizes.length === 1 ? sizes[0] : "");
+    setSelectedSize(is3D ? (sizes.includes("PLA") ? "PLA" : (sizes[0] || "")) : (sizes.length === 1 ? sizes[0] : ""));
     setSelectedColor(colors.length === 1 ? colors[0] : "");
     setQuantity(1);
     autoSwitchedColorRef.current = ""; // Reset matched color on product change
-  }, [product.id, sizes.length, colors.length]);
+  }, [product.id, is3D, sizes.length, colors.length]);
 
   // Automatically update activeImgIndex when selectedColor changes
   useEffect(() => {
@@ -150,7 +191,7 @@ export default function ProductDetails({
 
   const handleAddToCart = () => {
     if (sizes.length > 0 && !selectedSize) {
-      alert("Por favor selecciona un talle.");
+      alert(is3D ? "Por favor selecciona un material." : "Por favor selecciona un talle.");
       return;
     }
     if (colors.length > 0 && !selectedColor) {
@@ -160,9 +201,10 @@ export default function ProductDetails({
     const colorToPass = colors.length > 0 ? selectedColor : undefined;
     
     // Safety check quantity boundaries
-    const finalQty = Math.min(quantity, currentStock);
+    const maxQtyAllowed = is3D ? 99 : currentStock;
+    const finalQty = Math.min(quantity, maxQtyAllowed);
     if (finalQty <= 0) {
-      alert("Lo sentimos, esta combinación temporalmente no cuenta con stock.");
+      alert("Lo sentimos, la cantidad seleccionada no es válida.");
       return;
     }
 
@@ -175,10 +217,24 @@ export default function ProductDetails({
   };
 
   const handleImmediateWhatsAppQuery = () => {
+    let specText = "";
+    if (is3D) {
+      const immediateQty = Math.min(quantity, Math.max(0, currentStock));
+      const onDemandQty = Math.max(0, quantity - currentStock);
+      specText = `👉 Material seleccionado: ${selectedSize}
+👉 Color deseado: ${selectedColor}
+👉 Cantidad: ${quantity} un.
+   - Entrega inmediata: ${immediateQty} un.
+   - A fabricar bajo demanda: ${onDemandQty} un.
+${onDemandQty > 0 ? `👉 Tiempo estimado de fabricación: ${(quantity - currentStock) * (product.hoursPerUnit || 8)} horas\n` : ""}`;
+    } else {
+      specText = `${selectedSize ? `👉 Talle seleccionado: ${selectedSize}\n` : ""}${selectedColor ? `👉 Color deseado: ${selectedColor}\n` : ""}`;
+    }
+
     const text = `Hola ${settings.siteTitle || "Ventas Juem"}! Me interesa obtener más información sobre este artículo:
 *${product.name}*
-${selectedSize ? `👉 Talle seleccionado: ${selectedSize}\n` : ""}${selectedColor ? `👉 Color deseado: ${selectedColor}\n` : ""}Precio actual del catálogo: $${Math.round(dynamicPrice)}
-Me gustaría saber disponibilidad de stock y métodos de envío.`;
+${specText}Precio actual: $${Math.round(dynamicPrice * quantity)}
+Me gustaría coordinar stock, fabricación y envío.`;
 
     const cleanPhone = settings.whatsappNumber.replace(/[^0-9]/g, "");
     const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
@@ -344,19 +400,22 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
                   </div>
                   {/* Subtle Stock Label */}
                   <span className={`text-[9px] font-semibold mt-0.5 ${
-                    currentStock > 0 
-                      ? (isThemeDark ? "text-zinc-400" : "text-zinc-500")
-                      : "text-red-500 font-bold"
+                    is3D 
+                      ? (currentStock > 0 ? "text-emerald-500 font-bold" : "text-amber-500 font-bold")
+                      : (currentStock > 0 ? (isThemeDark ? "text-zinc-400" : "text-zinc-500") : "text-red-500 font-bold")
                   }`}>
-                    Stock: {currentStock > 0 ? `${currentStock} un.` : "Agotado"}
+                    {is3D 
+                      ? (currentStock > 0 ? `Stock inmediato: ${currentStock} un. (Fabricación bajo demanda disponible)` : "Sin stock inmediato (Fabricación a pedido)")
+                      : `Stock: ${currentStock > 0 ? `${currentStock} un.` : "Agotado"}`
+                    }
                   </span>
                 </div>
 
-                {currentStock > 0 ? (
+                {(currentStock > 0 || is3D) ? (
                   <div className="flex items-center gap-2">
                     {/* Quantity Selector immediately to the right of the price */}
                     <div className={`flex items-center rounded-lg border p-0.5 select-none ${
-                      isThemeDark ? "border-zinc-800 bg-zinc-900/60 text-white" : "border-gray-205 bg-gray-50 text-zinc-800"
+                      isThemeDark ? "border-zinc-800 bg-zinc-900/60 text-white" : "border-gray-251 bg-gray-50 text-zinc-800"
                     }`}>
                       <button
                         type="button"
@@ -369,8 +428,8 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
                       <span className="w-6 text-center font-mono font-bold text-xs select-none">{quantity}</span>
                       <button
                         type="button"
-                        onClick={() => setQuantity(Math.min(currentStock, quantity + 1))}
-                        disabled={quantity >= currentStock}
+                        onClick={() => setQuantity(is3D ? Math.min(99, quantity + 1) : Math.min(currentStock, quantity + 1))}
+                        disabled={is3D ? quantity >= 99 : quantity >= currentStock}
                         className="w-7 h-7 flex items-center justify-center text-zinc-400 hover:text-white disabled:opacity-30 transition cursor-pointer font-bold text-sm"
                       >
                         +
@@ -394,6 +453,45 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
                   </div>
                 )}
               </div>
+
+              {/* 3D printed customization block */}
+              {is3D && (
+                <div className={`p-4 rounded-2xl border text-xs space-y-2.5 mb-6 ${
+                  isThemeDark ? "bg-zinc-950/40 border-zinc-800/60 text-zinc-300" : "bg-slate-50 border-slate-100 text-zinc-700"
+                }`}>
+                  <div className="flex items-center gap-1.5 font-extrabold text-[#5346ff] dark:text-indigo-400 text-[10px] uppercase tracking-wider mb-2">
+                    <Cpu className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: "3s" }} />
+                    <span>Sincronización de Producción 3D</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex flex-col p-2.5 rounded-xl bg-black/5 dark:bg-zinc-900/50">
+                      <span className="text-[9px] text-zinc-500 font-semibold uppercase">Entrega Inmediata</span>
+                      <span className="text-sm font-extrabold text-[#25D366]">
+                        {Math.min(quantity, Math.max(0, currentStock))} un.
+                      </span>
+                    </div>
+                    <div className="flex flex-col p-2.5 rounded-xl bg-black/5 dark:bg-zinc-900/50">
+                      <span className="text-[9px] text-zinc-500 font-semibold uppercase">A Fabricar</span>
+                      <span className="text-sm font-extrabold text-[#5346ff] dark:text-indigo-400">
+                        {Math.max(0, quantity - currentStock)} un.
+                      </span>
+                    </div>
+                  </div>
+
+                  {quantity > currentStock && (
+                    <div className="mt-3.5 pt-3.5 border-t border-zinc-500/10 space-y-2 text-zinc-500 dark:text-zinc-400">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+                        <span>Fabricación Estimada: <strong className="text-zinc-800 dark:text-zinc-200">{(quantity - currentStock) * (product.hoursPerUnit || 8)} Horas</strong> ({Math.ceil(((quantity - currentStock) * (product.hoursPerUnit || 8)) / 18)} {Math.ceil(((quantity - currentStock) * (product.hoursPerUnit || 8)) / 18) === 1 ? "Día hábil" : "Días hábiles"} de impresora activa)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-emerald-500 shrink-0" />
+                        <span>Fecha estimada de entrega: <strong className="text-zinc-800 dark:text-zinc-200">{getEstimatedDeliveryString(Math.ceil(((quantity - currentStock) * (product.hoursPerUnit || 8)) / 18))}</strong></span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Description Details Block */}
               <h4 className={`text-[10px] font-bold tracking-[0.18em] uppercase mb-2 ${
@@ -425,11 +523,13 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
                 <h4 className={`text-[10px] font-bold tracking-[0.15em] uppercase ${
                   isThemeDark ? "text-zinc-400" : "text-zinc-500"
                 }`}>
-                  TALLE SELECCIONADO:{" "}
+                  {is3D ? "MATERIAL SELECCIONADO: " : "TALLE SELECCIONADO: "}
                   {selectedSize ? (
                     <span className="text-[#5346ff] font-extrabold">{selectedSize}</span>
                   ) : (
-                    <span className="text-red-500 font-bold dark:text-red-400 animate-pulse text-[9px]">(Por favor selecciona un talle)</span>
+                    <span className="text-red-500 font-bold dark:text-red-400 animate-pulse text-[9px]">
+                      {is3D ? "(Por favor selecciona un material)" : "(Por favor selecciona un talle)"}
+                    </span>
                   )}
                 </h4>
                 <div className="flex flex-wrap gap-2">
@@ -439,7 +539,6 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
                       type="button"
                       onClick={() => {
                         setSelectedSize(sz);
-                        setQuantity(1); // reset quantity safely
                       }}
                       className={`text-xs px-4 py-1.5 rounded-full border transition-all duration-200 font-bold tracking-wide cursor-pointer select-none ${
                         selectedSize === sz
@@ -453,6 +552,14 @@ Me gustaría saber disponibilidad de stock y métodos de envío.`;
                     </button>
                   ))}
                 </div>
+                {is3D && selectedSize && (() => {
+                  const mInfo = PRINT_MATERIALS.find(m => m.id === selectedSize);
+                  return mInfo ? (
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 italic mt-1 font-light leading-snug">
+                      {mInfo.description}
+                    </p>
+                  ) : null;
+                })()}
               </div>
             )}
 

@@ -492,6 +492,15 @@ Me gustaría coordinar stock, fabricación y envío.`;
                           <Calendar className="w-4 h-4 text-emerald-500 shrink-0" />
                           <span>Fecha estimada de entrega: <strong className="text-zinc-800 dark:text-zinc-200">{getEstimatedDeliveryString(totalDelayDays)}</strong></span>
                         </div>
+                        <div className="pt-1.5 flex items-center">
+                          <button
+                            onClick={handleImmediateWhatsAppQuery}
+                            className="flex items-center gap-2 text-xs text-[#25D366] hover:text-[#20ba59] active:scale-95 transition-all font-semibold outline-none focus:outline-none cursor-pointer"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                            <span>Para un tiempo más preciso, consulte por WhatsApp</span>
+                          </button>
+                        </div>
                       </div>
                     );
                   })()}

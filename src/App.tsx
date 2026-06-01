@@ -2437,18 +2437,6 @@ export default function App() {
                     </h3>
                     <span className="text-xs font-mono text-zinc-500 dark:text-zinc-400">({sortedProducts.length} productos)</span>
                   </div>
-
-                  <button
-                    onClick={() => {
-                      navigateToProductRoute("todos", "all");
-                      setSearchQuery("");
-                      setOnlyInStock(false);
-                      setSortBy("featured");
-                    }}
-                    className="text-xs text-indigo-500 hover:underline transition-all cursor-pointer font-bold"
-                  >
-                    Limpiar Filtros ×
-                  </button>
                 </div>
 
                 {sortedProducts.length === 0 ? (

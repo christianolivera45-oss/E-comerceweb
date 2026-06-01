@@ -319,11 +319,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
               </div>
             </div>
             
-            {isDiscounted && (
-              <span className="absolute top-4 left-4 bg-red-650 text-white font-extrabold text-[8px] uppercase tracking-widest px-2.5 py-1 rounded-full shadow-md z-10">
-                Oferta Especial
-              </span>
-            )}
+
 
             {/* Navigation arrows for gallery images floating gracefully inside the card borders */}
             {allImages.length > 1 && (
@@ -401,13 +397,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
                     <span className="text-2xl sm:text-3xl font-extrabold text-[#5346ff] tracking-tight">
                       ${Math.round(dynamicPrice)}
                     </span>
-                    {isDiscounted && (
-                      <span className={`text-[11px] sm:text-xs line-through font-light ${
-                        isThemeDark ? "text-zinc-500" : "text-zinc-400"
-                      }`}>
-                        ${Math.round(product.originalPrice || 0)}
-                      </span>
-                    )}
+
                   </div>
                   {/* Subtle Stock Label */}
                   <span className={`text-[9px] font-semibold mt-0.5 ${

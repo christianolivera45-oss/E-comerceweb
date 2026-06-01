@@ -149,11 +149,6 @@ export default function ProductCard({
         {/* Pricing & Stock */}
         <div className="flex items-center justify-between mt-3 sm:mt-4 gap-1.5">
           <div className="flex flex-col">
-            {isDiscounted && (
-              <span className="text-[10px] sm:text-xs text-zinc-500 line-through">
-                ${Math.round(product.originalPrice || 0)}
-              </span>
-            )}
             <span className="text-sm sm:text-base font-bold theme-text-primary">
               {getPriceDisplay()}
             </span>

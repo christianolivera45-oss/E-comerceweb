@@ -285,11 +285,6 @@ export default function CartDrawer({
 
                           {/* Price */}
                           <div className="text-right">
-                            <span className="text-xs text-zinc-500 block line-through">
-                              {item.product.originalPrice && item.product.originalPrice > getItemPrice(item) && (
-                                `$${Math.round(item.product.originalPrice * item.quantity)}`
-                              )}
-                            </span>
                             <span className="text-sm font-bold theme-text-primary">
                               ${Math.round(getItemPrice(item) * item.quantity)}
                             </span>

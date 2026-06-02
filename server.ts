@@ -1195,6 +1195,326 @@ async function startServer() {
     }
   });
 
+  // Mercado Pago Uruguay Custom Server Integration Endpoints
+  app.post("/api/payments/mercadopago/preference", async (req, res) => {
+    try {
+      const { cartItems, userInfo, discountPercent, appliedPromo } = req.body;
+      if (!cartItems || cartItems.length === 0) {
+        return res.status(400).json({ success: false, message: "El carrito está vacío." });
+      }
+
+      // Read current store settings
+      const settings = currentStoreState.settings;
+      const accessToken = settings.mercadopagoAccessToken?.trim() || process.env.MERCADOPAGO_ACCESS_TOKEN?.trim();
+
+      if (!accessToken) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "El vendedor no ha configurado sus credenciales de Mercado Pago todavía en el panel de administradores." 
+        });
+      }
+
+      // Calculate prices and map items to Mercado Pago format
+      // Note: we convert prices from USD to UYU using the configured exchange rate
+      const exchangeRate = parseFloat(settings.exchangeRate as any) || 40;
+      const discountFactor = 1 - (discountPercent || 0) / 100;
+
+      const items = cartItems.map((item: any) => {
+        // Resolve item or variant override price (already in UYU Pesos)
+        let basePriceUYU = item.product.price;
+        const p = item.product;
+        if (p.variants && p.variants.length > 0 && item.selectedSize) {
+          const exactMatch = item.selectedColor 
+            ? p.variants.find((v: any) => v.size === item.selectedSize && v.color === item.selectedColor)
+            : null;
+          const sizeMatch = p.variants.find((v: any) => v.size === item.selectedSize);
+          const match = exactMatch || sizeMatch;
+          if (match && match.price !== undefined) {
+            basePriceUYU = match.price;
+          }
+        }
+        
+        // Round to integer (Mercado Pago requirements) and apply discount
+        const itemPriceUYU = Math.round(basePriceUYU * discountFactor);
+        
+        let title = item.product.name;
+        const options = [];
+        if (item.selectedSize) options.push(`Talle/Mat: ${item.selectedSize}`);
+        if (item.selectedColor) options.push(`Col: ${item.selectedColor}`);
+        if (options.length > 0) title += ` (${options.join(", ")})`;
+
+        return {
+          title: title,
+          quantity: parseInt(item.quantity) || 1,
+          unit_price: itemPriceUYU,
+          currency_id: "UYU"
+        };
+      });
+
+      // Dynamic host protocol handling
+      const protocol = req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+      const host = req.get("host");
+      const baseUrl = `${protocol}://${host}`;
+
+      const mpPayload = {
+        items: items,
+        back_urls: {
+          success: `${baseUrl}/api/payments/mercadopago/feedback?status=success&user=${encodeURIComponent(userInfo?.name || "")}&addr=${encodeURIComponent(userInfo?.address || "")}&promo=${encodeURIComponent(appliedPromo || "")}`,
+          failure: `${baseUrl}/api/payments/mercadopago/feedback?status=failure`,
+          pending: `${baseUrl}/api/payments/mercadopago/feedback?status=pending`
+        },
+        auto_return: "approved",
+        statement_descriptor: (settings.siteTitle || "Ventas Juem").substring(0, 16)
+      };
+
+      console.log("Creando preferencia Mercado Pago:", JSON.stringify(mpPayload, null, 2));
+
+      const response = await fetch("https://api.mercadopago.com/checkout/preferences", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${accessToken}`
+        },
+        body: JSON.stringify(mpPayload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Error de la API de Mercado Pago:", errorData);
+        return res.status(500).json({ 
+          success: false, 
+          message: "Error al comunicarse con Mercado Pago.", 
+          detail: errorData.message || response.statusText 
+        });
+      }
+
+      const resData = await response.json();
+      res.json({ 
+        success: true, 
+        preferenceId: resData.id, 
+        initPoint: resData.init_point 
+      });
+
+    } catch (err: any) {
+      console.error("Excepción en creación de preferencia:", err);
+      res.status(500).json({ success: false, message: "Error interno del servidor.", error: err.message });
+    }
+  });
+
+  app.get("/api/payments/mercadopago/feedback", (req, res) => {
+    const status = req.query.status;
+    const paymentId = req.query.payment_id || req.query.preference_id || "";
+    const userName = req.query.user || "Cliente";
+    const address = req.query.addr || "Coordinar";
+    const promo = req.query.promo || "";
+
+    const settings = currentStoreState.settings;
+    const siteTitle = settings.siteTitle || "Ventas Juem";
+    const whatsappNum = settings.whatsappNumber || "";
+    const cleanPhone = whatsappNum.replace(/[^0-9]/g, "");
+
+    // Generate WhatsApp text
+    let waMessage = `🛒 *COMPRA EXCELENTE POR MERCADO PAGO - ${siteTitle}*\n\n`;
+    waMessage += `👤 *Cliente:* ${userName}\n`;
+    waMessage += `📍 *Dirección de envío:* ${address}\n`;
+    waMessage += `💳 *Método de Pago:* Mercado Pago Uruguay (Aprobado)\n`;
+    if (paymentId) {
+      waMessage += `🏷️ *Referencia de Pago:* ${paymentId}\n`;
+    }
+    if (promo) {
+      waMessage += `🎟️ *Cupón:* ${promo}\n`;
+    }
+    waMessage += `┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n`;
+    waMessage += `🙌 _¡Hola! Ya completé la compra y el pago por Mercado Pago Uruguay con éxito. Adjunto mi confirmación para el envío._`;
+
+    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMessage)}`;
+
+    let contentHtml = "";
+
+    if (status === "success") {
+      contentHtml = `
+        <div class="card">
+          <div class="icon-success">✓</div>
+          <h1>¡Pago Realizado con Éxito!</h1>
+          <p class="subtitle">Tu pago ha sido procesado y aprobado mediante Mercado Pago Uruguay de forma segura.</p>
+          
+          <div class="summary-box">
+            <p><strong>Pedido para:</strong> ${userName}</p>
+            <p><strong>Dirección:</strong> ${address}</p>
+            <p><strong>Referencia:</strong> ${paymentId || "Pendiente confirmación"}</p>
+          </div>
+
+          <p class="final-step">Para coordinar el envío de forma inmediata, por favor haz clic en el siguiente botón:</p>
+          
+          <a href="${waUrl}" class="action-btn-whatsapp">
+            Notificar Compra por WhatsApp
+          </a>
+
+          <a href="/" class="secondary-btn">Volver a la Tienda</a>
+        </div>
+      `;
+    } else {
+      contentHtml = `
+        <div class="card">
+          <div class="icon-error">✗</div>
+          <h1>Pago no Completado</h1>
+          <p class="subtitle">El proceso de pago de Mercado Pago no pudo completarse con éxito o fue cancelado.</p>
+          
+          <a href="/" class="action-btn-retry">Intentar Nuevamente</a>
+          <a href="/" class="secondary-btn">Volver al Catálogo</a>
+        </div>
+      `;
+    }
+
+    const themeBg = settings.themeMode === "dark" ? "#09090b" : "#f8fafc";
+    const themeCard = settings.themeMode === "dark" ? "#18181b" : "#ffffff";
+    const themeText = settings.themeMode === "dark" ? "#ffffff" : "#0f172a";
+    const themeSubtitle = settings.themeMode === "dark" ? "#a1a1aa" : "#475569";
+    const themeAccent = settings.primaryColor || "#3b82f6";
+
+    const responseHtml = `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Confirmación de Pago - ${siteTitle}</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+        <style>
+          body {
+            font-family: 'Inter', sans-serif;
+            background-color: ${themeBg};
+            color: ${themeText};
+            margin: 0;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+          }
+          .card {
+            background-color: ${themeCard};
+            border-radius: 16px;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
+            max-width: 480px;
+            width: 90%;
+            padding: 40px 32px;
+            text-align: center;
+            border: 1px solid ${settings.themeMode === "dark" ? "#27272a" : "#e2e8f0"};
+          }
+          .icon-success {
+            width: 72px;
+            height: 72px;
+            background-color: rgb(16, 185, 129, 0.15);
+            color: #10b981;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            margin: 0 auto 24px;
+            justify-content: center;
+            font-size: 32px;
+            font-weight: bold;
+          }
+          .icon-error {
+            width: 72px;
+            height: 72px;
+            background-color: rgb(239, 68, 68, 0.15);
+            color: #ef4444;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            margin: 0 auto 24px;
+            justify-content: center;
+            font-size: 32px;
+            font-weight: bold;
+          }
+          h1 {
+            font-size: 22px;
+            font-weight: 700;
+            margin: 0 0 12px;
+          }
+          .subtitle {
+            font-size: 14px;
+            line-height: 1.5;
+            color: ${themeSubtitle};
+            margin-bottom: 24px;
+          }
+          .summary-box {
+            background-color: ${settings.themeMode === "dark" ? "#242427" : "#f1f5f9"};
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 24px;
+            text-align: left;
+            font-size: 13px;
+          }
+          .summary-box p {
+            margin: 4px 0;
+            line-height: 1.4;
+          }
+          .final-step {
+            font-size: 13px;
+            font-style: italic;
+            color: ${themeSubtitle};
+            margin-bottom: 16px;
+          }
+          .action-btn-whatsapp {
+            display: block;
+            width: 100%;
+            background-color: #25d366;
+            color: white;
+            text-decoration: none;
+            padding: 14px 20px;
+            font-weight: 700;
+            border-radius: 12px;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            box-sizing: border-box;
+            border: none;
+            box-shadow: 0 4px 12px rgba(37,211,102,0.25);
+            margin-bottom: 12px;
+          }
+          .action-btn-whatsapp:hover {
+            opacity: 0.95;
+            transform: translateY(-1px);
+          }
+          .action-btn-retry {
+            display: block;
+            width: 100%;
+            background-color: ${themeAccent};
+            color: white;
+            text-decoration: none;
+            padding: 14px 20px;
+            font-weight: 700;
+            border-radius: 12px;
+            font-size: 14px;
+            box-sizing: border-box;
+            border: none;
+            margin-bottom: 12px;
+          }
+          .secondary-btn {
+            display: inline-block;
+            font-size: 12px;
+            color: ${themeSubtitle};
+            text-decoration: none;
+            font-weight: 600;
+            margin-top: 8px;
+            transition: color 0.15s;
+          }
+          .secondary-btn:hover {
+            color: ${themeAccent};
+          }
+        </style>
+      </head>
+      <body>
+        ${contentHtml}
+      </body>
+      </html>
+    `;
+
+    res.send(responseHtml);
+  });
+
   // Handle healthcheck
   app.get("/api/health", (req, res) => {
     res.json({ 

@@ -1,4 +1,4 @@
-import { useState, FormEvent } from "react";
+import { useState, useEffect, FormEvent } from "react";
 import { X, ShoppingBag, Trash2, Plus, Minus, ArrowRight } from "lucide-react";
 import { CartItem, SiteSettings, Coupon, is3DProduct } from "../types";
 import { motion, AnimatePresence } from "motion/react";
@@ -12,6 +12,7 @@ interface CartDrawerProps {
   settings: SiteSettings;
   onClearCart: () => void;
   coupons?: Coupon[];
+  onProceedToCheckout: () => void;
 }
 
 export default function CartDrawer({
@@ -22,11 +23,9 @@ export default function CartDrawer({
   onRemoveItem,
   settings,
   onClearCart,
-  coupons
+  coupons,
+  onProceedToCheckout
 }: CartDrawerProps) {
-  const [userName, setUserName] = useState("");
-  const [address, setAddress] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("Transferencia");
   const [promoCode, setPromoCode] = useState("");
   const [appliedDiscount, setAppliedDiscount] = useState(0); // in percentage
   const [promoStatus, setPromoStatus] = useState<"none" | "success" | "invalid">("none");
@@ -100,74 +99,7 @@ export default function CartDrawer({
     }
   };
 
-  const handleWhatsAppCheckout = (e: FormEvent) => {
-    e.preventDefault();
-    if (cartItems.length === 0) return;
-    if (!userName.trim() || !address.trim()) {
-      alert("Por favor completa tu nombre y dirección de envío.");
-      return;
-    }
-
-    // Generate messaging text formatted nicely for WhatsApp
-    let message = `🛒 *NUEVO PEDIDO - ${settings.siteTitle}*\n\n`;
-    message += `👤 *Cliente:* ${userName.trim()}\n`;
-    message += `📍 *Dirección:* ${address.trim()}\n`;
-    message += `💳 *Método de Pago:* ${paymentMethod}\n`;
-    if (appliedDiscount > 0) {
-      message += `🎟️ *Cupón Aplicado:* ${promoCode.toUpperCase()} (${appliedDiscount}% desc.)\n`;
-    }
-    message += `┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n`;
-
-    cartItems.forEach((item, index) => {
-      const is3D = is3DProduct(item.product);
-      const options = [];
-      if (item.selectedSize) {
-        options.push(is3D ? `Material: ${item.selectedSize}` : `Talle: ${item.selectedSize}`);
-      }
-      if (item.selectedColor) {
-        options.push(`Color: ${item.selectedColor}`);
-      }
-      const optionsStr = options.length > 0 ? ` (${options.join(", ")})` : "";
-      
-      const itemPrice = getItemPrice(item);
-      message += `${index + 1}. *${item.product.name}*${optionsStr}\n`;
-      
-      if (is3D) {
-        const immediateStock = item.product.stock || 0;
-        const immediateQty = Math.min(item.quantity, Math.max(0, immediateStock));
-        const onDemandQty = Math.max(0, item.quantity - immediateStock);
-        
-        const rawVal = item.product.hoursPerUnit;
-        const delayDays = (rawVal === undefined || rawVal === null) ? 1 : (rawVal === 8 ? 1 : (rawVal === 24 ? 2 : (rawVal === 48 ? 3 : rawVal)));
-        const totalDelayDays = onDemandQty * delayDays;
-        message += `   ⚡ _Stock inmediato:_ ${immediateQty} un.\n`;
-        message += `   🛠️ _A fabricar:_ ${onDemandQty} un. (demora est. ${totalDelayDays} ${totalDelayDays === 1 ? "día" : "días"})\n`;
-      }
-      
-      message += `   👉 ${item.quantity} x $${Math.round(itemPrice)} = *$${Math.round(
-        itemPrice * item.quantity
-      )}*\n\n`;
-    });
-
-    message += `┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n`;
-    message += `🔹 *Subtotal:* $${Math.round(subtotal)}\n`;
-    if (appliedDiscount > 0) {
-      message += `🔹 *Descuento (${appliedDiscount}%):* -$${Math.round(discountAmount)}\n`;
-    }
-    message += `🔥 *TOTAL NETO:* *$${Math.round(total)}*\n\n`;
-    message += `🙌 _Quiero coordinar la entrega y el pago con ustedes de este pedido._`;
-
-    // Encode text and open link
-    const encodedText = encodeURIComponent(message);
-    const cleanPhone = settings.whatsappNumber.replace(/[^0-9]/g, "");
-    const waUrl = `https://wa.me/${cleanPhone}?text=${encodedText}`;
-    
-    // Open in standard tab safely
-    window.open(waUrl, "_blank", "referrer");
-    onClearCart();
-    onClose();
-  };
-
+  // Rendering logic below
   return (
     <AnimatePresence>
       {isOpen && (
@@ -358,63 +290,19 @@ export default function CartDrawer({
                   </div>
                 </div>
 
-                {/* Shipping Form & Checkout */}
-                <form onSubmit={handleWhatsAppCheckout} className="space-y-3 pt-2">
-                  <hr className={`border-t ${settings.themeMode === "dark" ? "border-zinc-800" : "border-gray-200"}`} />
-                  <h4 className="text-xs font-semibold tracking-wider uppercase text-zinc-400">Datos para Envío (WhatsApp Coordinated)</h4>
-                  
-                  <div className="space-y-2">
-                    <input
-                      required
-                      type="text"
-                      placeholder="Nombre Completo"
-                      value={userName}
-                      onChange={(e) => setUserName(e.target.value)}
-                      className={`text-xs w-full px-3 py-2 rounded-lg border outline-none ${
-                        settings.themeMode === "dark"
-                          ? "bg-zinc-900 border-zinc-800 text-white placeholder-zinc-500 focus:border-zinc-700"
-                          : "bg-white border-gray-200 text-zinc-900 placeholder-gray-400"
-                      }`}
-                    />
-                    <input
-                      required
-                      type="text"
-                      placeholder="Dirección Física de Entrega"
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      className={`text-xs w-full px-3 py-2 rounded-lg border outline-none ${
-                        settings.themeMode === "dark"
-                          ? "bg-zinc-900 border-zinc-800 text-white placeholder-zinc-500 focus:border-zinc-700"
-                          : "bg-white border-gray-200 text-zinc-900 placeholder-gray-400"
-                      }`}
-                    />
-                    
-                    <div className="flex items-center gap-2 justify-between">
-                      <label className="text-[11px] text-zinc-400 font-sans">Pago preferido:</label>
-                      <select
-                        value={paymentMethod}
-                        onChange={(e) => setPaymentMethod(e.target.value)}
-                        className={`text-xs px-2 py-1 rounded-lg border outline-none ${
-                          settings.themeMode === "dark"
-                            ? "bg-zinc-900 border-zinc-800 text-white"
-                            : "bg-white border-gray-200 text-zinc-900"
-                        }`}
-                      >
-                        <option value="Transferencia BCP/Mercado Pago">MercadoPago / Transf.</option>
-                        <option value="Efectivo al recibir">Efectivo Contraentrega</option>
-                        <option value="Tarjeta vía link de pago">Tarjeta de Crédito/Débito</option>
-                      </select>
-                    </div>
-                  </div>
-
+                {/* Action button to proceed to Checkout */}
+                <div className="pt-2 border-t border-dashed border-zinc-800">
                   <button
-                    type="submit"
-                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold font-sans theme-btn-primary mt-1 shadow-lg shadow-black/10 transition-transform active:scale-95"
+                    onClick={() => {
+                      onProceedToCheckout();
+                      onClose();
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-extrabold uppercase tracking-widest theme-btn-primary mt-1 shadow-lg shadow-black/15 transition-all transform active:scale-95 cursor-pointer"
                   >
-                    Comprar vía WhatsApp
+                    <span>Continuar</span>
                     <ArrowRight className="h-4 w-4" />
                   </button>
-                </form>
+                </div>
               </div>
             )}
           </motion.div>

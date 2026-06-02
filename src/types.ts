@@ -44,6 +44,13 @@ export interface HeroSlide {
   buttonLink?: string;
 }
 
+export interface DeliveryMethod {
+  id: string;
+  title: string;
+  subtext?: string | null;
+  iconType: string;
+}
+
 export interface SiteSettings {
   siteTitle: string;
   siteSubtitle: string;
@@ -68,6 +75,25 @@ export interface SiteSettings {
   footerCol3Text?: string;
   footerCopyright?: string;
   lowStockThreshold?: number;
+  mercadopagoActive?: boolean;
+  mercadopagoMessage?: string;
+  mercadopagoPublicKey?: string;
+  mercadopagoAccessToken?: string;
+  exchangeRate?: number;
+  transferActive?: boolean;
+  transferDetails?: string;
+  cashActive?: boolean;
+  cashMessage?: string;
+  pickupActive?: boolean;
+  pickupAddress?: string;
+  pickupHours?: string;
+  pickupSuccessMessage?: string;
+  deliveryActive?: boolean;
+  deliveryMethods?: DeliveryMethod[];
+  invoiceOptionActive?: boolean;
+  defaultFirstName?: string;
+  defaultLastName?: string;
+  defaultPhone?: string;
 }
 
 export interface Category {

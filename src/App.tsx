@@ -20,6 +20,7 @@ import {
   AlertCircle,
   Database,
   ArrowLeft,
+  ShoppingCart,
   Image,
   Tag,
   Key,
@@ -68,7 +69,8 @@ import {
   Tv,
   HardDrive,
   Headphones,
-  Sofa
+  Sofa,
+  CreditCard
 } from "lucide-react";
 import { Product, SiteSettings, ShopState, CartItem, Category, Subcategory, ProductVariant, is3DProduct } from "./types";
 import ThemeStyles from "./components/ThemeStyles";
@@ -76,6 +78,7 @@ import ProductCard from "./components/ProductCard";
 import ProductSlider from "./components/ProductSlider";
 import ProductDetails from "./components/ProductDetails";
 import CartDrawer from "./components/CartDrawer";
+import Checkout from "./components/Checkout";
 import HeroSlider from "./components/HeroSlider";
 import SecurityPanel from "./components/SecurityPanel";
 import { DashboardGeneral } from "./components/DashboardGeneral";
@@ -197,6 +200,15 @@ const DEFAULT_SETTINGS: SiteSettings = {
   promotionBannerText: "🚚 ¡ENVÍO GRATUITO en compras superiores a $50! Código: JUEM50",
   showPromotionBanner: true,
   lowStockThreshold: 5,
+  mercadopagoActive: true,
+  mercadopagoMessage: "Paga de manera 100% segura con cuotas sin recargo utilizando tus tarjetas favoritas: OCA, VISA, MasterCard, Lider y Diners, o en redes de cobranza Abitab y Redpagos. Te enviaremos el link de pago seguro al iniciar el chat de WhatsApp.",
+  mercadopagoPublicKey: "",
+  mercadopagoAccessToken: "",
+  exchangeRate: 40,
+  transferActive: true,
+  transferDetails: "Realiza tu transferencia bancaria directa de forma rápida y segura desde BROU, Itaú, Santander, BBVA o cualquier banco de Uruguay. Al enviar tu pedido, te daremos los datos de cuenta para que nos envíes el comprobante.",
+  cashActive: true,
+  cashMessage: "Abona en efectivo al recibir tu pedido (válido para Montevideo y zonas metropolitanas coordinadas). Pagas cómodamente en mano a nuestro repartidor al momento de la entrega.",
   heroSlides: [
     {
       id: "slide-1",
@@ -226,7 +238,48 @@ const DEFAULT_SETTINGS: SiteSettings = {
   footerCol2Text: "Todos los productos que visualizas pasan por un control estricto de empaque y selección. Ofrecemos cambio de talle inmediato dentro de las 72 horas de recibida tu compra.",
   footerCol3Title: "📞 Soporte Directo",
   footerCol3Text: "¿Habiendo dudas con talles o stock rápido? Pícale al botón de consulta express en la ficha de cada producto y un asesor te responderá inmediatamente en WhatsApp.",
-  footerCopyright: "Desarrollado con tecnología de punta responsive. Reservados todos los derechos."
+  footerCopyright: "Desarrollado con tecnología de punta responsive. Reservados todos los derechos.",
+  pickupActive: true,
+  pickupAddress: "Av. Italia 3824, Parque Batlle, Montevideo, Uruguay",
+  pickupHours: "Lunes a Viernes de 10:00 a 18:00 hs y Sábados de 09:00 a 13:00 hs.",
+  pickupSuccessMessage: "Listo para retirar el mismo día hábil",
+  deliveryActive: true,
+  deliveryMethods: [
+    {
+      id: "express_mvd",
+      title: "Envío Express en 3 horas dentro de Montevideo (ver zonas)",
+      subtext: "*antes de 16h de L a V",
+      iconType: "motorcycle"
+    },
+    {
+      id: "mvd_normal",
+      title: "Envío dentro de Montevideo (24 a 48 horas)",
+      subtext: null,
+      iconType: "truck_orange"
+    },
+    {
+      id: "ues",
+      title: "Envío a todo el país por UES",
+      subtext: null,
+      iconType: "ues"
+    },
+    {
+      id: "dac",
+      title: "Envío a todo el país por DAC (Agencia Central)",
+      subtext: null,
+      iconType: "dac"
+    },
+    {
+      id: "depunta",
+      title: "Envío a Maldonado por De Punta",
+      subtext: null,
+      iconType: "depunta"
+    }
+  ],
+  invoiceOptionActive: true,
+  defaultFirstName: "Christian",
+  defaultLastName: "Olivera",
+  defaultPhone: "095085181"
 };
 
 const ICON_LABELS: Record<string, string> = {
@@ -572,8 +625,8 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState("");
 
   // Search & Navigation
-  const [activeTab, setActiveTab] = useState<"storefront" | "admin">("storefront");
-  const [adminSection, setAdminSection] = useState<"general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer">("dashboard");
+  const [activeTab, setActiveTab] = useState<"storefront" | "admin" | "checkout">("storefront");
+  const [adminSection, setAdminSection] = useState<"general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config">("dashboard");
   const [searchQuery, setSearchQuery] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [bannerProductSearch, setBannerProductSearch] = useState("");
@@ -614,7 +667,7 @@ export default function App() {
     }
   };
 
-  const navigateAdminSection = (section: "general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer") => {
+  const navigateAdminSection = (section: "general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config") => {
     setAdminSection(section);
     setEditingProduct(null);
     setIsNewProductMode(false);
@@ -2611,6 +2664,19 @@ export default function App() {
         </div>
       )}
 
+      {/* RENDER DYNAMIC CHECKOUT SECTION */}
+      {activeTab === "checkout" && (
+        <Checkout
+          cartItems={cart}
+          onUpdateQuantity={handleUpdateQuantity}
+          onRemoveItem={handleRemoveCartItem}
+          settings={store.settings}
+          onClearCart={handleClearCart}
+          onBackToCatalog={() => setActiveTab("storefront")}
+          coupons={store.coupons}
+        />
+      )}
+
       {/* RENDER ADMIN DASHBOARD - SECURE ACCESS GUARD WHEN NOT AUTHENTICATED */}
       {activeTab === "admin" && !authToken && (
         <div className="flex-grow flex items-center justify-center p-6 bg-slate-100 dark:bg-zinc-950 min-h-[70vh]">
@@ -2799,6 +2865,30 @@ export default function App() {
               </button>
 
               <button
+                onClick={() => navigateAdminSection("checkout_config")}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
+                  adminSection === "checkout_config"
+                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
+                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                }`}
+              >
+                <ShoppingCart className="h-4 w-4" />
+                <span>Carrito y Envíos 🛒</span>
+              </button>
+
+              <button
+                onClick={() => navigateAdminSection("payments")}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
+                  adminSection === "payments"
+                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
+                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                }`}
+              >
+                <CreditCard className="h-4 w-4" />
+                <span>Métodos de Pago 💳</span>
+              </button>
+
+              <button
                 onClick={() => navigateAdminSection("security")}
                 className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
                   adminSection === "security"
@@ -2858,6 +2948,7 @@ export default function App() {
                   {adminSection === "promos" && "Promociones y Administrador de Cupones"}
                   {adminSection === "security" && "Seguridad y Control de Acceso"}
                   {adminSection === "stock" && "Control y Alertas de Stock Bajo"}
+                  {adminSection === "payments" && "Administración de Métodos de Pago (Uruguay)"}
                 </h2>
                 <p className="text-slate-500 dark:text-zinc-400 text-xs">
                   Modifica los contenidos de tu tienda en tiempo real. Los cambios se sincronizarán directamente con tu base de datos central sin tocar código.
@@ -6376,6 +6467,556 @@ export default function App() {
                   </div>
                 )}
 
+                {/* 11. PAYMENTS CONTROL CENTER PANEL */}
+                {adminSection === "payments" && (
+                  <div className="bg-white dark:bg-zinc-950 rounded-2xl border border-slate-200 dark:border-zinc-850 p-6 space-y-6 shadow-sm">
+                    <div className="space-y-1.5 pb-4 border-b border-slate-150 dark:border-zinc-850">
+                      <h3 className="font-extrabold text-sm uppercase text-slate-800 dark:text-zinc-200 tracking-wider flex items-center gap-2">
+                        <CreditCard className="h-4.5 w-4.5 text-indigo-500" />
+                        <span>Pasarelas & Métodos de Pago Habilitados (Uruguay)</span>
+                      </h3>
+                      <p className="text-xs text-zinc-450 dark:text-zinc-450">
+                        Configura y personaliza qué métodos de pago ofreces a tus compradores uruguayos en la pantalla del carrito. Los clientes verán estas instrucciones y el método seleccionado se adjuntará de forma automatizada al iniciar el pedido en tu WhatsApp.
+                      </p>
+                    </div>
+
+                    <div className="space-y-6">
+                      {/* Method 1: Mercado Pago Uruguay */}
+                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-150 dark:border-zinc-850 rounded-2xl space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">🇺🇾</span>
+                            <div>
+                              <h4 className="font-bold text-sm text-slate-800 dark:text-zinc-200">Mercado Pago Uruguay</h4>
+                              <p className="text-[10px] text-zinc-450 dark:text-zinc-500">Tarjetas de Crédito, Débito (OCA, VISA, MasterCard, Lider, Diners) y Cobros Abitab/Redpagos.</p>
+                            </div>
+                          </div>
+                          
+                          {/* Toggle switch */}
+                          <button
+                            type="button"
+                            onClick={() => setEditingSettings({
+                              ...editingSettings,
+                              mercadopagoActive: editingSettings.mercadopagoActive === false ? true : false
+                            })}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              editingSettings.mercadopagoActive !== false ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-zinc-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                editingSettings.mercadopagoActive !== false ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {editingSettings.mercadopagoActive !== false && (
+                          <div className="space-y-3 pt-2">
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">
+                                Leyenda / Instrucción para el Comprador
+                              </label>
+                              <textarea
+                                rows={2}
+                                value={editingSettings.mercadopagoMessage || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, mercadopagoMessage: e.target.value })}
+                                placeholder="Escribe las indicaciones o beneficios que el cliente visualizará..."
+                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                              />
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-3">
+                                <div>
+                                  <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1">
+                                    Clave Pública (Public Key)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="ej: APP_USR-8cfaeed0-bf51-4040-af84-48ff61cb38b2"
+                                    value={editingSettings.mercadopagoPublicKey || ""}
+                                    onChange={(e) => setEditingSettings({ ...editingSettings, mercadopagoPublicKey: e.target.value })}
+                                    className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white font-mono"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1">
+                                    Token de Acceso (Access Token)
+                                  </label>
+                                  <input
+                                    type="password"
+                                    placeholder="ej: APP_USR-492751947293-PROD..."
+                                    value={editingSettings.mercadopagoAccessToken || ""}
+                                    onChange={(e) => setEditingSettings({ ...editingSettings, mercadopagoAccessToken: e.target.value })}
+                                    className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white font-mono"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1 flex items-center gap-1">
+                                    <span>Tipo de Cambio ($ UYU por 1 USD)</span>
+                                  </label>
+                                  <input
+                                    type="number"
+                                    step="0.1"
+                                    placeholder="40"
+                                    value={editingSettings.exchangeRate || 40}
+                                    onChange={(e) => setEditingSettings({ ...editingSettings, exchangeRate: parseFloat(e.target.value) || 40 })}
+                                    className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white font-mono"
+                                  />
+                                </div>
+                              </div>
+                              <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-lg text-[10px] leading-relaxed flex flex-col justify-between">
+                                <div>
+                                  <span className="font-bold block mb-1">🇲🇵 Pasarela de Mercado Pago Uruguay:</span>
+                                  <p className="opacity-90 leading-normal mb-2">
+                                    Al ingresar tu **Public Key** y **Access Token**, la pasarela de pagos integrada en la web se activará de forma real. Tus compradores podrán pagar directamente usando tarjetas o redes físicas de Uruguay de forma totalmente segura.
+                                  </p>
+                                  <p className="opacity-90 leading-normal">
+                                    Si dejas los campos en blanco, la web funcionará en modo **Link de Pago Manual**, el cual permite coordinar con el comprador el envío del link seguro de Mercado Pago directamente por chat de WhatsApp al concretar el pedido.
+                                  </p>
+                                </div>
+                                <span className="text-[8px] text-green-400 mt-2 block">✓ Integración dinámica y tipo de cambio listos para usarse</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Method 2: Transferencia Bancaria Directa */}
+                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-150 dark:border-zinc-850 rounded-2xl space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">🏦</span>
+                            <div>
+                              <h4 className="font-bold text-sm text-slate-800 dark:text-zinc-200">Transferencia Bancaria Uruguaya</h4>
+                              <p className="text-[10px] text-zinc-450 dark:text-zinc-500">BROU, Itaú, Santander, BBVA, Scotiabank u otros bancos nacionales.</p>
+                            </div>
+                          </div>
+                          
+                          {/* Toggle switch */}
+                          <button
+                            type="button"
+                            onClick={() => setEditingSettings({
+                              ...editingSettings,
+                              transferActive: editingSettings.transferActive === false ? true : false
+                            })}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              editingSettings.transferActive !== false ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-zinc-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                editingSettings.transferActive !== false ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {editingSettings.transferActive !== false && (
+                          <div className="space-y-3 pt-2">
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">
+                                Datos de Cuenta Bancaria / CBU / Alias
+                              </label>
+                              <textarea
+                                rows={3}
+                                value={editingSettings.transferDetails || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, transferDetails: e.target.value })}
+                                placeholder="Escribe el Banco, Número de Caja de Ahorro, Moneda (UYU/USD), Nombre del titular y RUT/Documento..."
+                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white font-mono"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Method 3: Efectivo Contraentrega */}
+                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-150 dark:border-zinc-850 rounded-2xl space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">💵</span>
+                            <div>
+                              <h4 className="font-bold text-sm text-slate-800 dark:text-zinc-200">Efectivo contra el envío (Contraentrega)</h4>
+                              <p className="text-[10px] text-zinc-450 dark:text-zinc-500 font-medium">Recomendado para logística propia en Montevideo o áreas coordinadas.</p>
+                            </div>
+                          </div>
+                          
+                          {/* Toggle switch */}
+                          <button
+                            type="button"
+                            onClick={() => setEditingSettings({
+                              ...editingSettings,
+                              cashActive: editingSettings.cashActive === false ? true : false
+                            })}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              editingSettings.cashActive !== false ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-zinc-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                editingSettings.cashActive !== false ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {editingSettings.cashActive !== false && (
+                          <div className="space-y-3 pt-2">
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">
+                                Requisitos / Limitaciones de Entrega
+                              </label>
+                              <textarea
+                                rows={2}
+                                value={editingSettings.cashMessage || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, cashMessage: e.target.value })}
+                                placeholder="Escribe las zonas de cobertura para cobros físicos..."
+                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                    </div>
+
+                    {/* Submit Saving command */}
+                    <div className="pt-4 flex justify-end border-t border-slate-150 dark:border-zinc-850">
+                      <button
+                        type="button"
+                        onClick={handleSaveSettings}
+                        className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold uppercase tracking-wide flex items-center gap-2 cursor-pointer transition shadow-lg shadow-indigo-600/10 active:scale-95"
+                      >
+                        <Save className="h-4 w-4" />
+                        <span>Sincronizar y Guardar Métodos de Pago</span>
+                      </button>
+                    </div>
+
+                  </div>
+                )}
+
+                {/* 11b. CHECKOUT & SHIPPING CONTROL CENTER PANEL */}
+                {adminSection === "checkout_config" && (
+                  <div className="bg-white dark:bg-zinc-950 rounded-2xl border border-slate-200 dark:border-zinc-850 p-6 space-y-6 shadow-sm">
+                    <div className="space-y-1.5 pb-4 border-b border-slate-150 dark:border-zinc-850">
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                        <span>🛒</span> Configuración de Carrito y Envíos
+                      </h3>
+                      <p className="text-zinc-500 text-xs font-semibold leading-relaxed">
+                        Controla las opciones de entrega que se muestran al comprador en el checkout, el retiro físico en local, y habilita la facturación con RUT de empresa uruguaya.
+                      </p>
+                    </div>
+
+                    <div className="space-y-5">
+                      {/* 1. RETIRO EN LOCAL */}
+                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-150 dark:border-zinc-850 rounded-2xl space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">🏪</span>
+                            <div>
+                              <h4 className="font-bold text-sm text-slate-800 dark:text-zinc-200">Retiro físico en empresa (Pickup)</h4>
+                              <p className="text-[10px] text-zinc-450 dark:text-zinc-500 font-medium">Permite a los usuarios retirar sus pedidos directamente en tu local comercial.</p>
+                            </div>
+                          </div>
+                          
+                          {/* Toggle switch */}
+                          <button
+                            type="button"
+                            onClick={() => setEditingSettings({
+                              ...editingSettings,
+                              pickupActive: editingSettings.pickupActive === false ? true : false
+                            })}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              editingSettings.pickupActive !== false ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-zinc-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                editingSettings.pickupActive !== false ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {editingSettings.pickupActive !== false && (
+                          <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-zinc-800/60 mt-2">
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">
+                                Dirección Física del Local
+                              </label>
+                              <input
+                                type="text"
+                                value={editingSettings.pickupAddress || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, pickupAddress: e.target.value })}
+                                placeholder="Ej: Av. Italia 3824, Parque Batlle, Montevideo, Uruguay"
+                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                              />
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">
+                                  Horarios de Atención
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editingSettings.pickupHours || ""}
+                                  onChange={(e) => setEditingSettings({ ...editingSettings, pickupHours: e.target.value })}
+                                  placeholder="Ej: Lunes a Viernes de 10:00 a 18:00 hs"
+                                  className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">
+                                  Mensaje de Disponibilidad
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editingSettings.pickupSuccessMessage || ""}
+                                  onChange={(e) => setEditingSettings({ ...editingSettings, pickupSuccessMessage: e.target.value })}
+                                  placeholder="Ej: Listo para retirar el mismo día hábil"
+                                  className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 2. ENVÍO A DOMICILIO */}
+                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-150 dark:border-zinc-850 rounded-2xl space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">🚚</span>
+                            <div>
+                              <h4 className="font-bold text-sm text-slate-800 dark:text-zinc-200">Envío a domicilio</h4>
+                              <p className="text-[10px] text-zinc-450 dark:text-zinc-500 font-medium">Habilita o deshabilita los métodos de entrega del país.</p>
+                            </div>
+                          </div>
+                          
+                          {/* Toggle switch */}
+                          <button
+                            type="button"
+                            onClick={() => setEditingSettings({
+                              ...editingSettings,
+                              deliveryActive: editingSettings.deliveryActive === false ? true : false
+                            })}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              editingSettings.deliveryActive !== false ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-zinc-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                editingSettings.deliveryActive !== false ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {editingSettings.deliveryActive !== false && (
+                          <div className="space-y-4 pt-2 border-t border-slate-100 dark:border-zinc-800/60 mt-2">
+                            <div className="flex items-center justify-between">
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">
+                                Métodos de entrega disponibles ({ (editingSettings.deliveryMethods || []).length })
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const currentMethods = editingSettings.deliveryMethods || [
+                                    { id: "express_mvd", title: "Envío Express en 3 horas dentro de Montevideo (ver zonas)", subtext: "*antes de 16h de L a V", iconType: "motorcycle" },
+                                    { id: "mvd_normal", title: "Envío dentro de Montevideo (24 a 48 horas)", subtext: null, iconType: "truck_orange" },
+                                    { id: "ues", title: "Envío a todo el país por UES", subtext: null, iconType: "ues" },
+                                    { id: "dac", title: "Envío a todo el país por DAC (Agencia Central)", subtext: null, iconType: "dac" },
+                                    { id: "depunta", title: "Envío a Maldonado por De Punta", subtext: null, iconType: "depunta" }
+                                  ];
+                                  const newMethod = {
+                                    id: "delivery_" + Date.now(),
+                                    title: "Nuevo método de envío",
+                                    subtext: "Coordinación posterior",
+                                    iconType: "truck_orange"
+                                  };
+                                  setEditingSettings({
+                                    ...editingSettings,
+                                    deliveryMethods: [...currentMethods, newMethod]
+                                  });
+                                }}
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-[10px] font-extrabold uppercase transition cursor-pointer"
+                              >
+                                + Agregar método
+                              </button>
+                            </div>
+
+                            <div className="space-y-3">
+                              {(() => {
+                                const listMethods = editingSettings.deliveryMethods || [
+                                  { id: "express_mvd", title: "Envío Express en 3 horas dentro de Montevideo (ver zonas)", subtext: "*antes de 16h de L a V", iconType: "motorcycle" },
+                                  { id: "mvd_normal", title: "Envío dentro de Montevideo (24 a 48 horas)", subtext: null, iconType: "truck_orange" },
+                                  { id: "ues", title: "Envío a todo el país por UES", subtext: null, iconType: "ues" },
+                                  { id: "dac", title: "Envío a todo el país por DAC (Agencia Central)", subtext: null, iconType: "dac" },
+                                  { id: "depunta", title: "Envío a Maldonado por De Punta", subtext: null, iconType: "depunta" }
+                                ];
+
+                                return listMethods.map((method, idx) => (
+                                  <div key={method.id} className="p-4 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl space-y-3 relative group">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const updated = listMethods.filter((_, i) => i !== idx);
+                                        setEditingSettings({ ...editingSettings, deliveryMethods: updated });
+                                      }}
+                                      className="absolute right-3 top-3 text-red-500 hover:text-red-600 transition text-[10px] font-bold uppercase cursor-pointer"
+                                      title="Eliminar método"
+                                    >
+                                      ELIMINAR ×
+                                    </button>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                                      <div className="md:col-span-6">
+                                        <label className="block text-[8px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Título del Envío</label>
+                                        <input
+                                          type="text"
+                                          value={method.title}
+                                          onChange={(e) => {
+                                            const updated = listMethods.map((m, i) => i === idx ? { ...m, title: e.target.value } : m);
+                                            setEditingSettings({ ...editingSettings, deliveryMethods: updated });
+                                          }}
+                                          placeholder="Ej: Envío Express"
+                                          className="text-xs w-full px-2.5 py-1.5 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                                        />
+                                      </div>
+
+                                      <div className="md:col-span-3">
+                                        <label className="block text-[8px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Subtexto / Detalle</label>
+                                        <input
+                                          type="text"
+                                          value={method.subtext || ""}
+                                          onChange={(e) => {
+                                            const updated = listMethods.map((m, i) => i === idx ? { ...m, subtext: e.target.value || null } : m);
+                                            setEditingSettings({ ...editingSettings, deliveryMethods: updated });
+                                          }}
+                                          placeholder="Aclaración rápida"
+                                          className="text-xs w-full px-2.5 py-1.5 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                                        />
+                                      </div>
+
+                                      <div className="md:col-span-3">
+                                        <label className="block text-[8px] font-bold text-zinc-500 uppercase tracking-widest mb-1">Icono / Logotipo</label>
+                                        <select
+                                          value={method.iconType}
+                                          onChange={(e) => {
+                                            const updated = listMethods.map((m, i) => i === idx ? { ...m, iconType: e.target.value } : m);
+                                            setEditingSettings({ ...editingSettings, deliveryMethods: updated });
+                                          }}
+                                          className="text-xs w-full px-2.5 py-1.5 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                                        >
+                                          <option value="truck_orange">🚚 Camión Naranja</option>
+                                          <option value="motorcycle">🏍️ Moto Express</option>
+                                          <option value="ues">📦 UES Logo</option>
+                                          <option value="dac">📦 DAC Logo</option>
+                                          <option value="depunta">📦 De Punta Logo</option>
+                                          <option value="truck">📦 Paquete General</option>
+                                        </select>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ));
+                              })()}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 3. FACTURACIÓN CON RUT */}
+                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-150 dark:border-zinc-850 rounded-2xl space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">🧾</span>
+                            <div>
+                              <h4 className="font-bold text-sm text-slate-800 dark:text-zinc-200">Facturación con RUT (Empresas)</h4>
+                              <p className="text-[10px] text-zinc-450 dark:text-zinc-500 font-medium font-sans">Permite al comprador solicitar factura oficial ingresando RUT de 12 dígitos y Razón Social.</p>
+                            </div>
+                          </div>
+                          
+                          {/* Toggle switch */}
+                          <button
+                            type="button"
+                            onClick={() => setEditingSettings({
+                              ...editingSettings,
+                              invoiceOptionActive: editingSettings.invoiceOptionActive === false ? true : false
+                            })}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              editingSettings.invoiceOptionActive !== false ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-zinc-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                editingSettings.invoiceOptionActive !== false ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* 4. DESTINATARIO PREESTABLECIDO */}
+                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-150 dark:border-zinc-850 rounded-2xl space-y-4">
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">👤</span>
+                          <div>
+                            <h4 className="font-bold text-sm text-slate-800 dark:text-zinc-200">Datos por Defecto del Comprador</h4>
+                            <p className="text-[10px] text-zinc-450 dark:text-zinc-500 font-medium">Define los datos cargados automáticamente en el checkout como sugeridos de inicio.</p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                          <div>
+                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Nombre Inicial</label>
+                            <input
+                              type="text"
+                              value={editingSettings.defaultFirstName || ""}
+                              onChange={(e) => setEditingSettings({ ...editingSettings, defaultFirstName: e.target.value })}
+                              placeholder="Ej: Christian"
+                              className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Apellido Inicial</label>
+                            <input
+                              type="text"
+                              value={editingSettings.defaultLastName || ""}
+                              onChange={(e) => setEditingSettings({ ...editingSettings, defaultLastName: e.target.value })}
+                              placeholder="Ej: Olivera"
+                              className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Celular Inicial</label>
+                            <input
+                              type="text"
+                              value={editingSettings.defaultPhone || ""}
+                              onChange={(e) => setEditingSettings({ ...editingSettings, defaultPhone: e.target.value })}
+                              placeholder="Ej: 095085181"
+                              className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* Submit Saving command */}
+                    <div className="pt-4 flex justify-end border-t border-slate-150 dark:border-zinc-850">
+                      <button
+                        type="button"
+                        onClick={handleSaveSettings}
+                        className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold uppercase tracking-wide flex items-center gap-2 cursor-pointer transition shadow-lg shadow-indigo-600/10 active:scale-95"
+                      >
+                        <Save className="h-4 w-4" />
+                        <span>Sincronizar y Guardar Cambios de Carrito</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* 10. ACCESS SECURITY & CREDENTIALS CONFIG */}
                 {adminSection === "security" && (
                   <SecurityPanel
@@ -6552,6 +7193,7 @@ export default function App() {
         settings={store.settings}
         onClearCart={handleClearCart}
         coupons={store.coupons}
+        onProceedToCheckout={() => setActiveTab("checkout")}
       />
 
       {/* Mobile Drawer Navigation Menu */}

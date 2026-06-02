@@ -18,7 +18,8 @@ import {
   Calendar,
   Percent,
   MessageSquare,
-  Clock
+  Clock,
+  CreditCard
 } from "lucide-react";
 import { ShopState, Product } from "../types";
 
@@ -52,7 +53,7 @@ function formatSpanishDate(dateString: string) {
 
 export interface DashboardGeneralProps {
   store: ShopState;
-  navigateAdminSection: (section: "general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer") => void;
+  navigateAdminSection: (section: "general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments") => void;
   setStockFilterTab?: (tab: "all" | "outOfStock" | "lowStock" | "alerts") => void;
   setIsNewProductMode?: (mode: boolean) => void;
   setEditingProduct?: (product: Product | null) => void;
@@ -630,6 +631,33 @@ export function DashboardGeneral({
                 </div>
                 <p className="text-[9px] text-indigo-500 font-bold mt-1 group-hover:underline flex items-center gap-0.5">
                   <span>Administrar Cupones</span>
+                  <ChevronRight className="h-2.5 w-2.5" />
+                </p>
+              </div>
+            </div>
+
+            {/* KPI Card: Payments Admin Section */}
+            <div 
+              onClick={() => navigateAdminSection("payments")} 
+              className="bg-slate-50/50 dark:bg-zinc-900/35 p-5 rounded-2xl border border-slate-200/60 dark:border-zinc-850 shadow-sm flex flex-col justify-between space-y-4 cursor-pointer hover:border-indigo-500/40 transition group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] uppercase font-mono font-black text-slate-500 dark:text-zinc-450 tracking-wider">Métodos de Pago</span>
+                <CreditCard className="h-4 w-4 text-zinc-500 group-hover:text-indigo-500 transition" />
+              </div>
+              <div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl font-bold tracking-tight text-slate-800 dark:text-zinc-200">
+                    {[
+                      store.settings?.mercadopagoActive !== false,
+                      store.settings?.transferActive !== false,
+                      store.settings?.cashActive !== false
+                    ].filter(Boolean).length}
+                  </span>
+                  <span className="text-[10px] font-mono text-zinc-450 dark:text-zinc-500">activos</span>
+                </div>
+                <p className="text-[9px] text-indigo-500 font-bold mt-1 group-hover:underline flex items-center gap-0.5">
+                  <span>Administrar Pagos</span>
                   <ChevronRight className="h-2.5 w-2.5" />
                 </p>
               </div>

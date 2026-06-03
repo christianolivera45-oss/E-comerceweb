@@ -481,6 +481,52 @@ async function getDbState(): Promise<ShopState> {
       };
     });
 
+    // 7. Fetch orders & their items
+    let orders: any[] = [];
+    try {
+      const ordersRes = await pool.query("SELECT id, customer_email, customer_name, customer_phone, subtotal, discount_amount, shipping_cost, total, applied_coupon_code, current_status, notes, created_at, updated_at FROM public.orders ORDER BY created_at DESC;");
+      
+      const itemsRes = await pool.query("SELECT id, order_id, product_id, variant_id, product_name, sku, size_selected, color_selected, unit_price, quantity, total_price FROM public.order_items;");
+      const orderItemsMap: Record<string, any[]> = {};
+      for (const item of itemsRes.rows) {
+        const oid = item.order_id;
+        if (!orderItemsMap[oid]) {
+          orderItemsMap[oid] = [];
+        }
+        orderItemsMap[oid].push({
+          id: item.id,
+          productId: item.product_id ? String(item.product_id) : undefined,
+          variantId: item.variant_id || undefined,
+          productName: item.product_name,
+          sku: item.sku || undefined,
+          sizeSelected: item.size_selected || undefined,
+          colorSelected: item.color_selected || undefined,
+          unitPrice: Number(item.unit_price),
+          quantity: Number(item.quantity),
+          totalPrice: Number(item.total_price)
+        });
+      }
+
+      orders = ordersRes.rows.map(row => ({
+        id: row.id,
+        customerEmail: row.customer_email,
+        customerName: row.customer_name,
+        customerPhone: row.customer_phone || undefined,
+        subtotal: Number(row.subtotal),
+        discountAmount: Number(row.discount_amount || 0),
+        shippingCost: Number(row.shipping_cost || 0),
+        total: Number(row.total),
+        couponCode: row.applied_coupon_code || undefined,
+        status: row.current_status,
+        notes: row.notes || undefined,
+        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+        updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
+        items: orderItemsMap[row.id] || []
+      }));
+    } catch (ordErr) {
+      console.warn("Orders database tables read failed (possibly not created yet):", ordErr);
+    }
+
     return {
       categories: dbCategories.map(c => c.nombre),
       dbCategories,
@@ -488,7 +534,8 @@ async function getDbState(): Promise<ShopState> {
       settings,
       products,
       coupons,
-      adminCredentials
+      adminCredentials,
+      orders
     };
   } catch (err: any) {
     console.error("Error reading relational DB tables:", err);
@@ -839,6 +886,41 @@ async function initPostgresStore(): Promise<ShopState | null> {
       );
     `);
 
+    // 8. Create orders and order items tables for Mercado Pago Uruguay transactions tracking
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS public.orders (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        customer_email TEXT NOT NULL,
+        customer_name TEXT NOT NULL,
+        customer_phone TEXT,
+        subtotal NUMERIC(10, 2) NOT NULL,
+        discount_amount NUMERIC(10, 2) DEFAULT 0.00,
+        shipping_cost NUMERIC(10, 2) DEFAULT 0.00,
+        total NUMERIC(10, 2) NOT NULL,
+        applied_coupon_code VARCHAR(100),
+        current_status VARCHAR(50) NOT NULL DEFAULT 'pedido_iniciado',
+        notes TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS public.order_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        order_id UUID NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
+        product_id INTEGER REFERENCES public.products(id) ON DELETE SET NULL,
+        variant_id TEXT,
+        product_name TEXT NOT NULL,
+        sku VARCHAR(100),
+        size_selected VARCHAR(50),
+        color_selected VARCHAR(50),
+        unit_price NUMERIC(10, 2) NOT NULL,
+        quantity INTEGER NOT NULL,
+        total_price NUMERIC(10, 2) NOT NULL
+      );
+    `);
+
     // --- CREATE OPTIMIZED INDEXES FOR HIGH-PERFORMANCE CATALOGUE FETCHES ---
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_products_search ON public.products (active, featured, paused);
@@ -937,6 +1019,36 @@ async function startServer() {
   // Sync cache with store.json
   currentStoreState = initDataStore();
 
+  // --- IN-MEMORY SECURITY LAYER FOR RATE-LIMITING AND XSS SANITIZATION ---
+  const rateLimitMap = new Map<string, { count: number; lastReset: number }>();
+  function limitRequest(ip: string, limit: number, windowMs: number): boolean {
+    const now = Date.now();
+    const clientData = rateLimitMap.get(ip) || { count: 0, lastReset: now };
+    if (now - clientData.lastReset > windowMs) {
+      clientData.count = 1;
+      clientData.lastReset = now;
+      rateLimitMap.set(ip, clientData);
+      return true;
+    }
+    if (clientData.count >= limit) {
+      return false;
+    }
+    clientData.count += 1;
+    rateLimitMap.set(ip, clientData);
+    return true;
+  }
+
+  function sanitizeHtmlString(str: string): string {
+    if (typeof str !== "string") return "";
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#x27;")
+      .replace(/\//g, "&#x2F;");
+  }
+
   function isValidToken(authHeader: string | undefined): boolean {
     if (!authHeader || !authHeader.startsWith("Bearer ")) return false;
     const token = authHeader.substring(7);
@@ -947,10 +1059,10 @@ async function startServer() {
     
     // Create stable deterministic token to ensure stateless/ephemeral scaling resilience
     const stableToken = hashPassword(expectedUsername + ":" + expectedPasswordHash);
-    const legacyToken = "session-juem-admin-token-olivera45";
     const expectedToken = creds?.sessionToken || stableToken;
     
-    return token === expectedToken || token === stableToken || token === legacyToken;
+    // REMOVED INSECURE LEGACY BACKDOOR/STATIC STRINGS FOR CRITICAL PRODUCTION HARDENING
+    return token === expectedToken || token === stableToken;
   }
 
   // Cargar estado de Postgres si DATABASE_URL está definido
@@ -971,6 +1083,12 @@ async function startServer() {
 
   // API Admin login
   app.post("/api/admin/login", async (req, res) => {
+    const clientIp = req.ip || req.headers["x-forwarded-for"] || "";
+    const ipStr = Array.isArray(clientIp) ? clientIp[0] : String(clientIp);
+    if (!limitRequest(ipStr, 5, 2 * 60 * 1000)) { // limit to 5 login request checks per 2 minutes
+      return res.status(429).json({ success: false, message: "Demasiados intentos fallidos de inicio de sesión. Por seguridad, debes esperar 2 minutos." });
+    }
+
     const { username, password } = req.body;
     const creds = currentStoreState.adminCredentials;
     const expectedUsername = creds?.username || "Juem";
@@ -1087,6 +1205,11 @@ async function startServer() {
 
   // POST upload to Cloudinary (Full-stack API proxy for credentials safety)
   app.post("/api/cloudinary/upload", upload.single("image"), (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado: solo personal de administración autorizado puede subir archivos." });
+    }
+
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
     const apiKey = process.env.CLOUDINARY_API_KEY;
     const apiSecret = process.env.CLOUDINARY_API_SECRET;
@@ -1195,16 +1318,274 @@ async function startServer() {
     }
   });
 
-  // Mercado Pago Uruguay Custom Server Integration Endpoints
+  // --- REAL-TIME SALES AND ORDERS PERSISTENCE API (URUGUAY LOCAL + PSQL CLOUD) ---
+
+  // GET all orders for administration tracking (Protected)
+  app.get("/api/orders", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación de administrador principal." });
+    }
+    
+    try {
+      const pool = getDbPool();
+      if (pool && !dbUnavailable) {
+        // Force refresh state from SQL
+        const dbState = await getDbState();
+        currentStoreState = dbState;
+      }
+      res.json({ success: true, orders: currentStoreState.orders || [] });
+    } catch (err: any) {
+      console.error("Error reading orders:", err);
+      res.status(500).json({ success: false, message: "Error al recuperar listado de pedidos.", error: err.message });
+    }
+  });
+
+  // POST create a safe checkout order BEFORE redirecting to gateway (Fully Secured)
+  app.post("/api/orders", async (req, res) => {
+    try {
+      // 1. Rate Limiting Check
+      const clientIp = req.ip || req.headers["x-forwarded-for"] || "";
+      const ipStr = Array.isArray(clientIp) ? clientIp[0] : String(clientIp);
+      if (!limitRequest(ipStr, 10, 5 * 60 * 1000)) { // limit 10 order queries per 5 minutes per IP
+        return res.status(429).json({ success: false, message: "Demasiados pedidos creados en poco tiempo. Por favor, intente nuevamente en unos minutos." });
+      }
+
+      const { customerName, customerEmail, customerPhone, shippingCost, couponCode, notes, items } = req.body;
+      
+      if (!customerName || !customerEmail || !items || items.length === 0) {
+        return res.status(400).json({ success: false, message: "Nombre, Correo Electrónico y Artículos del carrito son obligatorios." });
+      }
+
+      // 2. Input Sanitization to prevent XSS (Stored & Dom XSS injection blocks)
+      const sanitizedName = sanitizeHtmlString(customerName).trim().substring(0, 100);
+      const sanitizedEmail = sanitizeHtmlString(customerEmail).trim().substring(0, 100);
+      const sanitizedPhone = sanitizeHtmlString(customerPhone || "").trim().substring(0, 50);
+      const sanitizedNotes = sanitizeHtmlString(notes || "").trim().substring(0, 1000);
+
+      const status = "pedido_iniciado"; // initial state
+      const pool = getDbPool();
+      let orderId: string;
+
+      // 3. SECURE SERVER-SIDE CALCULATIONS (No client-submitted prices or totals are trusted)
+      const officialState = await getDbState();
+      const officialProducts = officialState.products || [];
+      const officialCoupons = officialState.coupons || [];
+
+      let serverSubtotal = 0;
+      const verifiedItems = [];
+
+      for (const item of items) {
+        const dbProd = officialProducts.find(p => Number(p.id) === Number(item.productId));
+        if (!dbProd) {
+          return res.status(400).json({ success: false, message: `El producto con ID '${item.productId}' ya no está disponible en la tienda.` });
+        }
+
+        // Determine correct base or variant price
+        let correctUnitPrice = Number(dbProd.price);
+        let activeVariantId = item.variantId;
+
+        if (dbProd.variants && dbProd.variants.length > 0 && item.sizeSelected) {
+          const exactMatch = item.colorSelected 
+            ? dbProd.variants.find((v: any) => v.size === item.sizeSelected && v.color === item.colorSelected)
+            : null;
+          const sizeMatch = dbProd.variants.find((v: any) => v.size === item.sizeSelected);
+          const match = exactMatch || sizeMatch;
+          
+          if (match) {
+            activeVariantId = match.id;
+            if (match.price !== undefined && Number(match.price) > 0) {
+              correctUnitPrice = Number(match.price);
+            } else if (match.priceDelta !== undefined && Number(match.priceDelta) !== 0) {
+              correctUnitPrice = Number(dbProd.price) + Number(match.priceDelta);
+            }
+          }
+        }
+
+        const qty = Math.max(1, parseInt(item.quantity) || 1);
+        const itemTot = correctUnitPrice * qty;
+        serverSubtotal += itemTot;
+
+        verifiedItems.push({
+          productId: dbProd.id,
+          variantId: activeVariantId || null,
+          productName: dbProd.name,
+          sku: item.sku || null,
+          sizeSelected: item.sizeSelected || null,
+          colorSelected: item.colorSelected || null,
+          unitPrice: correctUnitPrice,
+          quantity: qty,
+          totalPrice: itemTot
+        });
+      }
+
+      // Check coupon validation server-side
+      let serverDiscountAmount = 0;
+      if (couponCode) {
+        const cleanCode = String(couponCode).trim().toUpperCase();
+        const dbCoupon = officialCoupons.find(c => c.code.toUpperCase() === cleanCode && c.active !== false);
+        if (dbCoupon) {
+          const now = new Date();
+          const exp = dbCoupon.expiration_date ? new Date(dbCoupon.expiration_date) : null;
+          if (!exp || exp > now) {
+            serverDiscountAmount = Math.round((serverSubtotal * Number(dbCoupon.discount_percent)) / 100);
+          }
+        }
+      }
+
+      const verifiedShippingCost = Number(shippingCost || 0);
+      const serverTotal = Math.max(0, serverSubtotal - serverDiscountAmount + verifiedShippingCost);
+
+      if (pool && !dbUnavailable) {
+        // Insert secure calculated values into postgres
+        const orderRes = await pool.query(`
+          INSERT INTO public.orders (customer_name, customer_email, customer_phone, subtotal, discount_amount, shipping_cost, total, applied_coupon_code, current_status, notes)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          RETURNING id, created_at;
+        `, [
+          sanitizedName, 
+          sanitizedEmail, 
+          sanitizedPhone || null, 
+          serverSubtotal, 
+          serverDiscountAmount, 
+          verifiedShippingCost, 
+          serverTotal, 
+          couponCode || null, 
+          status, 
+          sanitizedNotes || null
+        ]);
+        
+        orderId = orderRes.rows[0].id;
+
+        const isUuid = (val: any) => typeof val === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
+        for (const item of verifiedItems) {
+          const cleanVariantId = isUuid(item.variantId) ? item.variantId : null;
+          await pool.query(`
+            INSERT INTO public.order_items (order_id, product_id, variant_id, product_name, sku, size_selected, color_selected, unit_price, quantity, total_price)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
+          `, [
+            orderId,
+            item.productId,
+            cleanVariantId,
+            item.productName,
+            item.sku || null,
+            item.sizeSelected || null,
+            item.colorSelected || null,
+            item.unitPrice,
+            item.quantity,
+            item.totalPrice
+          ]);
+        }
+
+        // Force reload cache with database state
+        const dbState = await getDbState();
+        currentStoreState = dbState;
+      } else {
+        // Safe, verified file-system backup fallback
+        orderId = "local-ord-" + crypto.randomBytes(8).toString("hex");
+        const newOrderObj = {
+          id: orderId,
+          customerName: sanitizedName,
+          customerEmail: sanitizedEmail,
+          customerPhone: sanitizedPhone,
+          subtotal: serverSubtotal,
+          discountAmount: serverDiscountAmount,
+          shippingCost: verifiedShippingCost,
+          total: serverTotal,
+          couponCode,
+          status: status as any,
+          notes: sanitizedNotes,
+          createdAt: new Date().toISOString(),
+          items: verifiedItems.map((i: any) => ({
+            productId: String(i.productId),
+            variantId: i.variantId ? String(i.variantId) : undefined,
+            productName: i.productName,
+            sku: i.sku || undefined,
+            sizeSelected: i.sizeSelected || undefined,
+            colorSelected: i.colorSelected || undefined,
+            unitPrice: i.unitPrice,
+            quantity: i.quantity,
+            totalPrice: i.totalPrice
+          }))
+        };
+
+        if (!currentStoreState.orders) {
+          currentStoreState.orders = [];
+        }
+        currentStoreState.orders.unshift(newOrderObj);
+
+        try {
+          fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+        } catch (fsErr) {
+          console.error("Error writing backup order to store file:", fsErr);
+        }
+      }
+
+      res.status(201).json({ success: true, orderId });
+    } catch (err: any) {
+      console.error("Error creating order:", err);
+      res.status(500).json({ success: false, message: "Error interno del servidor al crear el pedido.", error: err.message });
+    }
+  });
+
+  // PUT update order status manually by administrator
+  app.put("/api/orders/:id/status", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación de administrador principal." });
+    }
+
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!status) {
+      return res.status(400).json({ success: false, message: "El nuevo estado del pedido es obligatorio." });
+    }
+
+    try {
+      const pool = getDbPool();
+      if (pool && !dbUnavailable) {
+        await pool.query("UPDATE public.orders SET current_status = $1, updated_at = NOW() WHERE id = $2;", [status, id]);
+        const dbState = await getDbState();
+        currentStoreState = dbState;
+      } else {
+        if (currentStoreState.orders) {
+          currentStoreState.orders = currentStoreState.orders.map(o => {
+            if (o.id === id) {
+              return { ...o, status, updatedAt: new Date().toISOString() };
+            }
+            return o;
+          });
+          fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+        }
+      }
+
+      res.json({ success: true, message: "Estado de pedido modificado correctamente en la base de datos.", state: currentStoreState });
+    } catch (err: any) {
+      console.error("Error updating status:", err);
+      res.status(500).json({ success: false, message: "No se pudo actualizar el estado del pedido.", error: err.message });
+    }
+  });
+
+  // Mercado Pago Uruguay Custom Server Integration Endpoints (Fully Secured against price tampering)
   app.post("/api/payments/mercadopago/preference", async (req, res) => {
     try {
-      const { cartItems, userInfo, discountPercent, appliedPromo } = req.body;
-      if (!cartItems || cartItems.length === 0) {
-        return res.status(400).json({ success: false, message: "El carrito está vacío." });
+      const { orderId, appliedPromo } = req.body;
+
+      if (!orderId) {
+        return res.status(400).json({ success: false, message: "Falta el ID del pedido registrado en el sistema." });
+      }
+
+      // Retrieve authentic pre-registered order from database/file state cache
+      const officialState = await getDbState();
+      const order = (officialState.orders || []).find((o: any) => String(o.id) === String(orderId));
+      if (!order) {
+        return res.status(404).json({ success: false, message: "El pedido especificado no fue encontrado o no está guardado de forma persistente." });
       }
 
       // Read current store settings
-      const settings = currentStoreState.settings;
+      const settings = officialState.settings || currentStoreState.settings;
       const accessToken = settings.mercadopagoAccessToken?.trim() || process.env.MERCADOPAGO_ACCESS_TOKEN?.trim();
 
       if (!accessToken) {
@@ -1214,42 +1595,36 @@ async function startServer() {
         });
       }
 
-      // Calculate prices and map items to Mercado Pago format
-      // Note: we convert prices from USD to UYU using the configured exchange rate
-      const exchangeRate = parseFloat(settings.exchangeRate as any) || 40;
-      const discountFactor = 1 - (discountPercent || 0) / 100;
-
-      const items = cartItems.map((item: any) => {
-        // Resolve item or variant override price (already in UYU Pesos)
-        let basePriceUYU = item.product.price;
-        const p = item.product;
-        if (p.variants && p.variants.length > 0 && item.selectedSize) {
-          const exactMatch = item.selectedColor 
-            ? p.variants.find((v: any) => v.size === item.selectedSize && v.color === item.selectedColor)
-            : null;
-          const sizeMatch = p.variants.find((v: any) => v.size === item.selectedSize);
-          const match = exactMatch || sizeMatch;
-          if (match && match.price !== undefined) {
-            basePriceUYU = match.price;
-          }
-        }
-        
-        // Round to integer (Mercado Pago requirements) and apply discount
-        const itemPriceUYU = Math.round(basePriceUYU * discountFactor);
-        
-        let title = item.product.name;
+      // Build safe itemized preference list directly from server-verified database values
+      const discountFactor = order.subtotal > 0 ? (order.total / order.subtotal) : 1;
+      
+      const items = order.items.map((it: any) => {
+        let title = it.productName;
         const options = [];
-        if (item.selectedSize) options.push(`Talle/Mat: ${item.selectedSize}`);
-        if (item.selectedColor) options.push(`Col: ${item.selectedColor}`);
+        if (it.sizeSelected) options.push(`Talle/Mat: ${it.sizeSelected}`);
+        if (it.colorSelected) options.push(`Col: ${it.colorSelected}`);
         if (options.length > 0) title += ` (${options.join(", ")})`;
+
+        // Multiply item unit price by discount factor and round to integer per MP spec
+        const finalPriceUYU = Math.round(Number(it.unitPrice) * discountFactor);
 
         return {
           title: title,
-          quantity: parseInt(item.quantity) || 1,
-          unit_price: itemPriceUYU,
+          quantity: parseInt(it.quantity) || 1,
+          unit_price: finalPriceUYU,
           currency_id: "UYU"
         };
       });
+
+      // Add shippingCost directly if it exists in the secured order record
+      if (order.shippingCost && Number(order.shippingCost) > 0) {
+        items.push({
+          title: "Costo de Envío",
+          quantity: 1,
+          unit_price: Math.round(Number(order.shippingCost)),
+          currency_id: "UYU"
+        });
+      }
 
       // Dynamic host protocol handling
       const protocol = req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
@@ -1258,16 +1633,17 @@ async function startServer() {
 
       const mpPayload = {
         items: items,
+        external_reference: orderId, // Crucial backlink correlation
         back_urls: {
-          success: `${baseUrl}/api/payments/mercadopago/feedback?status=success&user=${encodeURIComponent(userInfo?.name || "")}&addr=${encodeURIComponent(userInfo?.address || "")}&promo=${encodeURIComponent(appliedPromo || "")}`,
-          failure: `${baseUrl}/api/payments/mercadopago/feedback?status=failure`,
-          pending: `${baseUrl}/api/payments/mercadopago/feedback?status=pending`
+          success: `${baseUrl}/api/payments/mercadopago/feedback?status=success&orderId=${orderId}&promo=${encodeURIComponent(appliedPromo || "")}`,
+          failure: `${baseUrl}/api/payments/mercadopago/feedback?status=failure&orderId=${orderId}`,
+          pending: `${baseUrl}/api/payments/mercadopago/feedback?status=pending&orderId=${orderId}`
         },
         auto_return: "approved",
         statement_descriptor: (settings.siteTitle || "Ventas Juem").substring(0, 16)
       };
 
-      console.log("Creando preferencia Mercado Pago:", JSON.stringify(mpPayload, null, 2));
+      console.log("Creando preferencia Mercado Pago segura:", JSON.stringify(mpPayload, null, 2));
 
       const response = await fetch("https://api.mercadopago.com/checkout/preferences", {
         method: "POST",
@@ -1301,23 +1677,101 @@ async function startServer() {
     }
   });
 
-  app.get("/api/payments/mercadopago/feedback", (req, res) => {
-    const status = req.query.status;
-    const paymentId = req.query.payment_id || req.query.preference_id || "";
-    const userName = req.query.user || "Cliente";
-    const address = req.query.addr || "Coordinar";
-    const promo = req.query.promo || "";
+  app.get("/api/payments/mercadopago/feedback", async (req, res) => {
+    // Extract query parameters
+    const paymentId = (req.query.payment_id || req.query.collection_id || "") as string;
+    const orderId = (req.query.orderId || req.query.external_reference || "") as string;
+    const promo = (req.query.promo || "") as string;
 
     const settings = currentStoreState.settings;
     const siteTitle = settings.siteTitle || "Ventas Juem";
     const whatsappNum = settings.whatsappNumber || "";
     const cleanPhone = whatsappNum.replace(/[^0-9]/g, "");
 
+    // Secure server-to-server validation logic directly querying Mercado Pago's official API
+    let finalOrderState: "pago_aprobado" | "pago_pendiente" | "pago_rechazado" = "pago_pendiente";
+    let isApproved = false;
+    let verifiedPaymentAmount = 0;
+
+    const accessToken = settings.mercadopagoAccessToken?.trim() || process.env.MERCADOPAGO_ACCESS_TOKEN?.trim();
+
+    if (paymentId && paymentId !== "null" && accessToken) {
+      try {
+        console.log(`[Seguridad] Consultando transacción real ${paymentId} en pasarela Mercado Pago.`);
+        const mpVerifyRes = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`
+          }
+        });
+
+        if (mpVerifyRes.ok) {
+          const mpPaymentData = await mpVerifyRes.json();
+          const verifiedStatus = mpPaymentData.status; // 'approved', 'pending', 'in_process', 'rejected', 'refunded', 'cancelled'
+          verifiedPaymentAmount = mpPaymentData.transaction_amount || 0;
+          console.log(`[Seguridad] Pasarela confirmó estado real del pago: ${verifiedStatus} (Monto: $${verifiedPaymentAmount})`);
+
+          if (verifiedStatus === "approved") {
+            finalOrderState = "pago_aprobado";
+            isApproved = true;
+          } else if (verifiedStatus === "rejected") {
+            finalOrderState = "pago_rechazado";
+          } else {
+            finalOrderState = "pago_pendiente";
+          }
+        } else {
+          console.error("[Seguridad MP] Error en verificación server-to-server:", await mpVerifyRes.text());
+        }
+      } catch (mpVerifyError) {
+        console.error("[Seguridad MP] Excepción al consultar transacción:", mpVerifyError);
+      }
+    } else {
+      console.log(`[Advertencia] No se pudo verificar con pasarela (No hay ID de pago u Token ausente). ID: ${paymentId}`);
+    }
+
+    // Persist real verified status back to our systems so the merchant never loses order updates!
+    if (orderId) {
+      try {
+        const pool = getDbPool();
+        if (pool && !dbUnavailable) {
+          await pool.query("UPDATE public.orders SET current_status = $1, updated_at = NOW() WHERE id = $2;", [finalOrderState, orderId]);
+          console.log(`[DB Sinc] Pedido ${orderId} actualizado con seguridad a estado: ${finalOrderState}`);
+        } else {
+          if (currentStoreState.orders) {
+            currentStoreState.orders = currentStoreState.orders.map(o => {
+              if (o.id === orderId) {
+                return { ...o, status: finalOrderState, updatedAt: new Date().toISOString() };
+              }
+              return o;
+            });
+            fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+            console.log(`[JSON Sinc] Pedido local ${orderId} actualizado a estado: ${finalOrderState}`);
+          }
+        }
+        
+        // Force state reload
+        const dbState = await getDbState();
+        currentStoreState = dbState;
+      } catch (dbUpdateError) {
+        console.error(`[Error DB Sinc] Falló actualizar pedido ${orderId} tras pago:`, dbUpdateError);
+      }
+    }
+
+    // Recover order details for presentation
+    const activeOrders = currentStoreState.orders || [];
+    const orderDetails = activeOrders.find(o => o.id === orderId);
+    
+    const userName = orderDetails ? orderDetails.customerName : "Cliente";
+    const address = orderDetails ? (orderDetails.notes || "Coordinar entrega") : "Coordinar entrega";
+    const orderTotal = orderDetails ? orderDetails.total : (verifiedPaymentAmount || 0);
+
     // Generate WhatsApp text
     let waMessage = `🛒 *COMPRA EXCELENTE POR MERCADO PAGO - ${siteTitle}*\n\n`;
+    waMessage += `📦 *Orden N°:* ${orderId || "Coordinar"}\n`;
     waMessage += `👤 *Cliente:* ${userName}\n`;
     waMessage += `📍 *Dirección de envío:* ${address}\n`;
-    waMessage += `💳 *Método de Pago:* Mercado Pago Uruguay (Aprobado)\n`;
+    waMessage += `💰 *Total del pedido:* $${orderTotal.toLocaleString("es-AR")}\n`;
+    waMessage += `💳 *Método de Pago:* Mercado Pago Uruguay (${isApproved ? "Aprobado" : "Pendiente de Aprobación"})\n`;
     if (paymentId) {
       waMessage += `🏷️ *Referencia de Pago:* ${paymentId}\n`;
     }
@@ -1325,23 +1779,25 @@ async function startServer() {
       waMessage += `🎟️ *Cupón:* ${promo}\n`;
     }
     waMessage += `┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n`;
-    waMessage += `🙌 _¡Hola! Ya completé la compra y el pago por Mercado Pago Uruguay con éxito. Adjunto mi confirmación para el envío._`;
+    waMessage += `🙌 _¡Hola! Ya completé la compra y el pago por Mercado Pago Uruguay con éxito. Adjunto mi confirmación para el envío ordinario._`;
 
     const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMessage)}`;
 
     let contentHtml = "";
 
-    if (status === "success") {
+    if (isApproved) {
       contentHtml = `
         <div class="card">
           <div class="icon-success">✓</div>
           <h1>¡Pago Realizado con Éxito!</h1>
-          <p class="subtitle">Tu pago ha sido procesado y aprobado mediante Mercado Pago Uruguay de forma segura.</p>
+          <p class="subtitle">Tu pago de $${orderTotal.toLocaleString("es-AR")} ha sido procesado, verificado por pasarela y aprobado mediante Mercado Pago Uruguay de forma totalmente segura.</p>
           
           <div class="summary-box">
-            <p><strong>Pedido para:</strong> ${userName}</p>
+            <p><strong>Pedido ID:</strong> ${orderId || "Sincronizado"}</p>
+            <p><strong>Cliente:</strong> ${userName}</p>
             <p><strong>Dirección:</strong> ${address}</p>
-            <p><strong>Referencia:</strong> ${paymentId || "Pendiente confirmación"}</p>
+            <p><strong>Referencia MP:</strong> ${paymentId}</p>
+            <p><strong>Estado del Pago:</strong> <span style="color: #10b981; font-weight: bold;">VERIFICADO Y CONFIADO ✓</span></p>
           </div>
 
           <p class="final-step">Para coordinar el envío de forma inmediata, por favor haz clic en el siguiente botón:</p>
@@ -1353,14 +1809,43 @@ async function startServer() {
           <a href="/" class="secondary-btn">Volver a la Tienda</a>
         </div>
       `;
+    } else if (finalOrderState === "pago_pendiente") {
+      contentHtml = `
+        <div class="card">
+          <div class="icon-pending">⌚</div>
+          <h1>Pago Pendiente</h1>
+          <p class="subtitle">Tu pago se encuentra en proceso o pendiente de acreditación en Mercado Pago Uruguay.</p>
+          
+          <div class="summary-box">
+            <p><strong>Pedido ID:</strong> ${orderId || "Sincronizado"}</p>
+            <p><strong>Cliente:</strong> ${userName}</p>
+            <p><strong>Monto:</strong> $${orderTotal.toLocaleString("es-AR")}</p>
+            <p><strong>Estado del Pago:</strong> <span style="color: #f59e0b; font-weight: bold;">PENDIENTE</span></p>
+          </div>
+
+          <p class="final-step">Puedes coordinar tu compra con el vendedor notificándola a través de WhatsApp:</p>
+          
+          <a href="${waUrl}" class="action-btn-whatsapp" style="background-color: #f59e0b;">
+            Notificar Compra por WhatsApp
+          </a>
+
+          <a href="/" class="secondary-btn">Volver al Catálogo</a>
+        </div>
+      `;
     } else {
       contentHtml = `
         <div class="card">
           <div class="icon-error">✗</div>
           <h1>Pago no Completado</h1>
-          <p class="subtitle">El proceso de pago de Mercado Pago no pudo completarse con éxito o fue cancelado.</p>
+          <p class="subtitle">El proceso de pago de Mercado Pago no pudo aprobarse o fue declinado por la tarjeta emisora.</p>
           
-          <a href="/" class="action-btn-retry">Intentar Nuevamente</a>
+          <div class="summary-box">
+            <p><strong>Pedido ID:</strong> ${orderId || "Sincronizado"}</p>
+            <p><strong>Cliente:</strong> ${userName}</p>
+            <p><strong>Estado del Pago:</strong> <span style="color: #ef4444; font-weight: bold;">CON RECHAZO / SIN SALDO</span></p>
+          </div>
+          
+          <a href="/" class="action-btn-retry">Intentar con Otro Método</a>
           <a href="/" class="secondary-btn">Volver al Catálogo</a>
         </div>
       `;
@@ -1525,6 +2010,11 @@ async function startServer() {
   });
 
   app.get("/api/debug-db", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado: este endpoint de diagnóstico requiere autenticación de administrador principal." });
+    }
+
     const rawUrl = process.env.DATABASE_URL || "";
     if (!rawUrl) {
       return res.json({

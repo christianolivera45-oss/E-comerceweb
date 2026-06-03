@@ -154,13 +154,152 @@ export default function Checkout({
   onBackToCatalog,
   coupons
 }: CheckoutProps) {
-  // Client details states (Defaults as requested)
-  const [firstName, setFirstName] = useState(settings.defaultFirstName || "Christian");
-  const [lastName, setLastName] = useState(settings.defaultLastName || "Olivera");
-  const [phone, setPhone] = useState(settings.defaultPhone || "095085181");
+  // Client details states (Clean/empty on start as requested)
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [phone, setPhone] = useState("");
   const [wantsInvoice, setWantsInvoice] = useState(false);
   const [rutNumber, setRutNumber] = useState("");
   const [companyName, setCompanyName] = useState("");
+  const [fiscalAddress, setFiscalAddress] = useState("");
+
+  // Validation States for real-time error handling
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
+
+  // Uruguayan RUT Checksum Validation (Module 11)
+  const validateRUTUruguay = (rut: string): boolean => {
+    const cleanRut = rut.replace(/\D/g, "");
+    if (cleanRut.length !== 12) return false;
+    
+    // First two digits represent department code 01-21 in Uruguay
+    const dptoCode = parseInt(cleanRut.substring(0, 2), 10);
+    if (dptoCode < 1 || dptoCode > 21) return false;
+    
+    // Verify branch suffix is valid (usually non-zero)
+    const branch = parseInt(cleanRut.substring(8, 11), 10);
+    if (branch < 1) return false;
+    
+    // Checksum Weights: 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2
+    const weights = [4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    let sum = 0;
+    for (let i = 0; i < 11; i++) {
+      sum += parseInt(cleanRut.charAt(i), 10) * weights[i];
+    }
+    const mod = sum % 11;
+    const digitoVerificadorCalculado = mod === 0 ? 0 : 11 - mod;
+    const digitoVerificadorReal = parseInt(cleanRut.charAt(11), 10);
+    
+    if (digitoVerificadorCalculado === 10) {
+      return false;
+    }
+    return digitoVerificadorCalculado === digitoVerificadorReal;
+  };
+
+  const validateField = (fieldName: string, value: string, currentWantsInvoice?: boolean): string => {
+    const activeWantsInvoice = currentWantsInvoice !== undefined ? currentWantsInvoice : wantsInvoice;
+    const sanitize = (val: string) => {
+      return val.replace(/<[^>]*>/g, "").trim();
+    };
+
+    switch (fieldName) {
+      case "firstName": {
+        const clean = sanitize(value);
+        if (!clean) return "El nombre es obligatorio.";
+        if (clean.length < 2) return "El nombre debe tener un mínimo de 2 caracteres.";
+        const lettersOnly = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s\-\'\.]+(\s[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s\-\'\.]+)*$/;
+        if (!lettersOnly.test(clean)) {
+          return "El nombre sólo debe contener letras, espacios y caracteres acentuados.";
+        }
+        return "";
+      }
+      case "lastName": {
+        const clean = sanitize(value);
+        if (!clean) return "El apellido es obligatorio.";
+        if (clean.length < 2) return "El apellido debe tener un mínimo de 2 caracteres.";
+        const lettersOnly = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s\-\'\.]+(\s[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s\-\'\.]+)*$/;
+        if (!lettersOnly.test(clean)) {
+          return "El apellido sólo debe contener letras, espacios y caracteres acentuados.";
+        }
+        return "";
+      }
+      case "phone": {
+        const cleanVal = value.trim();
+        if (!cleanVal) return "El teléfono de contacto es obligatorio.";
+        
+        // Solo permitir números, espacios, guiones y el prefijo +
+        const allowedChars = /^[0-9\s\-+]+$/;
+        if (!allowedChars.test(cleanVal)) {
+          return "Solo se permiten números, espacios, guiones y el prefijo +.";
+        }
+
+        const digitsOnly = cleanVal.replace(/\D/g, "");
+        if (digitsOnly.length < 8) return "El teléfono debe tener un mínimo de 8 dígitos.";
+
+        // Validar formato de teléfono uruguayo
+        let isUruguayFormat = false;
+        if (digitsOnly.startsWith("598")) {
+          const rest = digitsOnly.slice(3);
+          if (/^(0?9|2|4)/.test(rest) && rest.length >= 7) {
+            isUruguayFormat = true;
+          }
+        } else {
+          if (/^(0?9|2|4)/.test(digitsOnly)) {
+            isUruguayFormat = true;
+          }
+        }
+
+        if (!isUruguayFormat) {
+          return "El formato debe ser un teléfono uruguayo válido (ej: 099123456 o 24001234).";
+        }
+        return "";
+      }
+      case "rutNumber": {
+        if (!activeWantsInvoice) return "";
+        const cleanVal = value.replace(/\D/g, "");
+        if (!value.trim()) return "El RUT es obligatorio.";
+        if (cleanVal.length !== 12) return "El RUT debe tener exactamente 12 dígitos.";
+
+        const isValidRut = validateRUTUruguay(cleanVal);
+        if (!isValidRut) {
+          return "El RUT ingresado no es válido para Uruguay (dígito verificador incorrecto).";
+        }
+        return "";
+      }
+      case "companyName": {
+        if (!activeWantsInvoice) return "";
+        const clean = sanitize(value);
+        if (!clean) return "La Razón Social es obligatoria.";
+        if (clean.length < 2) return "La Razón Social debe tener un mínimo de 2 caracteres.";
+        return "";
+      }
+      case "fiscalAddress": {
+        if (!activeWantsInvoice) return "";
+        const clean = sanitize(value);
+        if (!clean) return "La Dirección Fiscal es obligatoria.";
+        if (clean.length < 3) return "La Dirección Fiscal debe tener un mínimo de 3 caracteres.";
+        return "";
+      }
+      default:
+        return "";
+    }
+  };
+
+  const handleFieldChange = (name: string, val: string) => {
+    // Basic tag-cleaning sanitization
+    const sanitizedVal = val.replace(/<[^>]*>/g, "");
+    
+    if (name === "firstName") setFirstName(sanitizedVal);
+    else if (name === "lastName") setLastName(sanitizedVal);
+    else if (name === "phone") setPhone(sanitizedVal);
+    else if (name === "rutNumber") setRutNumber(sanitizedVal);
+    else if (name === "companyName") setCompanyName(sanitizedVal);
+    else if (name === "fiscalAddress") setFiscalAddress(sanitizedVal);
+
+    setTouchedFields(prev => ({ ...prev, [name]: true }));
+    const err = validateField(name, sanitizedVal);
+    setValidationErrors(prev => ({ ...prev, [name]: err }));
+  };
 
   const hasPickup = settings.pickupActive !== false;
   const hasDelivery = settings.deliveryActive !== false;
@@ -172,13 +311,13 @@ export default function Checkout({
   
   // Structured physical address states for Uruguay
   const [dept, setDept] = useState("Montevideo");
-  const [city, setCity] = useState("Montevideo");
-  const [street, setStreet] = useState("Luis Batlle Berres");
-  const [doorNumber, setDoorNumber] = useState("4282");
+  const [city, setCity] = useState("");
+  const [street, setStreet] = useState("");
+  const [doorNumber, setDoorNumber] = useState("");
   const [apartment, setApartment] = useState("");
   const [solar, setSolar] = useState("");
   const [manzana, setManzana] = useState("");
-  const [neighborhood, setNeighborhood] = useState("Paso de la Arena");
+  const [neighborhood, setNeighborhood] = useState("");
   const [deliveryPreference, setDeliveryPreference] = useState<"home" | "agency">("home");
   const [shippingNotes, setShippingNotes] = useState("");
 
@@ -232,18 +371,9 @@ export default function Checkout({
     }
   }, [settings.deliveryMethods, selectedDeliveryMethod]);
 
-  // Stored Addresses (defaults from screenshot 2)
-  const [addresses, setAddresses] = useState<AddressItem[]>([
-    {
-      id: "address-1",
-      dept: "Montevideo",
-      zone: "Paso de la Arena",
-      street: "Luis Batlle Berres",
-      doorNumber: "4282",
-      apartment: ""
-    }
-  ]);
-  const [selectedAddressId, setSelectedAddressId] = useState<string>("address-1");
+  // Stored Addresses (empty by default as requested by the user)
+  const [addresses, setAddresses] = useState<AddressItem[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string>("");
 
   // Address Modal editing state
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
@@ -376,16 +506,49 @@ export default function Checkout({
   const validateDetails = (): boolean => {
     setErrorMessage("");
 
-    if (!firstName.trim() || !lastName.trim()) {
-      setErrorMessage("Por favor ingresa tu Nombre y Apellido.");
-      return false;
+    const activeFields = ["firstName", "lastName", "phone"];
+    if (wantsInvoice) {
+      activeFields.push("rutNumber", "companyName", "fiscalAddress");
     }
-    if (!phone.trim()) {
-      setErrorMessage("Por favor ingresa tu número de Teléfono.");
+
+    const currentErrors: Record<string, string> = {};
+    const newTouched: Record<string, boolean> = {};
+    let hasValidationError = false;
+
+    activeFields.forEach((field) => {
+      newTouched[field] = true;
+      let val = "";
+      if (field === "firstName") val = firstName;
+      else if (field === "lastName") val = lastName;
+      else if (field === "phone") val = phone;
+      else if (field === "rutNumber") val = rutNumber;
+      else if (field === "companyName") val = companyName;
+      else if (field === "fiscalAddress") val = fiscalAddress;
+
+      const err = validateField(field, val);
+      if (err) {
+        currentErrors[field] = err;
+        hasValidationError = true;
+      } else {
+        currentErrors[field] = "";
+      }
+    });
+
+    setTouchedFields(prev => ({ ...prev, ...newTouched }));
+    setValidationErrors(prev => ({ ...prev, ...currentErrors }));
+
+    if (hasValidationError) {
+      setErrorMessage("Por favor corrige los campos inválidos marcados en rojo en el formulario.");
       return false;
     }
 
     if (shippingType === "delivery") {
+      const activeAddress = addresses.find((a) => a.id === selectedAddressId);
+      if (!activeAddress) {
+        setErrorMessage("Por favor agrega y selecciona una dirección de envío obligatoria.");
+        return false;
+      }
+
       if (!selectedDeliveryMethod) {
         setErrorMessage("Por favor selecciona una forma de envío a domicilio.");
         return false;
@@ -449,6 +612,12 @@ export default function Checkout({
     let deliveryCarrierInfo = "";
 
     if (shippingType === "delivery") {
+      const activeAddress = addresses.find((a) => a.id === selectedAddressId);
+      if (!activeAddress) {
+        setErrorMessage("Por favor agrega y selecciona una dirección de envío obligatoria.");
+        return;
+      }
+
       if (!selectedDeliveryMethod) {
         setErrorMessage("Por favor selecciona una forma de envío a domicilio.");
         return;
@@ -531,7 +700,7 @@ export default function Checkout({
     const compiledUserInformation = {
       name: `${firstName.trim()} ${lastName.trim()}`,
       phone: phone.trim(),
-      rut: wantsInvoice ? `RUT: ${rutNumber.trim()} (${companyName.trim()})` : "Consumidor Final (No RUT)",
+      rut: wantsInvoice ? `RUT: ${rutNumber.trim()} (${companyName.trim()}) - Dir. Fiscal: ${fiscalAddress.trim()}` : "Consumidor Final (No RUT)",
       address: finalShippingAddress,
       shippingType: shippingType === "pickup" ? "Retiro en Local" : `Envío a Domicilio (${deliveryCarrierInfo})`
     };
@@ -539,6 +708,66 @@ export default function Checkout({
     if (paymentMethod === "mercadopago") {
       setIsProcessing(true);
       try {
+        // Map individual product options to order item interfaces
+        const mappedOrderItems = cartItems.map((item) => {
+          let basePrice = item.product.price;
+          const p = item.product;
+          let matchedVariantId: string | undefined = undefined;
+          if (p.variants && p.variants.length > 0 && item.selectedSize) {
+            const exactMatch = item.selectedColor 
+              ? p.variants.find((v: any) => v.size === item.selectedSize && v.color === item.selectedColor)
+              : null;
+            const sizeMatch = p.variants.find((v: any) => v.size === item.selectedSize);
+            const match = exactMatch || sizeMatch;
+            if (match) {
+              if (match.price !== undefined) {
+                basePrice = match.price;
+              }
+              matchedVariantId = match.id;
+            }
+          }
+          return {
+            productId: item.product.id,
+            variantId: matchedVariantId,
+            productName: item.product.name,
+            sku: item.product.variants?.[0]?.sku || undefined,
+            sizeSelected: item.selectedSize || undefined,
+            colorSelected: item.selectedColor || undefined,
+            unitPrice: basePrice,
+            quantity: item.quantity,
+            totalPrice: basePrice * item.quantity
+          };
+        });
+
+        // 1. Pre-register order in database to ensure we do not lose sales leads
+        const orderRegResponse = await fetch("/api/orders", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            customerName: compiledUserInformation.name,
+            customerEmail: "cliente@tienda.com",
+            customerPhone: compiledUserInformation.phone,
+            subtotal: subtotalUYU,
+            discountAmount: discountAmountUYU,
+            shippingCost: 0,
+            total: totalUYU,
+            couponCode: appliedDiscount > 0 ? promoCode.toUpperCase() : undefined,
+            notes: `${shippingType === "pickup" ? "Retiro en Local de la Empresa" : "Envío a Domicilio: " + finalShippingAddress} | ${compiledUserInformation.rut}`,
+            items: mappedOrderItems
+          })
+        });
+
+        if (!orderRegResponse.ok) {
+          const errData = await orderRegResponse.json();
+          throw new Error(errData.message || "Error al pre-registrar tu orden en la base de datos.");
+        }
+
+        const registeredOrder = await orderRegResponse.json();
+        const serverOrderId = registeredOrder.orderId;
+
+        // 2. Generate checkout preference linking it to our brand new Order ID
         const response = await fetch("/api/payments/mercadopago/preference", {
           method: "POST",
           headers: {
@@ -551,19 +780,21 @@ export default function Checkout({
               address: `${shippingType === "pickup" ? "Retiro en Empresa" : "Envío a Domicilio: " + finalShippingAddress} | Tel: ${compiledUserInformation.phone} | ${compiledUserInformation.rut}`
             },
             discountPercent: appliedDiscount,
-            appliedPromo: appliedDiscount > 0 ? promoCode.toUpperCase() : ""
+            appliedPromo: appliedDiscount > 0 ? promoCode.toUpperCase() : "",
+            orderId: serverOrderId
           })
         });
 
         const data = await response.json();
         if (response.ok && data.success && data.initPoint) {
+          // Send to official secure payment gateway
           window.location.href = data.initPoint;
         } else {
           setErrorMessage(data.message || "Error al iniciar el pago con Mercado Pago.");
           setIsProcessing(false);
         }
-      } catch (err) {
-        setErrorMessage("Hubo un problema de conexión con el servidor de Mercado Pago.");
+      } catch (err: any) {
+        setErrorMessage(err.message || "Hubo un problema de conexión con el servidor de Mercado Pago.");
         setIsProcessing(false);
       }
     } else {
@@ -709,16 +940,29 @@ export default function Checkout({
                     <input
                       required
                       type="text"
-                      placeholder="Ej: Christian"
+                      placeholder="Ej: Juan"
                       value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
+                      onChange={(e) => handleFieldChange("firstName", e.target.value)}
                       className={`w-full text-xs pl-10 pr-4 py-3 rounded-xl border outline-none transition uppercase font-mono tracking-wide ${
-                        isDark
-                          ? "bg-zinc-950 border-zinc-800 text-white placeholder-zinc-655 focus:border-zinc-700"
-                          : "bg-stone-50 border-gray-300 text-zinc-900 placeholder-zinc-450 focus:border-sky-500 focus:bg-white"
+                        touchedFields["firstName"]
+                          ? validationErrors["firstName"]
+                            ? isDark
+                              ? "border-red-500 bg-red-955/20 text-white focus:border-red-400 focus:bg-zinc-900"
+                              : "border-red-500 bg-red-50/50 text-zinc-900 focus:border-red-600 focus:bg-white"
+                            : isDark
+                              ? "border-green-500 bg-green-955/20 text-white focus:border-green-400 focus:bg-zinc-900"
+                              : "border-green-500 bg-green-50/50 text-zinc-900 focus:border-green-600 focus:bg-white"
+                          : isDark
+                            ? "bg-zinc-950 border-zinc-800 text-white placeholder-zinc-655 focus:border-zinc-700"
+                            : "bg-stone-50 border-gray-300 text-zinc-900 placeholder-zinc-450 focus:border-sky-500 focus:bg-white"
                       }`}
                     />
                   </div>
+                  {touchedFields["firstName"] && validationErrors["firstName"] && (
+                    <p className="text-[11px] text-red-500 font-bold mt-1 px-1 flex items-center gap-1 font-mono">
+                      <span>⚠️</span> {validationErrors["firstName"]}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -730,16 +974,29 @@ export default function Checkout({
                     <input
                       required
                       type="text"
-                      placeholder="Ej: Olivera"
+                      placeholder="Ej: Pérez"
                       value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
+                      onChange={(e) => handleFieldChange("lastName", e.target.value)}
                       className={`w-full text-xs pl-10 pr-4 py-3 rounded-xl border outline-none transition uppercase font-mono tracking-wide ${
-                        isDark
-                          ? "bg-zinc-950 border-zinc-800 text-white placeholder-zinc-655 focus:border-zinc-700"
-                          : "bg-stone-50 border-gray-300 text-zinc-900 placeholder-zinc-450 focus:border-sky-500 focus:bg-white"
+                        touchedFields["lastName"]
+                          ? validationErrors["lastName"]
+                            ? isDark
+                              ? "border-red-500 bg-red-955/20 text-white focus:border-red-400 focus:bg-zinc-900"
+                              : "border-red-500 bg-red-50/50 text-zinc-900 focus:border-red-600 focus:bg-white"
+                            : isDark
+                              ? "border-green-500 bg-green-955/20 text-white focus:border-green-400 focus:bg-zinc-900"
+                              : "border-green-500 bg-green-50/50 text-zinc-900 focus:border-green-600 focus:bg-white"
+                          : isDark
+                            ? "bg-zinc-950 border-zinc-800 text-white placeholder-zinc-655 focus:border-zinc-700"
+                            : "bg-stone-50 border-gray-300 text-zinc-900 placeholder-zinc-450 focus:border-sky-500 focus:bg-white"
                       }`}
                     />
                   </div>
+                  {touchedFields["lastName"] && validationErrors["lastName"] && (
+                    <p className="text-[11px] text-red-500 font-bold mt-1 px-1 flex items-center gap-1 font-mono">
+                      <span>⚠️</span> {validationErrors["lastName"]}
+                    </p>
+                  )}
                 </div>
 
                 <div className="md:col-span-2">
@@ -751,16 +1008,29 @@ export default function Checkout({
                     <input
                       required
                       type="tel"
-                      placeholder="Ej: 095085181"
+                      placeholder="Ej: 099123456"
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
+                      onChange={(e) => handleFieldChange("phone", e.target.value)}
                       className={`w-full text-xs pl-10 pr-4 py-3 rounded-xl border outline-none transition font-mono tracking-widest ${
-                        isDark
-                          ? "bg-zinc-950 border-zinc-800 text-white placeholder-zinc-655 focus:border-zinc-700"
-                          : "bg-stone-50 border-gray-300 text-zinc-900 placeholder-zinc-450 focus:border-sky-500 focus:bg-white"
+                        touchedFields["phone"]
+                          ? validationErrors["phone"]
+                            ? isDark
+                              ? "border-red-500 bg-red-955/20 text-white focus:border-red-400 focus:bg-zinc-900"
+                              : "border-red-500 bg-red-50/50 text-zinc-900 focus:border-red-600 focus:bg-white"
+                            : isDark
+                              ? "border-green-500 bg-green-955/20 text-white focus:border-green-400 focus:bg-zinc-900"
+                              : "border-green-500 bg-green-50/50 text-zinc-900 focus:border-green-600 focus:bg-white"
+                          : isDark
+                            ? "bg-zinc-950 border-zinc-800 text-white placeholder-zinc-655 focus:border-zinc-700"
+                            : "bg-stone-50 border-gray-300 text-zinc-900 placeholder-zinc-450 focus:border-sky-500 focus:bg-white"
                       }`}
                     />
                   </div>
+                  {touchedFields["phone"] && validationErrors["phone"] && (
+                    <p className="text-[11px] text-red-500 font-bold mt-1 px-1 flex items-center gap-1 font-mono">
+                      <span>⚠️</span> {validationErrors["phone"]}
+                    </p>
+                  )}
                 </div>
 
                 {/* RUT Invoice details field */}
@@ -781,18 +1051,44 @@ export default function Checkout({
                         <div className="flex items-center gap-1 bg-zinc-805 p-0.5 rounded-lg border border-zinc-700">
                           <button
                             type="button"
-                            onClick={() => setWantsInvoice(false)}
+                            onClick={() => {
+                              setWantsInvoice(false);
+                              // clear errors for invoice fields since they are not used
+                              setValidationErrors(prev => ({
+                                ...prev,
+                                rutNumber: "",
+                                companyName: "",
+                                fiscalAddress: ""
+                              }));
+                            }}
                             className={`text-[10px] uppercase font-mono px-2.5 py-1 rounded-md transition font-black ${
                               !wantsInvoice 
                                 ? "bg-sky-500 text-white" 
-                                : "text-zinc-400 hover:text-white"
+                                : "text-zinc-440 hover:text-white"
                             }`}
                           >
                             No
                           </button>
                           <button
                             type="button"
-                            onClick={() => setWantsInvoice(true)}
+                            onClick={() => {
+                              setWantsInvoice(true);
+                              // Trigger state evaluation
+                              setTimeout(() => {
+                                setTouchedFields(prev => ({
+                                  ...prev,
+                                  rutNumber: true,
+                                  companyName: true,
+                                  fiscalAddress: true
+                                }));
+                                setValidationErrors(prev => ({
+                                  ...prev,
+                                  rutNumber: validateField("rutNumber", rutNumber, true),
+                                  companyName: validateField("companyName", companyName, true),
+                                  fiscalAddress: validateField("fiscalAddress", fiscalAddress, true)
+                                }));
+                              }, 10);
+                            }}
                             className={`text-[10px] uppercase font-mono px-2.5 py-1 rounded-md transition font-black ${
                               wantsInvoice 
                                 ? "bg-sky-500 text-white" 
@@ -805,34 +1101,87 @@ export default function Checkout({
                       </div>
 
                       {wantsInvoice && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 mt-3 pt-3 border-t border-dashed border-zinc-800">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 mt-3 pt-3 border-t border-dashed border-zinc-800">
                           <div>
-                            <label className="block text-[10px] font-bold uppercase text-zinc-400 mb-1">RUT de Empresa (12 dígitos)</label>
+                            <label className="block text-[10px] font-bold uppercase text-zinc-400 mb-1">RUT de Empresa (12 dígitos) <span className="text-red-500">*</span></label>
                             <input
                               type="text"
                               placeholder="Ej: 219999990011"
                               value={rutNumber}
-                              onChange={(e) => setRutNumber(e.target.value)}
+                              onChange={(e) => handleFieldChange("rutNumber", e.target.value)}
                               className={`w-full text-xs px-3 py-2 rounded-lg border outline-none font-mono ${
-                                isDark 
-                                  ? "bg-zinc-900 border-zinc-850 text-white focus:border-zinc-700" 
-                                  : "bg-white border-gray-300 text-zinc-900"
+                                touchedFields["rutNumber"]
+                                  ? validationErrors["rutNumber"]
+                                    ? isDark
+                                      ? "border-red-500 bg-red-955/20 text-white focus:border-red-400 focus:bg-zinc-900"
+                                      : "border-red-500 bg-red-50/50 text-zinc-900 focus:border-red-610 focus:bg-white"
+                                    : isDark
+                                      ? "border-green-500 bg-green-955/20 text-white focus:border-green-400 focus:bg-zinc-900"
+                                      : "border-green-500 bg-green-50/50 text-zinc-900 focus:border-green-610 focus:bg-white"
+                                  : isDark 
+                                    ? "bg-zinc-900 border-zinc-850 text-white focus:border-zinc-700" 
+                                    : "bg-white border-gray-300 text-zinc-900"
                               }`}
                             />
+                            {touchedFields["rutNumber"] && validationErrors["rutNumber"] && (
+                              <p className="text-[10px] text-red-500 font-bold mt-1 px-1 flex items-center gap-1 font-mono">
+                                <span>⚠️</span> {validationErrors["rutNumber"]}
+                              </p>
+                            )}
                           </div>
                           <div>
-                            <label className="block text-[10px] font-bold uppercase text-zinc-400 mb-1">Razón Social</label>
+                            <label className="block text-[10px] font-bold uppercase text-zinc-400 mb-1">Razón Social <span className="text-red-500">*</span></label>
                             <input
                               type="text"
-                              placeholder="Ej: Mi Empresa S.A."
+                              placeholder="Ej: Pérez Hnos S.A."
                               value={companyName}
-                              onChange={(e) => setCompanyName(e.target.value)}
+                              onChange={(e) => handleFieldChange("companyName", e.target.value)}
                               className={`w-full text-xs px-3 py-2 rounded-lg border outline-none ${
-                                isDark 
-                                  ? "bg-zinc-900 border-zinc-850 text-white focus:border-zinc-700" 
-                                  : "bg-white border-gray-300 text-zinc-900"
+                                touchedFields["companyName"]
+                                  ? validationErrors["companyName"]
+                                    ? isDark
+                                      ? "border-red-500 bg-red-955/20 text-white focus:border-red-400 focus:bg-zinc-900"
+                                      : "border-red-500 bg-red-50/50 text-zinc-900 focus:border-red-610 focus:bg-white"
+                                    : isDark
+                                      ? "border-green-500 bg-green-955/20 text-white focus:border-green-400 focus:bg-zinc-900"
+                                      : "border-green-500 bg-green-50/50 text-zinc-900 focus:border-green-610 focus:bg-white"
+                                  : isDark 
+                                    ? "bg-zinc-900 border-zinc-850 text-white focus:border-zinc-700" 
+                                    : "bg-white border-gray-300 text-zinc-900"
                               }`}
                             />
+                            {touchedFields["companyName"] && validationErrors["companyName"] && (
+                              <p className="text-[10px] text-red-500 font-bold mt-1 px-1 flex items-center gap-1 font-mono">
+                                <span>⚠️</span> {validationErrors["companyName"]}
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase text-zinc-400 mb-1">Dirección Fiscal <span className="text-red-500">*</span></label>
+                            <input
+                              type="text"
+                              placeholder="Ej: Av. Uruguay 1234, Montevideo"
+                              value={fiscalAddress}
+                              onChange={(e) => handleFieldChange("fiscalAddress", e.target.value)}
+                              className={`w-full text-xs px-3 py-2 rounded-lg border outline-none ${
+                                touchedFields["fiscalAddress"]
+                                  ? validationErrors["fiscalAddress"]
+                                    ? isDark
+                                      ? "border-red-500 bg-red-955/20 text-white focus:border-red-400 focus:bg-zinc-900"
+                                      : "border-red-500 bg-red-50/50 text-zinc-900 focus:border-red-610 focus:bg-white"
+                                    : isDark
+                                      ? "border-green-500 bg-green-955/20 text-white focus:border-green-400 focus:bg-zinc-900"
+                                      : "border-green-500 bg-green-50/50 text-zinc-900 focus:border-green-610 focus:bg-white"
+                                  : isDark 
+                                    ? "bg-zinc-900 border-zinc-850 text-white focus:border-zinc-700" 
+                                    : "bg-white border-gray-300 text-zinc-900"
+                              }`}
+                            />
+                            {touchedFields["fiscalAddress"] && validationErrors["fiscalAddress"] && (
+                              <p className="text-[10px] text-red-500 font-bold mt-1 px-1 flex items-center gap-1 font-mono">
+                                <span>⚠️</span> {validationErrors["fiscalAddress"]}
+                              </p>
+                            )}
                           </div>
                         </div>
                       )}
@@ -1548,6 +1897,12 @@ export default function Checkout({
                 </button>
               )}
               
+              {isProcessing && paymentMethod === "mercadopago" && (
+                <div id="mp-redirect-warning" className="p-3.5 bg-sky-500/10 border border-sky-500/20 text-sky-600 dark:text-sky-450 rounded-xl text-center text-xs font-bold mt-3 animate-pulse">
+                  🔒 Serás redirigido al entorno seguro de Mercado Pago para completar tu compra.
+                </div>
+              )}
+
               <p className="text-center text-[10px] text-zinc-500 font-semibold uppercase tracking-wider mt-3.5 leading-normal">
                 Proceso seguro e inmediato. Toda la información personal y datos bancarios están protegidos.
               </p>

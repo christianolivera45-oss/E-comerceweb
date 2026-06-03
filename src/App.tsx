@@ -82,6 +82,7 @@ import Checkout from "./components/Checkout";
 import HeroSlider from "./components/HeroSlider";
 import SecurityPanel from "./components/SecurityPanel";
 import { DashboardGeneral } from "./components/DashboardGeneral";
+import { DashboardOrders } from "./components/DashboardOrders";
 import WhatsAppWidget from "./components/WhatsAppWidget";
 import ImageGalleryEditor from "./components/ImageGalleryEditor";
 
@@ -626,7 +627,8 @@ export default function App() {
 
   // Search & Navigation
   const [activeTab, setActiveTab] = useState<"storefront" | "admin" | "checkout">("storefront");
-  const [adminSection, setAdminSection] = useState<"general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config">("dashboard");
+  const [adminSection, setAdminSection] = useState<"general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales">("dashboard");
+  const [mobileAdminMenuOpen, setMobileAdminMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [bannerProductSearch, setBannerProductSearch] = useState("");
@@ -667,10 +669,11 @@ export default function App() {
     }
   };
 
-  const navigateAdminSection = (section: "general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config") => {
+  const navigateAdminSection = (section: "general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales") => {
     setAdminSection(section);
     setEditingProduct(null);
     setIsNewProductMode(false);
+    setMobileAdminMenuOpen(false);
     window.history.pushState(null, "", `/admin/${section}`);
   };
 
@@ -992,6 +995,11 @@ export default function App() {
       window.removeEventListener("scroll", handleScroll);
     };
   }, []);
+
+  // Reset scroll to top when changing views/pages for a smooth user experience as requested by the user
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [activeTab, adminSection, selectedProduct?.id, selectedCategory, selectedSubcategory]);
 
   // Dynamic Tab Title and Favicon Synchronization based on admin settings
   useEffect(() => {
@@ -2752,12 +2760,30 @@ export default function App() {
           
           {/* Left sidebar nav following Professional Polish theme instructions */}
           <aside className="w-full md:w-60 bg-zinc-900 text-zinc-100 flex flex-col shrink-0 border-r border-zinc-800">
-            <nav className="p-4 space-y-1">
+            {/* Header de menú móvil visible sólo en pantallas chicas(Celular) */}
+            <div className="flex md:hidden items-center justify-between p-4 bg-zinc-950 border-b border-zinc-800 select-none">
+              <div className="flex items-center gap-2">
+                <span className="text-base">⚙️</span>
+                <span className="text-xs font-black uppercase tracking-widest text-zinc-200">Panel Control</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileAdminMenuOpen(!mobileAdminMenuOpen)}
+                className="p-1.5 focus:outline-none hover:bg-zinc-800 rounded-lg transition-colors text-zinc-350 hover:text-white flex items-center justify-center border border-zinc-800"
+                id="admin-mobile-menu-toggle"
+              >
+                {mobileAdminMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+              </button>
+            </div>
+
+            {/* Contenido colapsable en celular, auto expandido en escritorio */}
+            <div className={`${mobileAdminMenuOpen ? "flex" : "hidden"} md:flex flex-col flex-grow min-h-0`}>
+              <nav className="p-4 space-y-1">
               <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-4 px-3">
                 Gestión Operativa
               </div>
 
-              <button
+               <button
                 onClick={() => navigateAdminSection("dashboard")}
                 className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
                   adminSection === "dashboard"
@@ -2767,6 +2793,25 @@ export default function App() {
               >
                 <TrendingUp className="h-4 w-4" />
                 <span>Dashboard de Negocio 📊</span>
+              </button>
+
+              <button
+                onClick={() => navigateAdminSection("sales")}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
+                  adminSection === "sales"
+                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
+                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <CartIcon className="h-4 w-4" />
+                  <span>Ventas y Pedidos 🧾</span>
+                </div>
+                {store.orders && store.orders.filter(o => o.status === "pedido_iniciado" || o.status === "pago_pendiente").length > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-sky-500 text-white animate-pulse">
+                    {store.orders.filter(o => o.status === "pedido_iniciado" || o.status === "pago_pendiente").length}
+                  </span>
+                )}
               </button>
               
               <button
@@ -2930,6 +2975,7 @@ export default function App() {
                 </p>
               </div>
             </div>
+            </div> {/* Closing mobile wrapper */}
           </aside>
 
           {/* Main admin Workspace workspace */}
@@ -2999,6 +3045,35 @@ export default function App() {
                 setStockFilterTab={setStockFilterTab}
                 setIsNewProductMode={setIsNewProductMode}
                 setEditingProduct={(p) => setEditingProduct(p as any)}
+              />
+            ) : adminSection === "sales" ? (
+              <DashboardOrders
+                store={store}
+                onUpdateStatus={async (id, newStatus) => {
+                  try {
+                    const response = await fetch(`/api/orders/${id}/status`, {
+                      method: "PUT",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${localStorage.getItem("apex_admin_token")}`
+                      },
+                      body: JSON.stringify({ status: newStatus })
+                    });
+                    const d = await response.json();
+                    if (response.ok && d.success) {
+                      showAdminToast("Estado de pedido actualizado correctamente.", "success");
+                      // Dynamically set state in store to prevent full refresh lag
+                      setStore(prev => ({
+                        ...prev,
+                        orders: (prev.orders || []).map(o => o.id === id ? { ...o, status: newStatus } : o)
+                      }));
+                    } else {
+                      showAdminToast(d.message || "Error al actualizar estado.", "error");
+                    }
+                  } catch (err) {
+                    showAdminToast("Error de conexión al guardar el estado del pedido.", "error");
+                  }
+                }}
               />
             ) : (
               <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">

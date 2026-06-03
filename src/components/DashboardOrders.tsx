@@ -1,0 +1,462 @@
+import React, { useState } from "react";
+import { ShopState, Order } from "../types";
+import { 
+  Search, 
+  Clock, 
+  CheckCircle, 
+  AlertTriangle, 
+  XCircle, 
+  Phone, 
+  Mail, 
+  Calendar, 
+  ChevronDown, 
+  ChevronUp, 
+  DollarSign, 
+  ShoppingBag,
+  ExternalLink,
+  Tag as TagIcon
+} from "lucide-react";
+
+interface DashboardOrdersProps {
+  store: ShopState;
+  onUpdateStatus: (id: string, status: string) => Promise<void>;
+}
+
+export const DashboardOrders: React.FC<DashboardOrdersProps> = ({ store, onUpdateStatus }) => {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  const orders: Order[] = store.orders || [];
+
+  // Categorize stats
+  const totalOrdersCount = orders.length;
+  const approvedOrders = orders.filter(o => o.status === "pago_aprobado");
+  const pendingOrders = orders.filter(o => o.status === "pedido_iniciado" || o.status === "pago_pendiente");
+  const rejectedOrders = orders.filter(o => o.status === "pago_rechazado");
+
+  const totalVolumeUYU = approvedOrders.reduce((acc, o) => acc + o.total, 0);
+
+  // Status human-readable definitions
+  const getStatusLabelAndStyle = (status: string) => {
+    switch (status) {
+      case "pago_aprobado":
+        return {
+          label: "Aprobado / Pagado ✓",
+          colors: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-405 border-emerald-500/20",
+          icon: <CheckCircle className="h-3 w-3 inline mr-1" />
+        };
+      case "pago_pendiente":
+        return {
+          label: "Pago Pendiente ⌚",
+          colors: "bg-amber-500/10 text-amber-600 dark:text-amber-405 border-amber-500/20",
+          icon: <Clock className="h-3 w-3 inline mr-1" />
+        };
+      case "pedido_iniciado":
+        return {
+          label: "Iniciado / lead 📝",
+          colors: "bg-sky-500/10 text-sky-600 dark:text-sky-402 border-sky-500/20",
+          icon: <Clock className="h-3 w-3 inline mr-1" />
+        };
+      case "pago_rechazado":
+        return {
+          label: "Rechazado / Fallido ✗",
+          colors: "bg-rose-500/10 text-rose-600 dark:text-rose-405 border-rose-500/20",
+          icon: <XCircle className="h-3 w-3 inline mr-1" />
+        };
+      default:
+        return {
+          label: status || "Registrado",
+          colors: "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/20",
+          icon: null
+        };
+    }
+  };
+
+  const handleUpdateStatus = async (orderId: string, newStatus: string) => {
+    setUpdatingId(orderId);
+    try {
+      await onUpdateStatus(orderId, newStatus);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  // Filter orders
+  const filteredOrders = orders.filter(order => {
+    const matchesSearch = 
+      (order.id || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (order.customerName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (order.customerEmail || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (order.customerPhone || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (order.couponCode || "").toLowerCase().includes(searchTerm.toLowerCase());
+
+    if (statusFilter === "all") return matchesSearch;
+    if (statusFilter === "aprobado") return matchesSearch && order.status === "pago_aprobado";
+    if (statusFilter === "pendiente") return matchesSearch && (order.status === "pago_pendiente" || order.status === "pedido_iniciado");
+    if (statusFilter === "rechazado") return matchesSearch && order.status === "pago_rechazado";
+    return matchesSearch;
+  });
+
+  const toggleRow = (orderId: string) => {
+    if (expandedOrderId === orderId) {
+      setExpandedOrderId(null);
+    } else {
+      setExpandedOrderId(orderId);
+    }
+  };
+
+  const handleWhatsAppChat = (order: Order) => {
+    const rawNum = order.customerPhone || "";
+    const cleanNum = rawNum.replace(/[^0-9]/g, "");
+    const textMsg = `Hola ${order.customerName}, nos contactamos de la tienda por tu pedido N° ${order.id}.`;
+    window.open(`https://wa.me/${cleanNum}?text=${encodeURIComponent(textMsg)}`, "_blank");
+  };
+
+  return (
+    <div className="w-full space-y-6">
+      
+      {/* METRIC HEADER OVERVIEW cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        {/* Metric 1 */}
+        <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Ingresos Totales (Cuyo Pago es Aprobado)</p>
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-zinc-100 mt-1 font-mono">
+              $ {totalVolumeUYU.toLocaleString("es-AR")} UYU
+            </h3>
+            <p className="text-[10px] text-emerald-500 font-semibold mt-0.5">Sincronizado vía Mercado Pago Uruguay</p>
+          </div>
+          <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
+            <DollarSign className="h-5 w-5" />
+          </div>
+        </div>
+
+        {/* Metric 2 */}
+        <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Pedidos Aprobados</p>
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-zinc-100 mt-1 font-mono">
+              {approvedOrders.length}
+            </h3>
+            <p className="text-[10px] text-zinc-400 mt-0.5">De un total de {totalOrdersCount} registrados</p>
+          </div>
+          <div className="p-3 bg-indigo-500/10 text-indigo-500 rounded-xl">
+            <CheckCircle className="h-5 w-5" />
+          </div>
+        </div>
+
+        {/* Metric 3 */}
+        <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Leads y Pagos Pendientes</p>
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-zinc-100 mt-1 font-mono">
+              {pendingOrders.length}
+            </h3>
+            <p className="text-[10px] text-zinc-400 mt-0.5">Requieren seguimiento / coordinación</p>
+          </div>
+          <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
+            <Clock className="h-5 w-5" />
+          </div>
+        </div>
+
+        {/* Metric 4 */}
+        <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Pedidos Rechazados</p>
+            <h3 className="text-2xl font-bold text-rose-600 dark:text-rose-455 mt-1 font-mono">
+              {rejectedOrders.length}
+            </h3>
+            <p className="text-[10px] text-rose-500 mt-0.5">Cancelados o denegados por tarjeta</p>
+          </div>
+          <div className="p-3 bg-rose-500/10 text-rose-500 rounded-xl">
+            <XCircle className="h-5 w-5" />
+          </div>
+        </div>
+
+      </div>
+
+      {/* FILTER & CONTAINER HEADER */}
+      <div className="bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm overflow-hidden">
+        
+        {/* Controls bar */}
+        <div className="p-5 border-b border-slate-100 dark:border-zinc-850 flex flex-col md:flex-row justify-between items-center gap-4">
+          
+          {/* Status Tabs Navigation */}
+          <div className="flex flex-wrap gap-1 w-full md:w-auto">
+            <button
+              onClick={() => setStatusFilter("all")}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                statusFilter === "all"
+                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 font-extrabold"
+                  : "bg-slate-50 dark:bg-zinc-900 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+              }`}
+            >
+              Todos ({totalOrdersCount})
+            </button>
+            <button
+              onClick={() => setStatusFilter("aprobado")}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                statusFilter === "aprobado"
+                  ? "bg-emerald-500 text-white font-extrabold"
+                  : "bg-slate-50 dark:bg-zinc-900 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+              }`}
+            >
+              ✓ Aprobados ({approvedOrders.length})
+            </button>
+            <button
+              onClick={() => setStatusFilter("pendiente")}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                statusFilter === "pendiente"
+                  ? "bg-amber-500 text-zinc-950 font-extrabold"
+                  : "bg-slate-50 dark:bg-zinc-900 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+              }`}
+            >
+              ⌚ Pendientes ({pendingOrders.length})
+            </button>
+            <button
+              onClick={() => setStatusFilter("rechazado")}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                statusFilter === "rechazado"
+                  ? "bg-rose-500 text-white font-extrabold"
+                  : "bg-slate-50 dark:bg-zinc-900 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+              }`}
+            >
+              ✗ Rechazados ({rejectedOrders.length})
+            </button>
+          </div>
+
+          {/* Quick Search Box */}
+          <div className="relative w-full md:w-80">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
+            <input
+              type="text"
+              placeholder="Buscar por cliente, ID, cupón o tel..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
+            />
+          </div>
+
+        </div>
+
+        {/* LIST TABLE CONTAINER */}
+        {filteredOrders.length === 0 ? (
+          <div className="p-12 text-center">
+            <ShoppingBag className="h-10 w-10 text-zinc-300 dark:text-zinc-700 mx-auto mb-3" />
+            <p className="text-zinc-500 dark:text-zinc-400 text-sm font-semibold">No se encontraron pedidos registrados con los filtros actuales.</p>
+            <p className="text-zinc-400 dark:text-zinc-500 text-[11px] mt-1">Los pedidos aparecerán inmediatamente una vez que los clientes avancen en su proceso de checkout o Mercado Pago.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50/50 dark:bg-zinc-900/30 border-b border-slate-100 dark:border-zinc-850">
+                  <th className="p-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Pedido ID</th>
+                  <th className="p-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Fecha</th>
+                  <th className="p-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Cliente</th>
+                  <th className="p-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Contacto / Envío</th>
+                  <th className="p-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest text-right">Monto</th>
+                  <th className="p-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Estado Real</th>
+                  <th className="p-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest text-center">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-zinc-850">
+                {filteredOrders.map((order) => {
+                  const isExpanded = expandedOrderId === order.id;
+                  const statusInfo = getStatusLabelAndStyle(order.status);
+                  
+                  return (
+                    <React.Fragment key={order.id}>
+                      <tr className="hover:bg-slate-50/30 dark:hover:bg-zinc-900/10 cursor-pointer" onClick={() => toggleRow(order.id)}>
+                        <td className="p-4">
+                          <span className="font-mono text-xs font-bold text-slate-800 dark:text-zinc-200">
+                            #{order.id.substring(0, 15)}
+                          </span>
+                        </td>
+                        <td className="p-4 text-xs whitespace-nowrap text-zinc-500 dark:text-zinc-400 font-mono">
+                          {order.createdAt ? new Date(order.createdAt).toLocaleDateString("es-AR", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit"
+                          }) : "N/A"}
+                        </td>
+                        <td className="p-4">
+                          <p className="text-xs font-bold text-slate-900 dark:text-white">{order.customerName}</p>
+                          <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">{order.customerEmail}</p>
+                        </td>
+                        <td className="p-4">
+                          <span className="text-xs font-semibold text-slate-700 dark:text-zinc-300 font-mono">{order.customerPhone}</span>
+                          <span className="block text-[9px] text-sky-505 dark:text-sky-455 font-bold truncate max-w-xs">{order.notes}</span>
+                        </td>
+                        <td className="p-4 text-right">
+                          <span className="text-xs font-extrabold text-slate-900 dark:text-white font-mono">
+                            $ {order.total.toLocaleString("es-AR")} UYU
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-2 py-1 rounded text-[10px] font-bold border ${statusInfo.colors}`}>
+                            {statusInfo.icon}
+                            {statusInfo.label}
+                          </span>
+                        </td>
+                        <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => handleWhatsAppChat(order)}
+                              title="Chatear con el cliente"
+                              className="p-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-450 rounded-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer"
+                            >
+                              <Phone className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => toggleRow(order.id)}
+                              className="p-1.5 bg-slate-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg transition-colors cursor-pointer"
+                            >
+                              {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* EXPANDED INNER INFO ROW */}
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan={7} className="bg-slate-50/50 dark:bg-zinc-900/30 p-5">
+                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                              
+                              {/* Left column - items details */}
+                              <div className="lg:col-span-8 space-y-3">
+                                <h4 className="text-xs font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-zinc-800 pb-1.5">
+                                  DESGLOSE DE ARTÍCULOS EN EL CARRITO
+                                </h4>
+                                <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+                                  {order.items && order.items.map((item, idx) => (
+                                    <div key={idx} className="flex justify-between items-center bg-white dark:bg-zinc-950 p-2.5 rounded-lg border border-slate-150 dark:border-zinc-850">
+                                      <div>
+                                        <p className="text-xs font-bold text-slate-900 dark:text-white">
+                                          {item.productName}
+                                        </p>
+                                        <p className="text-[10px] text-zinc-500 dark:text-zinc-500 font-semibold font-mono">
+                                          Cant: {item.quantity} x $ {item.unitPrice.toLocaleString("es-AR")} UYU
+                                          {item.sizeSelected && ` | Talle: ${item.sizeSelected}`}
+                                          {item.colorSelected && ` | Color: ${item.colorSelected}`}
+                                        </p>
+                                      </div>
+                                      <span className="text-xs font-mono font-bold text-slate-900 dark:text-white">
+                                        $ {item.totalPrice.toLocaleString("es-AR")} UYU
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                <div className="p-3 bg-slate-100 dark:bg-zinc-900 rounded-lg flex flex-wrap gap-4 text-[11px] text-zinc-500 dark:text-zinc-400 justify-between">
+                                  <p><strong>Subtotal:</strong> $ {order.subtotal?.toLocaleString("es-AR")} UYU</p>
+                                  {order.discountAmount > 0 && (
+                                    <p className="text-rose-500">
+                                      <strong>Descuento:</strong> -$ {order.discountAmount?.toLocaleString("es-AR")} UYU
+                                    </p>
+                                  )}
+                                  <p className="text-slate-950 dark:text-white font-extrabold text-xs">
+                                    <strong>Total:</strong> $ {order.total?.toLocaleString("es-AR")} UYU
+                                  </p>
+                                  {order.couponCode && (
+                                    <p className="bg-sky-500/10 text-sky-600 px-1.5 py-0.5 rounded font-bold font-mono">
+                                      Cupón: {order.couponCode}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Right column - workflow modification */}
+                              <div className="lg:col-span-4 space-y-3">
+                                <h4 className="text-xs font-bold text-slate-900 dark:text-white border-b border-slate-200 dark:border-zinc-800 pb-1.5">
+                                  FLUJO DE VALIDACIÓN DE PEDIDO
+                                </h4>
+
+                                <div className="space-y-2">
+                                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">
+                                    Modificar Estado Manualmente
+                                  </p>
+
+                                  <div className="grid grid-cols-2 gap-1.5">
+                                    <button
+                                      disabled={updatingId !== null}
+                                      onClick={() => handleUpdateStatus(order.id, "pago_aprobado")}
+                                      className={`px-3 py-2 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                                        order.status === "pago_aprobado"
+                                          ? "bg-emerald-600 text-white font-extrabold scale-[1.01]"
+                                          : "bg-white hover:bg-emerald-50 dark:bg-zinc-900 dark:hover:bg-emerald-950 text-emerald-605"
+                                      }`}
+                                    >
+                                      ✓ Aprobado
+                                    </button>
+                                    
+                                    <button
+                                      disabled={updatingId !== null}
+                                      onClick={() => handleUpdateStatus(order.id, "pago_pendiente")}
+                                      className={`px-3 py-2 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                                        order.status === "pago_pendiente"
+                                          ? "bg-amber-500 text-zinc-950 font-extrabold scale-[1.01]"
+                                          : "bg-white hover:bg-amber-50 dark:bg-zinc-900 dark:hover:bg-amber-950/40 text-amber-600"
+                                      }`}
+                                    >
+                                      ⌚ Pendiente
+                                    </button>
+
+                                    <button
+                                      disabled={updatingId !== null}
+                                      onClick={() => handleUpdateStatus(order.id, "pago_rechazado")}
+                                      className={`px-3 py-2 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                                        order.status === "pago_rechazado"
+                                          ? "bg-rose-600 text-white font-extrabold scale-[1.01]"
+                                          : "bg-white hover:bg-rose-50 dark:bg-zinc-900 dark:hover:bg-rose-950/40 text-rose-600"
+                                      }`}
+                                    >
+                                      ✗ Rechazado
+                                    </button>
+
+                                    <button
+                                      disabled={updatingId !== null}
+                                      onClick={() => handleUpdateStatus(order.id, "pedido_iniciado")}
+                                      className={`px-3 py-2 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                                        order.status === "pedido_iniciado"
+                                          ? "bg-sky-600 text-white font-extrabold scale-[1.01]"
+                                          : "bg-white hover:bg-sky-50 dark:bg-zinc-900 dark:hover:bg-sky-950/40 text-sky-600"
+                                      }`}
+                                    >
+                                      📝 Lead / Iniciado
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className="pt-2">
+                                  <button
+                                    onClick={() => handleWhatsAppChat(order)}
+                                    className="w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg transition-transform hover:scale-[1.01] flex items-center justify-center gap-1.5 cursor-pointer shadow-sm shadow-emerald-500/10"
+                                  >
+                                    <Phone className="h-3.5 w-3.5" />
+                                    <span>Chatear por WhatsApp</span>
+                                  </button>
+                                </div>
+                              </div>
+
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

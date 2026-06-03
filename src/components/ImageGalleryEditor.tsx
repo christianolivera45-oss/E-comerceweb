@@ -105,6 +105,9 @@ export default function ImageGalleryEditor({ images, onChange, isThemeDark }: Im
 
         const uploadRes = await fetch("/api/cloudinary/upload", {
           method: "POST",
+          headers: {
+            "Authorization": `Bearer ${localStorage.getItem("apex_admin_token")}`
+          },
           body: formData,
         });
 

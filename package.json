@@ -8,6 +8,7 @@
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist server.js",
+    "test": "vitest run",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
@@ -33,6 +34,8 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
-    "@types/multer": "^2.1.0"
+    "@types/multer": "^2.1.0",
+    "@vitest/coverage-v8": "^4.1.8",
+    "vitest": "^4.1.8"
   }
 }

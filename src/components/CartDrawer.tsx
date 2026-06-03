@@ -242,33 +242,7 @@ export default function CartDrawer({
               <div className={`p-4 border-t space-y-4 ${
                 settings.themeMode === "dark" ? "border-zinc-800 bg-zinc-950/80" : "border-gray-150 bg-gray-50/50"
               }`}>
-                {/* Promo Code area */}
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Código de cupón (ej: APEX50)"
-                    value={promoCode}
-                    onChange={(e) => setPromoCode(e.target.value)}
-                    className={`flex-1 text-xs px-3 py-2 rounded-lg border outline-none font-mono ${
-                      settings.themeMode === "dark"
-                        ? "bg-zinc-900 border-zinc-800 text-white placeholder-zinc-500 focus:border-zinc-700"
-                        : "bg-white border-gray-200 text-zinc-900 placeholder-gray-400"
-                    }`}
-                  />
-                  <button
-                    onClick={handleApplyPromo}
-                    className="px-3 py-2 rounded-lg text-xs font-semibold theme-btn-accent whitespace-nowrap"
-                  >
-                    Aplicar
-                  </button>
-                </div>
 
-                {promoStatus === "success" && (
-                  <p className="text-[11px] text-green-400 font-medium">✔️ ¡Descuento de 10% aplicado de manera exitosa!</p>
-                )}
-                {promoStatus === "invalid" && (
-                  <p className="text-[11px] text-red-400 font-medium">❌ Cupón inválido. Revisa el código.</p>
-                )}
 
                 {/* Pricing summary */}
                 <div className="space-y-1.5 text-xs font-sans">

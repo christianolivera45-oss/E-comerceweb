@@ -125,6 +125,44 @@ export interface AdminCredentials {
   salt?: string;
 }
 
+export interface OrderItem {
+  id?: string;
+  productId?: string;
+  variantId?: string;
+  productName: string;
+  sku?: string;
+  sizeSelected?: string;
+  colorSelected?: string;
+  unitPrice: number;
+  quantity: number;
+  totalPrice: number;
+}
+
+export type OrderStatus = 
+  | "pedido_iniciado"
+  | "pago_pendiente"
+  | "pago_aprobado"
+  | "pago_rechazado"
+  | "pedido_cancelado"
+  | "pedido_reembolsado";
+
+export interface Order {
+  id: string; // UUID or ID
+  customerName: string;
+  customerEmail: string;
+  customerPhone?: string;
+  subtotal: number;
+  discountAmount: number;
+  shippingCost: number;
+  total: number;
+  couponCode?: string;
+  status: OrderStatus;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+  items?: OrderItem[];
+}
+
 export interface ShopState {
   products: Product[];
   categories: string[]; // compatible fallback
@@ -133,6 +171,7 @@ export interface ShopState {
   settings: SiteSettings;
   adminCredentials?: AdminCredentials;
   coupons?: Coupon[];
+  orders?: Order[]; // local context or active cached orders
 }
 
 export interface CartItem {

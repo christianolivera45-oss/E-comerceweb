@@ -70,10 +70,12 @@ import {
   HardDrive,
   Headphones,
   Sofa,
-  CreditCard
+  CreditCard,
+  Star
 } from "lucide-react";
 import { Product, SiteSettings, ShopState, CartItem, Category, Subcategory, ProductVariant, is3DProduct } from "./types";
 import ThemeStyles from "./components/ThemeStyles";
+import ReviewsSection from "./components/ReviewsSection";
 import ProductCard from "./components/ProductCard";
 import ProductSlider from "./components/ProductSlider";
 import ProductDetails from "./components/ProductDetails";
@@ -2652,6 +2654,10 @@ export default function App() {
                 </p>
               </div>
             </div>
+
+            {/* Google Business Real Commercial Reputation & Reviews Section */}
+            <ReviewsSection themeMode={store.settings.themeMode} />
+
             <div className="max-w-7xl mx-auto px-6 mt-8 pt-8 border-t border-zinc-800/10 text-center text-[11px] space-y-2">
               <p className="leading-relaxed opacity-75">
                 &copy; 2026 {store.settings.siteTitle}. {store.settings.footerCopyright || "Desarrollado con tecnología de punta responsive. Reservados todos los derechos."}

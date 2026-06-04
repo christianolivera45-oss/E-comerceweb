@@ -1626,12 +1626,35 @@ async function startServer() {
         });
       }
 
-      // Dynamic host protocol handling
-      const protocol = req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
-      const host = req.get("host");
-      const baseUrl = `${protocol}://${host}`;
+      // Extract the external host and protocol
+      let rawHost = req.headers["x-forwarded-host"] || req.get("host") || "";
+      if (Array.isArray(rawHost)) {
+        rawHost = rawHost[0];
+      }
+      let host = rawHost.split(",")[0].trim();
 
-      const mpPayload = {
+      let rawProto = req.headers["x-forwarded-proto"] || "https";
+      if (Array.isArray(rawProto)) {
+        rawProto = rawProto[0];
+      }
+      let protocol = rawProto.split(",")[0].trim();
+
+      // Force HTTPS for any external domains (e.g. google cloud previews) and strip the internal port
+      if (host.includes(".run.app") || host.includes(".studio") || protocol === "https" || req.headers["x-forwarded-host"]) {
+        protocol = "https";
+        host = host.split(":")[0]; // Strip the internal port (e.g. :3000)
+      }
+
+      // If it is localhost or local IP, and no proxy forwarded host exists, keep HTTP and port
+      const isLocal = host.includes("localhost") || host.includes("127.0.0.1");
+      if (isLocal && !req.headers["x-forwarded-host"]) {
+        protocol = "http";
+      }
+
+      const baseUrl = `${protocol}://${host}`;
+      const isHttps = baseUrl.startsWith("https://");
+
+      const mpPayload: any = {
         items: items,
         external_reference: orderId, // Crucial backlink correlation
         back_urls: {
@@ -1639,9 +1662,13 @@ async function startServer() {
           failure: `${baseUrl}/api/payments/mercadopago/feedback?status=failure&orderId=${orderId}`,
           pending: `${baseUrl}/api/payments/mercadopago/feedback?status=pending&orderId=${orderId}`
         },
-        auto_return: "approved",
         statement_descriptor: (settings.siteTitle || "Ventas Juem").substring(0, 16)
       };
+
+      // Mercado Pago only permits auto_return if all back_urls use a secure HTTPS protocol without custom port
+      if (isHttps && !host.includes(":")) {
+        mpPayload.auto_return = "approved";
+      }
 
       console.log("Creando preferencia Mercado Pago segura:", JSON.stringify(mpPayload, null, 2));
 

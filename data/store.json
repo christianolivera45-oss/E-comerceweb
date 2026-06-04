@@ -1,9 +1,10 @@
 {
   "categories": [
     "Ropa",
-    "Artículos electrónicos",
-    "Accesorios",
-    "Hogar"
+    "Informática",
+    "Hogar",
+    "Gamer",
+    "Impresión 3d"
   ],
   "dbCategories": [
     {
@@ -15,16 +16,9 @@
     },
     {
       "id": "electronica",
-      "nombre": "Artículos electrónicos",
-      "icono": "Smartphone",
+      "nombre": "Informática",
+      "icono": "Laptop",
       "orden": 2,
-      "active": true
-    },
-    {
-      "id": "accesorios",
-      "nombre": "Accesorios",
-      "icono": "Sparkles",
-      "orden": 3,
       "active": true
     },
     {
@@ -32,6 +26,20 @@
       "nombre": "Hogar",
       "icono": "Home",
       "orden": 4,
+      "active": true
+    },
+    {
+      "id": "gamer",
+      "nombre": "Gamer",
+      "icono": "Gamepad2",
+      "orden": 5,
+      "active": false
+    },
+    {
+      "id": "impresion-3d",
+      "nombre": "Impresión 3d",
+      "icono": "Printer",
+      "orden": 5,
       "active": true
     }
   ],
@@ -68,38 +76,58 @@
     },
     {
       "id": "pc",
-      "nombre": "PC y accesorios",
+      "nombre": "PC ",
       "categoria_id": "electronica",
-      "active": true
-    },
-    {
-      "id": "mochilas",
-      "nombre": "Mochilas",
-      "categoria_id": "accesorios",
-      "active": true
-    },
-    {
-      "id": "lentes",
-      "nombre": "Gafas de Sol",
-      "categoria_id": "accesorios",
-      "active": true
-    },
-    {
-      "id": "decoracion",
-      "nombre": "Decoración",
-      "categoria_id": "hogar",
       "active": true
     },
     {
       "id": "organizacion",
       "nombre": "Organización",
       "categoria_id": "hogar",
+      "active": false
+    },
+    {
+      "id": "decoracion",
+      "nombre": "Baño",
+      "categoria_id": "hogar",
+      "active": true
+    },
+    {
+      "id": "cocina",
+      "nombre": "Cocina",
+      "categoria_id": "hogar",
+      "active": true
+    },
+    {
+      "id": "teclados",
+      "nombre": "Teclados",
+      "categoria_id": "gamer",
+      "active": true
+    },
+    {
+      "id": "mouse",
+      "nombre": "Mouse",
+      "categoria_id": "gamer",
+      "active": true
+    },
+    {
+      "id": "monitores",
+      "nombre": "Monitores",
+      "categoria_id": "gamer",
+      "active": true
+    },
+    {
+      "id": "accesorios",
+      "nombre": "Accesorios",
+      "categoria_id": "electronica",
       "active": true
     }
   ],
   "settings": {
-    "siteTitle": "Ventas Juem",
+    "logoType": "image",
+    "siteTitle": "Ventas Juem ",
     "themeMode": "dark",
+    "cashActive": false,
     "heroSlides": [
       {
         "id": "slide-1",
@@ -120,162 +148,247 @@
         "subtitle": "Lentes, mochilas, relojes y detalles que transforman cualquier outfit."
       }
     ],
-    "accentColor": "#10b981",
+    "accentColor": "#EFBF04",
     "bannerTitle": "Colección Exclusiva de Primavera",
-    "primaryColor": "#3b82f6",
+    "defaultPhone": "Telefono ",
+    "logoImageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780264210/ChatGPT_Image_31_may_2026_17_29_14_lpz7zu.png",
+    "primaryColor": "#003385",
     "siteSubtitle": "Moda, tecnología y accesorios con envío a todo el país.",
     "bannerImageUrl": "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80",
     "bannerSubtitle": "Descubre las últimas tendencias con descuentos de hasta el 40%.",
-    "whatsappNumber": "5491123456789",
-    "promotionBannerText": "🚚 ¡ENVÍO GRATUITO en compras superiores a $50! Código: JUEM50",
-    "showPromotionBanner": true
+    "whatsappNumber": "598098058775",
+    "defaultLastName": "Apellido",
+    "defaultFirstName": "Nombre ",
+    "lowStockThreshold": 4,
+    "promotionBannerText": "🚚 ¡ENVÍO GRATUITO en compras superiores a $50! Código: APEX50",
+    "showPromotionBanner": false,
+    "mercadopagoPublicKey": "APP_USR-e6d3cee3-1595-4050-a254-e44d2104aeef",
+    "mercadopagoAccessToken": "APP_USR-5703420117418329-060320-feecb712341ace1b22f0555c993c7a8f-1092985910",
+    "mercadopagoActive": true
   },
   "products": [
     {
-      "id": "prod-1779985745222",
-      "name": "Buzo",
-      "description": "Poncho calentitio ",
-      "price": 500,
-      "originalPrice": 450,
-      "category": "Ropa",
-      "categoria_id": "ropa",
-      "subcategoria_id": "invierno",
-      "imageUrl": "data:image/webp;base64,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",
-      "stock": 11,
+      "id": "15",
+      "name": "Lámpara Uv Mata Anti Mosquitos Usb Silenciosa Sin Químico",
+      "price": 329,
+      "stock": 10,
+      "category": "Hogar",
       "featured": true,
-      "createdAt": "2026-05-28T16:29:05.222Z",
+      "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780264935/ChatGPT_Image_28_may_2026_09_41_06_rmda7w.png",
+      "createdAt": "2026-05-31T23:12:56.614Z",
+      "description": "Elimina mosquitos e insectos voladores de forma segura y silenciosa. Utiliza luz LED UV para atraerlos y un sistema de succión por ventilador que los atrapa en un recipiente recolector.\n\n• Sin químicos ni productos tóxicos\n• Funcionamiento silencioso\n• Luz LED UV de alta eficiencia\n• Recipiente desmontable para fácil limpieza\n• Ideal para dormitorios, oficinas y espacios interiores\n• Alimentación USB (5V)\n• Portátil y fácil de transportar\n\nIncluye:\n• 1 Lámpara UV mata mosquitos\n• 1 Cable USB",
+      "categoria_id": "hogar",
+      "originalPrice": 329,
+      "subcategoria_id": "all",
+      "active": true,
+      "paused": false,
+      "sizes": [],
+      "colors": [
+        "Blanco"
+      ],
+      "imagenes": [
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780264935/ChatGPT_Image_28_may_2026_09_41_23_hlqybx.png"
+      ],
+      "variants": [],
+      "is3D": false
+    },
+    {
+      "id": "14",
+      "name": "Soporte Para Tablet De Pared Alto Ranurado Anti Robo",
+      "price": 999,
+      "stock": 5,
+      "category": "Impresión 3d",
+      "featured": true,
+      "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780267539/ChatGPT_Image_28_may_2026_08_53_28_gt92wn.png",
+      "createdAt": "2026-05-31T22:44:56.928Z",
+      "description": "Set de 4 soportes para montaje en pared, ideal para tablets y celulares.\n\n2 Soportes Superiores\n\nBase: 3 x 10 cm\nAlto: 10 cm\nAncho: 7 cm\nLargo: 1,5 cm\nApertura: 1,2 cm\n\n2 Soportes Inferiores\n\nAlto: 10 cm\nAncho: 4 cm\nLargo: 1,5 cm\nApertura: 1,2 cm\n\nEspesor máximo compatible: 1,2 cm.",
+      "categoria_id": "impresion-3d",
+      "originalPrice": 999,
+      "subcategoria_id": "all",
+      "active": true,
+      "paused": false,
       "sizes": [
-        "Único"
+        "PLA"
       ],
       "colors": [
         "Negro"
-      ]
+      ],
+      "imagenes": [
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780267538/ChatGPT_Image_28_may_2026_08_52_56_wj32uv.png",
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780267690/1666820879598_bw6au4.jpg",
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780267688/1666820879547_wytcgq.jpg",
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780267686/1666820879623_ekejil.jpg"
+      ],
+      "variants": [
+        {
+          "id": "10f5ad53-a654-4be2-878d-653158196599",
+          "size": "PLA",
+          "color": "Negro",
+          "colorCode": "#000000",
+          "priceDelta": 0,
+          "stock": 5,
+          "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780267539/ChatGPT_Image_28_may_2026_08_53_28_gt92wn.png",
+          "price": 850
+        }
+      ],
+      "is3D": true,
+      "hoursPerUnit": 3
     },
     {
-      "id": "7",
-      "name": "Buzo Oversize 'Retro Comfort'",
-      "price": 49.99,
-      "stock": 25,
+      "id": "13",
+      "name": "Funda Neopreno 11 Plan Ceibal Lisas",
+      "price": 480,
+      "stock": 50,
+      "category": "Informática",
+      "featured": true,
+      "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265675/1084_bkc6ar.jpg",
+      "createdAt": "2026-05-31T22:17:55.708Z",
+      "description": "Protege tu laptop o notebook con esta práctica funda de neopreno, ideal para equipos de 11 pulgadas. Su material resistente ayuda a proteger contra rayones, polvo y pequeños golpes durante el transporte.\n\n• Material: Neopreno\n• Compatible con equipos de hasta 11\"\n• Ideal para laptops y computadoras del Plan Ceibal\n• Liviana y fácil de transportar\n• Medidas: 33 cm x 23 cm",
+      "categoria_id": "electronica",
+      "originalPrice": 480,
+      "subcategoria_id": "pc",
+      "active": true,
+      "paused": false,
+      "sizes": [
+        "11\""
+      ],
+      "colors": [
+        "Rosa",
+        "Negro",
+        "Turquesa"
+      ],
+      "imagenes": [
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265680/108420c_oe3rxu.jpg",
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265674/108420a_1_fiveu6.jpg",
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265677/productos32_35602_y8dxnc.jpg",
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265675/productos34_29896_s7mkpo.jpg"
+      ],
+      "variants": [
+        {
+          "id": "cee4f9e6-65a7-45c9-b0c4-63281c816965",
+          "size": "11\"",
+          "color": "Rosa",
+          "colorCode": "#f472b6",
+          "priceDelta": 0,
+          "stock": 10,
+          "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265677/productos32_35602_y8dxnc.jpg"
+        },
+        {
+          "id": "ebe574ca-1e2b-4a3c-ae93-f31dadf6528f",
+          "size": "11\"",
+          "color": "Negro",
+          "colorCode": "#000000",
+          "priceDelta": 0,
+          "stock": 10,
+          "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265675/1084_bkc6ar.jpg"
+        },
+        {
+          "id": "4474fffc-a907-4986-b27a-968f59224ae4",
+          "size": "11\"",
+          "color": "Turquesa",
+          "colorCode": "#9ca3af",
+          "priceDelta": 0,
+          "stock": 30,
+          "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265675/productos34_29896_s7mkpo.jpg"
+        }
+      ],
+      "is3D": false
+    },
+    {
+      "id": "12",
+      "name": "Toalla Turbante Baño Pelo Gorro Algodón  dia de la ma",
+      "price": 390,
+      "stock": 10,
       "category": "Ropa",
       "featured": true,
-      "imageUrl": "https://images.unsplash.com/photo-1556821840-3a63f95609a7?auto=format&fit=crop&w=600&q=80",
-      "createdAt": "2026-05-27T15:50:32.690Z",
-      "description": "Buzo / sudadera con capucha estilo oversize de algodón orgánico texturizado con bolsillo tipo canguro y cordón ajustable premium.",
+      "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265275/5_t600vh.png",
+      "createdAt": "2026-05-31T22:10:58.822Z",
+      "description": "Toalla ideal para el secado del cabello.\nMaterial 100% Algodón y detalles en cinta Bies.  \nDiseño en blanco con cinta Bies en color Rojo.\nProducto 100% artesanal.\nMedidas : 25cm x 60 cm.",
       "categoria_id": "ropa",
-      "originalPrice": 69.99,
+      "originalPrice": 390,
+      "subcategoria_id": "mujer",
+      "active": true,
+      "paused": false,
+      "sizes": [],
+      "colors": [],
+      "imagenes": [],
+      "variants": [],
+      "is3D": false
+    },
+    {
+      "id": "11",
+      "name": "Media Panty Térmica Mujer Efecto Piel Con Corderito",
+      "price": 299,
+      "stock": 10,
+      "category": "Ropa",
+      "featured": true,
+      "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780264935/pGu_W25J0J.pictures.1_mw1UYpzo1B_h9kuot.png",
+      "createdAt": "2026-05-31T22:04:07.483Z",
+      "description": "Disfruta de la elegancia de unas medias translúcidas sin renunciar al abrigo. Su diseño efecto piel brinda una apariencia fina y delicada, mientras que su interior térmico afelpado ayuda a mantener el calor corporal durante los días más fríos.\n\n• Efecto piel translúcido\n• Interior térmico suave y abrigado\n• Excelente elasticidad y comodidad\n• Modelo con pie completo\n• Talle Único (se adapta aproximadamente de L a XL)\n• Color: Negro\n\nIdeales para usar con vestidos, polleras, shorts o debajo de pantalones en invierno.",
+      "categoria_id": "ropa",
+      "originalPrice": 299,
+      "subcategoria_id": "mujer",
+      "active": true,
+      "paused": false,
+      "sizes": [
+        "L/XL"
+      ],
+      "colors": [
+        "Negro"
+      ],
+      "imagenes": [
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780264935/pGu_W25J0J.pictures.0_uOxi0oau1G_hdel0v.png"
+      ],
+      "variants": [],
+      "is3D": false
+    },
+    {
+      "id": "10",
+      "name": "Poncho Buzo Canguro Pijama Plush C/ Capucha Corderito",
+      "price": 850,
+      "stock": 10,
+      "category": "Ropa",
+      "featured": true,
+      "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780008436/polar_xkibhp.jpg",
+      "createdAt": "2026-05-31T22:00:48.725Z",
+      "description": "Mantente cómodo y abrigado durante el invierno con este poncho buzo térmico de gran tamaño.\n\n- Exterior de plush extra suave\n- Interior forrado en corderito térmico\n-Capucha forrada\n-Bolsillo frontal tipo canguro\n-Talle XL\n-Unisex",
+      "categoria_id": "ropa",
+      "originalPrice": 850,
       "subcategoria_id": "invierno",
       "active": true,
       "paused": false,
-      "sizes": [],
-      "colors": []
-    },
-    {
-      "id": "6",
-      "name": "Gafas de Sol Polarizadas 'Oasis'",
-      "price": 29.99,
-      "stock": 18,
-      "category": "Accesorios",
-      "featured": false,
-      "imageUrl": "https://images.unsplash.com/photo-1511499767150-a48a237f0083?auto=format&fit=crop&w=600&q=80",
-      "createdAt": "2026-05-27T15:50:32.690Z",
-      "description": "Lentes de sol polarizados de diseño moderno con armazón de aleación ligera de alta resistencia y protección ultravioleta UV400 total.",
-      "categoria_id": "accesorios",
-      "originalPrice": 39.99,
-      "subcategoria_id": "lentes",
-      "active": true,
-      "paused": false,
-      "sizes": [],
-      "colors": []
-    },
-    {
-      "id": "5",
-      "name": "Estuche Organizador de Cables Tech",
-      "price": 19.99,
-      "stock": 35,
-      "category": "Accesorios",
-      "featured": false,
-      "imageUrl": "https://images.unsplash.com/photo-1531346878377-a5be20888e57?auto=format&fit=crop&w=600&q=80",
-      "createdAt": "2026-05-27T15:50:32.690Z",
-      "description": "Práctico estuche organizador de viaje para cargadores, cables, tarjetas SD y accesorios. Compartimentos elásticos acolchados ajustables.",
-      "categoria_id": "accesorios",
-      "originalPrice": 24.99,
-      "subcategoria_id": "mochilas",
-      "active": true,
-      "paused": false,
-      "sizes": [],
-      "colors": []
-    },
-    {
-      "id": "4",
-      "name": "Reloj Inteligente ActiveFit Pro",
-      "price": 119.99,
-      "stock": 15,
-      "category": "Artículos electrónicos",
-      "featured": true,
-      "imageUrl": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80",
-      "createdAt": "2026-05-27T15:50:32.690Z",
-      "description": "Smartwatch con pantalla AMOLED táctil, monitor de ritmo cardíaco, seguimiento de sueño, GPS integrado y resistencia al agua IP68.",
-      "categoria_id": "electronica",
-      "originalPrice": 159.99,
-      "subcategoria_id": "celulares",
-      "active": true,
-      "paused": false,
-      "sizes": [],
-      "colors": []
-    },
-    {
-      "id": "3",
-      "name": "Mochila Impermeable Urbana",
-      "price": 45,
-      "stock": 20,
-      "category": "Accesorios",
-      "featured": false,
-      "imageUrl": "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=600&q=80",
-      "createdAt": "2026-05-27T15:50:32.690Z",
-      "description": "Mochila multifuncional de 25L con compartimento acolchado para notebook de hasta 16 pies, puerto de carga USB exterior y material repelente al agua.",
-      "categoria_id": "accesorios",
-      "originalPrice": 45,
-      "subcategoria_id": "mochilas",
-      "active": true,
-      "paused": false,
-      "sizes": [],
-      "colors": []
-    },
-    {
-      "id": "2",
-      "name": "Auriculares ANC Inalámbricos Apex",
-      "price": 149.99,
-      "stock": 8,
-      "category": "Artículos electrónicos",
-      "featured": true,
-      "imageUrl": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80",
-      "createdAt": "2026-05-27T15:50:32.690Z",
-      "description": "Auriculares de diadema con cancelación activa de ruido (ANC) híbrida, 40 horas de reproducción de audio continuo y carga rápida USB-C.",
-      "categoria_id": "electronica",
-      "originalPrice": 199.99,
-      "subcategoria_id": "audio",
-      "active": true,
-      "paused": false,
-      "sizes": [],
-      "colors": []
-    },
-    {
-      "id": "1",
-      "name": "Chaqueta Bomber Premium 'Neo'",
-      "price": 89.99,
-      "stock": 12,
-      "category": "Ropa",
-      "featured": true,
-      "imageUrl": "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80",
-      "createdAt": "2026-05-27T15:50:32.690Z",
-      "description": "Chaqueta bomber de alta gama, fabricada con tejido resistente al viento y forro térmico suave. Incluye bolsillos interiores seguros y cierres reforzados.",
-      "categoria_id": "ropa",
-      "originalPrice": 129.99,
-      "subcategoria_id": "hombre",
-      "active": true,
-      "paused": false,
-      "sizes": [],
-      "colors": []
+      "sizes": [
+        "XL"
+      ],
+      "colors": [
+        "Azul",
+        "Negro"
+      ],
+      "imagenes": [
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780323391/ventas_juem_cloudinary/phwbzgu3g8grdw50lsyn.jpg"
+      ],
+      "variants": [
+        {
+          "id": "8f3c3888-1cd1-45e0-bb61-193d73246459",
+          "size": "XL",
+          "color": "Azul",
+          "colorCode": "#3b82f6",
+          "priceDelta": 0,
+          "stock": 5,
+          "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780323391/ventas_juem_cloudinary/phwbzgu3g8grdw50lsyn.jpg",
+          "price": 840
+        },
+        {
+          "id": "b7b5848f-6485-4028-86c9-3d61d7905277",
+          "size": "XL",
+          "color": "Negro",
+          "colorCode": "#000000",
+          "priceDelta": 0,
+          "stock": 5,
+          "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780008436/polar_xkibhp.jpg"
+        }
+      ],
+      "is3D": false
     }
   ],
   "coupons": [],
@@ -283,5 +396,375 @@
     "username": "Juem",
     "passwordHash": "7219fc1c5ecfc887aae98aa0338884186acac202b63924cb5a8bb8ea943c4fd1",
     "sessionToken": "session-52847781b6e0b82e0cd17c0eca5945f0"
-  }
+  },
+  "orders": [
+    {
+      "id": "dd3d05c7-804d-43b8-9848-dab787c55a1d",
+      "customerEmail": "cliente@tienda.com",
+      "customerName": "Chris tuu",
+      "customerPhone": "095085181",
+      "subtotal": 390,
+      "discountAmount": 0,
+      "shippingCost": 0,
+      "total": 390,
+      "status": "pedido_iniciado",
+      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-04T12:37:37.225Z",
+      "updatedAt": "2026-06-04T12:37:37.225Z",
+      "items": [
+        {
+          "id": "e68b065b-3c5f-436b-8c59-2b9f715abfa5",
+          "productId": "12",
+          "productName": "Toalla Turbante Baño Pelo Gorro Algodón  dia de la ma",
+          "sizeSelected": "XL",
+          "colorSelected": "Gris",
+          "unitPrice": 390,
+          "quantity": 1,
+          "totalPrice": 390
+        }
+      ]
+    },
+    {
+      "id": "824c5c7e-cbcb-40f8-8084-bf5a2eec7d60",
+      "customerEmail": "cliente@tienda.com",
+      "customerName": "Christisn olivera",
+      "customerPhone": "095085181",
+      "subtotal": 299,
+      "discountAmount": 0,
+      "shippingCost": 0,
+      "total": 299,
+      "status": "pedido_iniciado",
+      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-04T12:25:17.026Z",
+      "updatedAt": "2026-06-04T12:25:17.026Z",
+      "items": [
+        {
+          "id": "7da17995-ddef-4f45-9b69-467c463f0771",
+          "productId": "11",
+          "productName": "Media Panty Térmica Mujer Efecto Piel Con Corderito",
+          "sizeSelected": "L/XL",
+          "colorSelected": "Negro",
+          "unitPrice": 299,
+          "quantity": 1,
+          "totalPrice": 299
+        }
+      ]
+    },
+    {
+      "id": "5494cb6b-27ab-4cf9-be74-adb0a8668b05",
+      "customerEmail": "cliente@tienda.com",
+      "customerName": "Christisn olivera",
+      "customerPhone": "095085181",
+      "subtotal": 299,
+      "discountAmount": 0,
+      "shippingCost": 0,
+      "total": 299,
+      "status": "pedido_iniciado",
+      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-04T12:21:18.116Z",
+      "updatedAt": "2026-06-04T12:21:18.116Z",
+      "items": [
+        {
+          "id": "27063b34-f246-4566-8fcc-ba9ec731c1c5",
+          "productId": "11",
+          "productName": "Media Panty Térmica Mujer Efecto Piel Con Corderito",
+          "sizeSelected": "L/XL",
+          "colorSelected": "Negro",
+          "unitPrice": 299,
+          "quantity": 1,
+          "totalPrice": 299
+        }
+      ]
+    },
+    {
+      "id": "84e6c135-b2ab-4b78-8ce5-1a4802c45ebe",
+      "customerEmail": "cliente@tienda.com",
+      "customerName": "Christian oliver",
+      "customerPhone": "095085181",
+      "subtotal": 299,
+      "discountAmount": 0,
+      "shippingCost": 0,
+      "total": 299,
+      "status": "pedido_iniciado",
+      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-04T12:17:21.036Z",
+      "updatedAt": "2026-06-04T12:17:21.036Z",
+      "items": [
+        {
+          "id": "a76593ea-e3d9-4221-a6ce-a6cd3c79e9d7",
+          "productId": "11",
+          "productName": "Media Panty Térmica Mujer Efecto Piel Con Corderito",
+          "sizeSelected": "L/XL",
+          "colorSelected": "Negro",
+          "unitPrice": 299,
+          "quantity": 1,
+          "totalPrice": 299
+        }
+      ]
+    },
+    {
+      "id": "2fd4e3aa-b796-472e-9ba0-cda110ebaab9",
+      "customerEmail": "cliente@tienda.com",
+      "customerName": "Christian olivera",
+      "customerPhone": "095085181",
+      "subtotal": 299,
+      "discountAmount": 0,
+      "shippingCost": 0,
+      "total": 299,
+      "status": "pedido_iniciado",
+      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-04T12:10:18.040Z",
+      "updatedAt": "2026-06-04T12:10:18.040Z",
+      "items": [
+        {
+          "id": "dc2ae364-866e-4207-93ec-f5b5efc4c1d4",
+          "productId": "11",
+          "productName": "Media Panty Térmica Mujer Efecto Piel Con Corderito",
+          "sizeSelected": "L/XL",
+          "colorSelected": "Negro",
+          "unitPrice": 299,
+          "quantity": 1,
+          "totalPrice": 299
+        }
+      ]
+    },
+    {
+      "id": "90c01834-80c4-42c1-95c0-46c8ec2a5d2e",
+      "customerEmail": "cliente@tienda.com",
+      "customerName": "Christian olivera",
+      "customerPhone": "095085181",
+      "subtotal": 299,
+      "discountAmount": 0,
+      "shippingCost": 0,
+      "total": 299,
+      "status": "pedido_iniciado",
+      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-04T00:35:52.801Z",
+      "updatedAt": "2026-06-04T00:35:52.801Z",
+      "items": [
+        {
+          "id": "317f76cf-57e2-449a-b041-d906667efe6b",
+          "productId": "11",
+          "productName": "Media Panty Térmica Mujer Efecto Piel Con Corderito",
+          "unitPrice": 299,
+          "quantity": 1,
+          "totalPrice": 299
+        }
+      ]
+    },
+    {
+      "id": "54ea0c47-789a-4bd5-b595-131f4aedb846",
+      "customerEmail": "cliente@tienda.com",
+      "customerName": "Christian olivera",
+      "customerPhone": "095085181",
+      "subtotal": 299,
+      "discountAmount": 0,
+      "shippingCost": 0,
+      "total": 299,
+      "status": "pedido_iniciado",
+      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-04T00:35:48.748Z",
+      "updatedAt": "2026-06-04T00:35:48.748Z",
+      "items": [
+        {
+          "id": "039f57a9-7527-44a5-9e77-0be61ac19aba",
+          "productId": "11",
+          "productName": "Media Panty Térmica Mujer Efecto Piel Con Corderito",
+          "unitPrice": 299,
+          "quantity": 1,
+          "totalPrice": 299
+        }
+      ]
+    },
+    {
+      "id": "4c6afd17-cc53-41ec-bbeb-a05738bdb500",
+      "customerEmail": "cliente@tienda.com",
+      "customerName": "Christian olivera",
+      "customerPhone": "095085181",
+      "subtotal": 299,
+      "discountAmount": 0,
+      "shippingCost": 0,
+      "total": 299,
+      "status": "pedido_iniciado",
+      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-04T00:31:34.391Z",
+      "updatedAt": "2026-06-04T00:31:34.391Z",
+      "items": [
+        {
+          "id": "96e3944a-8b42-4a53-b404-96f914600694",
+          "productId": "11",
+          "productName": "Media Panty Térmica Mujer Efecto Piel Con Corderito",
+          "unitPrice": 299,
+          "quantity": 1,
+          "totalPrice": 299
+        }
+      ]
+    },
+    {
+      "id": "173adc1f-7cdc-447f-9be5-23bc81c6fd08",
+      "customerEmail": "cliente@tienda.com",
+      "customerName": "Christian olivera",
+      "customerPhone": "095085181",
+      "subtotal": 299,
+      "discountAmount": 0,
+      "shippingCost": 0,
+      "total": 299,
+      "status": "pedido_iniciado",
+      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-04T00:28:13.377Z",
+      "updatedAt": "2026-06-04T00:28:13.377Z",
+      "items": [
+        {
+          "id": "eca00622-6f65-4518-9743-3c6c765b798f",
+          "productId": "11",
+          "productName": "Media Panty Térmica Mujer Efecto Piel Con Corderito",
+          "sizeSelected": "L/XL",
+          "colorSelected": "Negro",
+          "unitPrice": 299,
+          "quantity": 1,
+          "totalPrice": 299
+        }
+      ]
+    },
+    {
+      "id": "b9f7a84c-7fdd-4e38-9b83-e8c095951fab",
+      "customerEmail": "elangelzaskiel@gmail.com",
+      "customerName": "Christian Olivera (E2E Test)",
+      "customerPhone": "099123456",
+      "subtotal": 1700,
+      "discountAmount": 0,
+      "shippingCost": 150,
+      "total": 1850,
+      "status": "pago_rechazado",
+      "notes": "Simulación de compra real Mercado Pago Sandbox",
+      "createdAt": "2026-06-03T15:02:26.767Z",
+      "updatedAt": "2026-06-03T15:02:28.265Z",
+      "items": [
+        {
+          "id": "b895de6d-d9a0-4ef3-a4b1-e44f0b791011",
+          "productId": "10",
+          "productName": "Poncho Buzo Canguro Pijama Plush C/ Capucha Corderito",
+          "unitPrice": 850,
+          "quantity": 2,
+          "totalPrice": 1700
+        }
+      ]
+    },
+    {
+      "id": "1d887cdc-aed2-4ab0-a39c-e3bc979736cb",
+      "customerEmail": "cliente@tienda.com",
+      "customerName": "Christian olivera",
+      "customerPhone": "095085181",
+      "subtotal": 299,
+      "discountAmount": 0,
+      "shippingCost": 0,
+      "total": 299,
+      "status": "pedido_iniciado",
+      "notes": "Envío a Domicilio: Manzana: 107, Solar: 120, Localidad: Canelones, Dpto: Canelones | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-03T14:53:41.078Z",
+      "updatedAt": "2026-06-03T19:29:39.519Z",
+      "items": [
+        {
+          "id": "bec9c545-cad9-40ad-a880-949cbf21ed24",
+          "productId": "11",
+          "productName": "Media Panty Térmica Mujer Efecto Piel Con Corderito",
+          "sizeSelected": "L/XL",
+          "colorSelected": "Negro",
+          "unitPrice": 299,
+          "quantity": 1,
+          "totalPrice": 299
+        }
+      ]
+    },
+    {
+      "id": "52d49589-617c-442b-8ca0-db9ebdfb4155",
+      "customerEmail": "elangelzaskiel@gmail.com",
+      "customerName": "Christian Olivera (E2E Test)",
+      "customerPhone": "099123456",
+      "subtotal": 1700,
+      "discountAmount": 0,
+      "shippingCost": 150,
+      "total": 1850,
+      "status": "pago_rechazado",
+      "notes": "Simulación de compra real Mercado Pago Sandbox",
+      "createdAt": "2026-06-03T14:44:12.603Z",
+      "updatedAt": "2026-06-03T14:44:14.049Z",
+      "items": [
+        {
+          "id": "5f520051-caf5-4e7f-ad35-5885f1640d2c",
+          "productId": "10",
+          "productName": "Poncho Buzo Canguro Pijama Plush C/ Capucha Corderito",
+          "unitPrice": 850,
+          "quantity": 2,
+          "totalPrice": 1700
+        }
+      ]
+    },
+    {
+      "id": "4a2cc568-903d-4bd9-b154-ad1f64bb96e4",
+      "customerEmail": "elangelzaskiel@gmail.com",
+      "customerName": "Christian Olivera (E2E Test)",
+      "customerPhone": "099123456",
+      "subtotal": 1700,
+      "discountAmount": 0,
+      "shippingCost": 150,
+      "total": 1850,
+      "status": "pago_rechazado",
+      "notes": "Simulación de compra real Mercado Pago Sandbox",
+      "createdAt": "2026-06-03T14:43:42.680Z",
+      "updatedAt": "2026-06-03T14:43:44.097Z",
+      "items": [
+        {
+          "id": "7fd7a223-ad53-46cf-824e-0314a24e2a43",
+          "productId": "10",
+          "productName": "Poncho Buzo Canguro Pijama Plush C/ Capucha Corderito",
+          "unitPrice": 850,
+          "quantity": 2,
+          "totalPrice": 1700
+        }
+      ]
+    },
+    {
+      "id": "6e6eae5b-fe05-4188-9ad9-b4d96e4c5168",
+      "customerEmail": "cliente@tienda.com",
+      "customerName": "Christian olivera",
+      "customerPhone": "095085181",
+      "subtotal": 850,
+      "discountAmount": 0,
+      "shippingCost": 0,
+      "total": 850,
+      "status": "pedido_iniciado",
+      "notes": "Envío a Domicilio: Manzana: 10, Solar: 15, Localidad: Canelones, Dpto: Canelones | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-03T13:56:21.581Z",
+      "updatedAt": "2026-06-03T13:56:21.581Z",
+      "items": [
+        {
+          "id": "cb83374a-9ee8-41c0-a0e5-01efa4d461ae",
+          "productId": "14",
+          "variantId": "10f5ad53-a654-4be2-878d-653158196599",
+          "productName": "Soporte Para Tablet De Pared Alto Ranurado Anti Robo",
+          "sizeSelected": "PLA",
+          "colorSelected": "Negro",
+          "unitPrice": 850,
+          "quantity": 1,
+          "totalPrice": 850
+        }
+      ]
+    },
+    {
+      "id": "7c259d8e-12af-4d8e-8ce2-8168aa8d2d06",
+      "customerEmail": "cliente@tienda.com",
+      "customerName": "Christian olivera",
+      "customerPhone": "42017845",
+      "subtotal": 850,
+      "discountAmount": 0,
+      "shippingCost": 0,
+      "total": 850,
+      "status": "pedido_iniciado",
+      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-03T13:52:18.287Z",
+      "updatedAt": "2026-06-03T13:52:18.287Z",
+      "items": []
+    }
+  ]
 }

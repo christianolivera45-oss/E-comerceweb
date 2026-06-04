@@ -626,6 +626,7 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"synced" | "syncing" | "error">("synced");
   const [errorMessage, setErrorMessage] = useState("");
+  const [showMpAccessToken, setShowMpAccessToken] = useState(false);
 
   // Search & Navigation
   const [activeTab, setActiveTab] = useState<"storefront" | "admin" | "checkout">("storefront");
@@ -6624,13 +6625,27 @@ export default function App() {
                                   <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1">
                                     Token de Acceso (Access Token)
                                   </label>
-                                  <input
-                                    type="password"
-                                    placeholder="ej: APP_USR-492751947293-PROD..."
-                                    value={editingSettings.mercadopagoAccessToken || ""}
-                                    onChange={(e) => setEditingSettings({ ...editingSettings, mercadopagoAccessToken: e.target.value })}
-                                    className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white font-mono"
-                                  />
+                                  <div className="relative">
+                                    <input
+                                      type={showMpAccessToken ? "text" : "password"}
+                                      placeholder="ej: APP_USR-492751947293-PROD..."
+                                      value={editingSettings.mercadopagoAccessToken || ""}
+                                      onChange={(e) => setEditingSettings({ ...editingSettings, mercadopagoAccessToken: e.target.value })}
+                                      className="text-xs w-full pl-3 pr-10 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white font-mono"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowMpAccessToken(!showMpAccessToken)}
+                                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer"
+                                      title={showMpAccessToken ? "Ocultar token" : "Mostrar token"}
+                                    >
+                                      {showMpAccessToken ? (
+                                        <EyeOff className="h-4 w-4" />
+                                      ) : (
+                                        <Eye className="h-4 w-4" />
+                                      )}
+                                    </button>
+                                  </div>
                                 </div>
                                 <div>
                                   <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1 flex items-center gap-1">
@@ -6658,6 +6673,29 @@ export default function App() {
                                 </div>
                                 <span className="text-[8px] text-green-400 mt-2 block">✓ Integración dinámica y tipo de cambio listos para usarse</span>
                               </div>
+                            </div>
+
+                            {/* Botón directo de verificación y salvado de claves */}
+                            <div className="mt-3 pt-3 border-t border-dashed border-slate-150 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50 dark:bg-zinc-900/40 p-4 rounded-xl">
+                              <div className="text-[11px] text-zinc-550 dark:text-zinc-400 max-w-md">
+                                <span className="font-bold text-slate-800 dark:text-zinc-200 block mb-0.5">¿Ingresaste tus credenciales correctamente?</span>
+                                Haz click en el botón de la derecha para aplicar, guardar y validar tus claves de Mercado Pago de inmediato en la tienda.
+                              </div>
+                              <button
+                                type="button"
+                                id="btn-save-mercadopago-keys"
+                                onClick={() => {
+                                  const updatedState = { ...store, settings: editingSettings };
+                                  saveStateToServer(updatedState).then(() => {
+                                    showAdminToast("¡Aceptado! Credenciales de Mercado Pago guardadas con éxito.", "success");
+                                  });
+                                }}
+                                disabled={saving}
+                                className="w-full sm:w-auto shrink-0 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-extrabold text-xs rounded-xl shadow-md shadow-emerald-600/10 hover:shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                              >
+                                <CheckCircle2 className="h-4 w-4" />
+                                <span>{saving ? "Guardando..." : "Aceptar y Guardar Claves"}</span>
+                              </button>
                             </div>
                           </div>
                         )}

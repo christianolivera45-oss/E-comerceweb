@@ -790,7 +790,8 @@ export default function Checkout({
           // Send to official secure payment gateway
           window.location.href = data.initPoint;
         } else {
-          setErrorMessage(data.message || "Error al iniciar el pago con Mercado Pago.");
+          const detailMsg = data.detail ? `${data.message} Detalles: ${data.detail}` : (data.message || "Error al iniciar el pago con Mercado Pago.");
+          setErrorMessage(detailMsg);
           setIsProcessing(false);
         }
       } catch (err: any) {

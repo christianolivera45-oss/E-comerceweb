@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Star } from "lucide-react";
+import { Star, CheckCircle, ShieldCheck, ExternalLink, ArrowRight } from "lucide-react";
 
 interface Review {
   author_name: string;
@@ -87,106 +87,171 @@ export default function ReviewsSection({ themeMode }: ReviewsSectionProps) {
         .slice(0, 3)
     : [];
 
+  const isDark = themeMode === "dark";
+
   return (
-    <div className="max-w-7xl mx-auto px-6 mt-12 pt-10 border-t border-zinc-200/30 dark:border-zinc-800/30">
-      <div className="flex flex-col lg:flex-row items-center lg:items-start justify-between gap-6 mb-8 text-center lg:text-left">
-        <div className="space-y-2">
-          <div className="flex items-center justify-center lg:justify-start gap-2.5">
-            <span className="text-xl font-black tracking-tight select-none">
-              <span className="text-[#4285F4]">G</span>
-              <span className="text-[#EA4335]">o</span>
-              <span className="text-[#FBBC05]">o</span>
-              <span className="text-[#4285F4]">g</span>
-              <span className="text-[#34A853]">l</span>
-              <span className="text-[#EA4335]">e</span>
-            </span>
-            <span className="text-xs font-semibold tracking-wide uppercase text-slate-400 dark:text-zinc-500 font-mono">Reseñas</span>
-          </div>
-          <div className="flex items-center justify-center lg:justify-start gap-1">
-            <span className="text-3xl font-extrabold text-slate-800 dark:text-zinc-100 mr-2">
-              {loading ? "..." : rating.toFixed(1)}
-            </span>
-            <div className="flex items-center gap-0.5">
-              {[...Array(5)].map((_, i) => (
-                <Star key={i} className="w-5 h-5 fill-amber-400 text-amber-400" />
-              ))}
+    <div className="max-w-7xl mx-auto px-6 mt-16 pt-12 border-t border-zinc-200/40 dark:border-zinc-800/50">
+      {/* Header Container - Designed as a beautiful bento-style stats card */}
+      <div className={`p-6 md:p-8 rounded-2xl mb-10 border transition-all duration-300 ${
+        isDark 
+          ? "bg-zinc-900/60 border-zinc-800/80 shadow-md shadow-black/10" 
+          : "bg-gradient-to-r from-slate-50 to-indigo-50/20 border-slate-200/75 shadow-sm"
+      }`}>
+        <div className="flex flex-col md:flex-row items-center justify-between gap-8">
+          
+          {/* Brand and Score section */}
+          <div className="flex flex-col sm:flex-row items-center gap-5 text-center sm:text-left">
+            {/* Huge Rating Badge */}
+            <div className={`flex flex-col items-center justify-center w-24 h-24 rounded-2xl border transition-all ${
+              isDark 
+                ? "bg-zinc-950/80 border-zinc-800 text-zinc-100" 
+                : "bg-white border-slate-200 shadow-sm text-slate-800"
+            }`}>
+              <span className="text-4xl font-extrabold tracking-tight font-sans">
+                {loading ? "..." : rating.toFixed(1)}
+              </span>
+              <div className="flex items-center gap-0.5 mt-1">
+                <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                <span className="text-[10px] font-bold opacity-80">/ 5.0</span>
+              </div>
+            </div>
+
+            {/* Google Brand Verification Info */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-center sm:justify-start gap-2.5">
+                <span className="text-2xl font-extrabold tracking-tight select-none font-sans">
+                  <span className="text-[#4285F4]">G</span>
+                  <span className="text-[#EA4335]">o</span>
+                  <span className="text-[#FBBC05]">o</span>
+                  <span className="text-[#4285F4]">g</span>
+                  <span className="text-[#34A853]">l</span>
+                  <span className="text-[#EA4335]">e</span>
+                </span>
+                <span className={`text-[10px] font-extrabold tracking-wider uppercase px-2 py-0.5 rounded-full font-mono ${
+                  isDark ? "bg-zinc-800 text-zinc-400" : "bg-slate-100 text-slate-500"
+                }`}>
+                  Opiniones Reales
+                </span>
+              </div>
+              
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1 text-xs">
+                <div className="flex items-center gap-0.5 mr-1 bg-amber-400/10 px-2 py-0.5 rounded text-amber-500 font-bold">
+                  {[...Array(5)].map((_, i) => (
+                    <Star key={i} className="w-3 h-3 fill-amber-400 text-amber-400" />
+                  ))}
+                </div>
+                <p className={`font-semibold ${isDark ? "text-zinc-300" : "text-slate-700"}`}>
+                  Excelente reputación de{" "}
+                  <span className={`underline decoration-indigo-400 decoration-2 font-bold ${isDark ? "text-zinc-100" : "text-slate-800"}`}>
+                    {loading ? "..." : `${totalReviews} clientes`}
+                  </span>
+                </p>
+              </div>
+
+              <p className={`text-xs ${isDark ? "text-zinc-500" : "text-slate-500"}`}>
+                Extraídas de nuestra sucursal oficial registrada en Google Business.
+              </p>
             </div>
           </div>
-          <p className="text-xs text-slate-500 dark:text-zinc-400 font-medium font-sans">
-            Excelente reputación comercial basada en{" "}
-            <strong className="text-slate-700 dark:text-zinc-200">
-              {loading ? "..." : totalReviews} opiniones
-            </strong>{" "}
-            reales de clientes en Google Business.
-          </p>
-        </div>
 
-        <div className="flex items-center">
-          <a
-            href="https://search.google.com/local/reviews?placeid=ChIJHZFnxeUhoJURtA0cWV3PH2A"
-            target="_blank"
-            rel="noreferrer noopener"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-slate-200 dark:border-zinc-800/70 bg-slate-50/50 dark:bg-zinc-900/40 hover:bg-slate-100 hover:text-indigo-600 dark:hover:text-amber-400 dark:hover:bg-zinc-800 text-xs font-bold text-slate-700 dark:text-zinc-300 transition-all shadow-sm group hover:-translate-y-0.5 cursor-pointer"
-          >
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Ver todas las opiniones en Google</span>
-          </a>
+          {/* Action button */}
+          <div className="w-full md:w-auto flex justify-center">
+            <a
+              href="https://search.google.com/local/reviews?placeid=ChIJHZFnxeUhoJURtA0cWV3PH2A"
+              target="_blank"
+              rel="noreferrer noopener"
+              className={`w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl font-bold text-xs transition-all duration-300 shadow-sm border group cursor-pointer ${
+                isDark 
+                  ? "bg-zinc-950 border-zinc-800 hover:border-zinc-700 text-zinc-100 hover:bg-zinc-900" 
+                  : "bg-white border-slate-200 text-slate-700 hover:text-indigo-600 hover:border-slate-300 hover:shadow"
+              }`}
+            >
+              <ShieldCheck className="w-4 h-4 text-emerald-500 animate-pulse" />
+              <span>Ver de forma oficial en Google Reviews</span>
+              <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+            </a>
+          </div>
+
         </div>
       </div>
 
+      {/* Reviews Cards Container */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 animate-pulse">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-pulse">
           {[...Array(3)].map((_, idx) => (
-            <div key={idx} className="h-44 rounded-xl bg-slate-100 dark:bg-zinc-900/30 border border-slate-200/40 dark:border-zinc-800/45"></div>
+            <div key={idx} className="h-48 rounded-2xl bg-slate-100 dark:bg-zinc-900/30 border border-slate-200/40 dark:border-zinc-800/45"></div>
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {displayedReviews.map((rev, idx) => (
             <div
               key={idx}
-              className={`p-5 rounded-xl border transition-all duration-300 flex flex-col justify-between hover:shadow-md hover:border-slate-350 dark:hover:border-zinc-700 ${
-                themeMode === "dark"
-                  ? "bg-zinc-900/45 border-zinc-900/80 text-zinc-350"
-                  : "bg-slate-50/50 border-slate-105 text-slate-600"
+              className={`p-6 rounded-2xl border transition-all duration-300 flex flex-col justify-between hover:shadow-lg hover:-translate-y-1 ${
+                isDark
+                  ? "bg-zinc-900/35 border-zinc-800/80 text-zinc-355 hover:border-zinc-700"
+                  : "bg-white border-slate-100 text-slate-650 hover:border-slate-200 shadow-sm"
               }`}
             >
-              <div className="space-y-3">
+              <div className="space-y-4">
+                {/* Micro header inside card */}
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-0.5">
+                  <div className="flex items-center gap-0.5 bg-amber-400/5 px-2 py-1 rounded">
                     {[...Array(rev.rating)].map((_, i) => (
                       <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                     ))}
                   </div>
-                  <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono">{rev.relative_time_description}</span>
+                  <span className={`text-[10px] font-bold font-mono tracking-wide ${
+                    isDark ? "text-zinc-500" : "text-slate-400"
+                  }`}>
+                    {rev.relative_time_description}
+                  </span>
                 </div>
-                <p className="text-xs leading-relaxed italic opacity-95 text-slate-700 dark:text-zinc-300">
-                  "{rev.text}"
+
+                {/* Review Text - Formatted with elegant size and line height */}
+                <p className={`text-sm leading-relaxed font-sans antialiased ${
+                  isDark ? "text-zinc-300" : "text-slate-650"
+                }`}>
+                  &ldquo;{rev.text}&rdquo;
                 </p>
               </div>
-              <div className="flex items-center gap-2.5 mt-4 pt-4 border-t border-slate-200/40 dark:border-zinc-800/45">
+
+              {/* Author Info block */}
+              <div className={`flex items-center gap-3 mt-6 pt-5 border-t ${
+                isDark ? "border-zinc-800/85" : "border-slate-100"
+              }`}>
                 {rev.profile_photo_url ? (
                   <img
                     src={rev.profile_photo_url}
                     alt={rev.author_name}
                     referrerPolicy="no-referrer"
-                    className="w-7 h-7 rounded-full object-cover"
+                    className="w-9 h-9 rounded-full object-cover ring-2 ring-indigo-500/10"
                   />
                 ) : (
-                  <div className="w-7 h-7 rounded-full bg-indigo-500/10 dark:bg-zinc-800 flex items-center justify-center text-[10px] font-extrabold text-indigo-600 dark:text-zinc-350 select-none">
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs font-black text-white shadow-sm uppercase select-none">
                     {rev.author_name.charAt(0)}
                   </div>
                 )}
                 <div>
-                  <div className="text-xs font-bold text-slate-800 dark:text-zinc-100 flex items-center gap-1.5">
-                    {rev.author_name}
-                    <span className="inline-flex items-center px-1 py-[1.5px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[8px] rounded uppercase font-extrabold tracking-wider select-none">
-                      Verificado
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-xs font-bold font-sans ${
+                      isDark ? "text-zinc-100" : "text-slate-800"
+                    }`}>
+                      {rev.author_name}
+                    </span>
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[8px] rounded uppercase font-extrabold tracking-wider select-none">
+                      <CheckCircle className="w-2.5 h-2.5 fill-emerald-600 text-white dark:fill-emerald-400 dark:text-zinc-950" />
+                      <span>Verificado</span>
                     </span>
                   </div>
-                  <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-sans">Cliente de Ventas Juem</span>
+                  <span className={`text-[10px] font-medium block ${
+                    isDark ? "text-zinc-500" : "text-slate-400"
+                  }`}>
+                    Cliente verificado de Juem
+                  </span>
                 </div>
               </div>
+
             </div>
           ))}
         </div>

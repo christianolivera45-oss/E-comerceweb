@@ -164,7 +164,12 @@
     "showPromotionBanner": false,
     "mercadopagoPublicKey": "APP_USR-e6d3cee3-1595-4050-a254-e44d2104aeef",
     "mercadopagoAccessToken": "APP_USR-5703420117418329-060320-feecb712341ace1b22f0555c993c7a8f-1092985910",
-    "mercadopagoActive": true
+    "mercadopagoActive": true,
+    "googleReviewsSource": "api",
+    "googlePlacesApiKey": "AIzaSyA9su2jLs5C5agKtDlONc6QZQh7IJN0zwc",
+    "freeShippingActive": true,
+    "freeShippingMinAmount": 2000,
+    "freeShippingRegions": "Pinamar, Salinas, Marindia, Neptunia"
   },
   "products": [
     {

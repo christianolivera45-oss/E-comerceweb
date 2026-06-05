@@ -1,4 +1,4 @@
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect, useMemo, FormEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Search,
@@ -23,6 +23,7 @@ import {
   ShoppingCart,
   Image,
   Tag,
+  Truck,
   Key,
   Lock,
   ShoppingBag as CartIcon,
@@ -43,6 +44,7 @@ import {
   Menu,
   X,
   ChevronRight,
+  ChevronLeft,
   TrendingUp,
   TrendingDown,
   Upload,
@@ -71,11 +73,11 @@ import {
   Headphones,
   Sofa,
   CreditCard,
-  Star
+  Star,
+  MapPin
 } from "lucide-react";
 import { Product, SiteSettings, ShopState, CartItem, Category, Subcategory, ProductVariant, is3DProduct } from "./types";
 import ThemeStyles from "./components/ThemeStyles";
-import ReviewsSection from "./components/ReviewsSection";
 import ProductCard from "./components/ProductCard";
 import ProductSlider from "./components/ProductSlider";
 import ProductDetails from "./components/ProductDetails";
@@ -280,9 +282,18 @@ const DEFAULT_SETTINGS: SiteSettings = {
     }
   ],
   invoiceOptionActive: true,
+  freeShippingActive: true,
+  freeShippingMinAmount: 2000,
+  freeShippingRegions: "Pinamar, Salinas, Marindia, Neptunia",
   defaultFirstName: "Christian",
   defaultLastName: "Olivera",
-  defaultPhone: "095085181"
+  defaultPhone: "095085181",
+  googleReviewsSource: "custom",
+  googleReviewsRating: 4.9,
+  googleReviewsTotal: 184,
+  googleReviewsCustomList: [],
+  googleClientId: "",
+  googleClientSecret: ""
 };
 
 const ICON_LABELS: Record<string, string> = {
@@ -630,7 +641,7 @@ export default function App() {
 
   // Search & Navigation
   const [activeTab, setActiveTab] = useState<"storefront" | "admin" | "checkout">("storefront");
-  const [adminSection, setAdminSection] = useState<"general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales">("dashboard");
+  const [adminSection, setAdminSection] = useState<"general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales" | "reviews">("dashboard");
   const [mobileAdminMenuOpen, setMobileAdminMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -641,6 +652,7 @@ export default function App() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [scrolled, setScrolled] = useState(false);
+  const [currentBannerIdx, setCurrentBannerIdx] = useState(0);
 
   // Sorting & Filtering States
   const [sortBy, setSortBy] = useState<string>("featured");
@@ -672,7 +684,7 @@ export default function App() {
     }
   };
 
-  const navigateAdminSection = (section: "general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales") => {
+  const navigateAdminSection = (section: "general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales" | "reviews") => {
     setAdminSection(section);
     setEditingProduct(null);
     setIsNewProductMode(false);
@@ -719,6 +731,9 @@ export default function App() {
       else if (sub === "dashboard") setAdminSection("dashboard");
       else if (sub === "banner") setAdminSection("banner");
       else if (sub === "footer") setAdminSection("footer");
+      else if (sub === "payments") setAdminSection("payments");
+      else if (sub === "sales") setAdminSection("sales");
+      else if (sub === "reviews") setAdminSection("reviews");
       else setAdminSection("dashboard");
 
       // Verify session token integrity on every URL change
@@ -924,6 +939,11 @@ export default function App() {
 
   const [editingSettings, setEditingSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
 
+  const [googlePlaceSearchQuery, setGooglePlaceSearchQuery] = useState("");
+  const [googlePlaceSearchResults, setGooglePlaceSearchResults] = useState<any[]>([]);
+  const [googlePlaceSearchLoading, setGooglePlaceSearchLoading] = useState(false);
+  const [googlePlaceSearchError, setGooglePlaceSearchError] = useState("");
+
   // Fetch initial data and setup routing listeners
   useEffect(() => {
     fetchStoreData();
@@ -999,10 +1019,85 @@ export default function App() {
     };
   }, []);
 
+  // Google Reviews OAuth postMessage response listener
+  useEffect(() => {
+    const handleGoogleOAuthMessage = (event: MessageEvent) => {
+      const origin = event.origin;
+      // Allow AI Studio preview environment domains (*.run.app) or localhost
+      if (!origin.endsWith(".run.app") && !origin.includes("localhost")) {
+        return;
+      }
+
+      if (event.data?.type === "OAUTH_AUTH_SUCCESS") {
+        const payload = event.data.payload;
+        showAdminToast(`¡Sincronización Exitosa! Conectado como ${payload?.name || "Merchant Owner"}`, "success");
+        // Trigger a complete refresh from the server to pull the newly authenticated state
+        fetchStoreData();
+      }
+    };
+
+    window.addEventListener("message", handleGoogleOAuthMessage);
+    return () => {
+      window.removeEventListener("message", handleGoogleOAuthMessage);
+    };
+  }, []);
+
   // Reset scroll to top when changing views/pages for a smooth user experience as requested by the user
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [activeTab, adminSection, selectedProduct?.id, selectedCategory, selectedSubcategory]);
+
+  // Memoize top-bar slider dynamic slides for reactivity and performance
+  const bannerSlides = useMemo(() => {
+    const slides = [];
+    if (store.settings.showPromotionBanner && store.settings.promotionBannerText) {
+      slides.push({
+        id: "promo",
+        text: store.settings.promotionBannerText,
+        icon: <Tag className="h-3.5 w-3.5 inline shrink-0" />
+      });
+    }
+    if (store.settings.freeShippingActive !== false) {
+      const minAmount = store.settings.freeShippingMinAmount !== undefined ? store.settings.freeShippingMinAmount : 2000;
+      const regions = store.settings.freeShippingRegions || "Pinamar, Salinas, Marindia, Neptunia";
+      slides.push({
+        id: "shipping",
+        text: `🎁 ¡Envío GRATIS en compras mayores de $${minAmount} para ${regions}! Elige tu agencia favorita y nosotros lo cubrimos.`,
+        icon: <Truck className="h-4 w-4 inline shrink-0 text-emerald-300 animate-pulse" />
+      });
+    }
+    return slides;
+  }, [
+    store.settings.showPromotionBanner,
+    store.settings.promotionBannerText,
+    store.settings.freeShippingActive,
+    store.settings.freeShippingMinAmount,
+    store.settings.freeShippingRegions
+  ]);
+
+  // Auto cycle top header slides every 5 seconds
+  useEffect(() => {
+    if (bannerSlides.length <= 1) {
+      setCurrentBannerIdx(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setCurrentBannerIdx((prev) => (prev + 1) % bannerSlides.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [bannerSlides.length]);
+
+  const activeBannerIdx = currentBannerIdx >= bannerSlides.length ? 0 : currentBannerIdx;
+
+  const handlePrevBanner = () => {
+    if (bannerSlides.length <= 1) return;
+    setCurrentBannerIdx((prev) => (prev - 1 + bannerSlides.length) % bannerSlides.length);
+  };
+
+  const handleNextBanner = () => {
+    if (bannerSlides.length <= 1) return;
+    setCurrentBannerIdx((prev) => (prev + 1) % bannerSlides.length);
+  };
 
   // Dynamic Tab Title and Favicon Synchronization based on admin settings
   useEffect(() => {
@@ -1357,6 +1452,19 @@ export default function App() {
   };
 
   // CRUD handlers - Coupons
+  const handleGenerateRandomCouponCode = () => {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const prefixes = ["JUEM", "DESCUENTO", "PROMO", "SALE", "COUPON", "UYU", "REGALO"];
+    const randomPrefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+    let randomSuffix = "";
+    for (let i = 0; i < 4; i++) {
+      randomSuffix += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const code = `${randomPrefix}${randomSuffix}`;
+    setNewCouponCode(code);
+    showAdminToast(`Código generado: ${code}`, "success");
+  };
+
   const handleAddCoupon = (e: FormEvent) => {
     e.preventDefault();
     const code = newCouponCode.trim().toUpperCase();
@@ -1692,6 +1800,62 @@ export default function App() {
     saveStateToServer(updatedState);
   };
 
+  // Google OAuth popup flow initiator
+  const handleGoogleConnect = async () => {
+    try {
+      const res = await fetch("/api/auth/google-reviews/url");
+      if (!res.ok) {
+        showAdminToast("Fallo al obtener la ruta de Google de tu servidor.", "error");
+        return;
+      }
+      const { url } = await res.json();
+      
+      const authWindow = window.open(
+        url,
+        "google_oauth_popup",
+        "width=580,height=720,status=no,resizable=yes,scrollbars=yes"
+      );
+
+      if (!authWindow) {
+        showAdminToast("⚠️ Ventana emergente bloqueada. Por favor, habilita las ventanas emergentes en tu navegador para conectar Tu Comercio.", "error");
+      }
+    } catch (err) {
+      console.error("Error initiating Google OAuth workflow:", err);
+      showAdminToast("Ocurrió un error al contactar al servidor de autenticación Google.", "error");
+    }
+  };
+
+  // Google Place Search from official Google Maps Finder
+  const handleSearchGooglePlace = async () => {
+    if (!googlePlaceSearchQuery.trim()) {
+      setGooglePlaceSearchError("Por favor ingresa el nombre de tu negocio para buscarlo.");
+      return;
+    }
+    setGooglePlaceSearchLoading(true);
+    setGooglePlaceSearchError("");
+    setGooglePlaceSearchResults([]);
+    try {
+      const res = await fetch(`/api/google-places/search?query=${encodeURIComponent(googlePlaceSearchQuery)}`);
+      if (!res.ok) {
+        throw new Error("Respuesta de servidor inválida al buscar el local.");
+      }
+      const data = await res.json();
+      if (data.success && Array.isArray(data.results)) {
+        setGooglePlaceSearchResults(data.results);
+        if (data.results.length === 0) {
+          setGooglePlaceSearchError("No se encontraron coincidencias para este comercio.");
+        }
+      } else {
+        setGooglePlaceSearchError(data.message || "Error al buscar el local en Google Maps.");
+      }
+    } catch (err: any) {
+      console.error("Error searching Google Place ID:", err);
+      setGooglePlaceSearchError("Ocurrió un error de conexión al buscar en Google Maps. Asegúrate de configurar la Clave API de Google Places primero.");
+    } finally {
+      setGooglePlaceSearchLoading(false);
+    }
+  };
+
   // Image Helper templates
   const UNSPLASH_TEMPLATES = [
     { title: "Ropa / Moda 1", url: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=800&q=80" },
@@ -1839,11 +2003,64 @@ export default function App() {
             ? "bg-white/80 border-b border-slate-200 backdrop-blur-md shadow-md shadow-slate-100/70" 
             : "bg-white border-b border-slate-200 shadow-sm"
       }`}>
-        {/* Top Banner Message for Promotions */}
-        {store.settings.showPromotionBanner && store.settings.promotionBannerText && (
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-2 px-4 text-center text-xs font-semibold relative z-30 flex items-center justify-center gap-2">
-            <Tag className="h-3 w-3 inline" />
-            <span>{store.settings.promotionBannerText}</span>
+        {/* Top Banner Message for Promotions & Free Shipping Slider */}
+        {bannerSlides.length > 0 && (
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white h-9 px-4 md:px-12 text-center text-[11px] md:text-xs font-semibold relative z-30 flex items-center justify-between overflow-hidden font-sans group">
+            {/* Left Manual Arrow */}
+            {bannerSlides.length > 1 && (
+              <button 
+                onClick={handlePrevBanner}
+                className="absolute left-1.5 md:left-3 p-1 rounded-full text-white bg-white/5 hover:bg-white/15 hover:scale-105 active:scale-95 transition cursor-pointer shrink-0 z-40 select-none opacity-80 group-hover:opacity-100"
+                title="Promoción Anterior"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+            )}
+
+            {/* Slider Content Frame */}
+            <div className="flex-1 h-full flex items-center justify-center">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeBannerIdx}
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -15 }}
+                  transition={{ duration: 0.35, ease: "easeInOut" }}
+                  className="flex items-center justify-center gap-2 w-full h-full pb-1.5"
+                >
+                  {bannerSlides[activeBannerIdx] && bannerSlides[activeBannerIdx].icon}
+                  <span className="truncate max-w-[70vw] sm:max-w-[75vw] md:max-w-3xl select-all pointer-events-auto">
+                    {bannerSlides[activeBannerIdx] && bannerSlides[activeBannerIdx].text}
+                  </span>
+                </motion.div>
+              </AnimatePresence>
+            </div>
+
+            {/* Right Manual Arrow */}
+            {bannerSlides.length > 1 && (
+              <button 
+                onClick={handleNextBanner}
+                className="absolute right-1.5 md:right-3 p-1 rounded-full text-white bg-white/5 hover:bg-white/15 hover:scale-105 active:scale-95 transition cursor-pointer shrink-0 z-40 select-none opacity-80 group-hover:opacity-100"
+                title="Siguiente Promoción"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            )}
+
+            {/* Pagination dots (bottom tiny bars) */}
+            {bannerSlides.length > 1 && (
+              <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-40 select-none">
+                {bannerSlides.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setCurrentBannerIdx(idx)}
+                    className={`h-0.5 rounded-full transition-all duration-300 cursor-pointer ${
+                      idx === activeBannerIdx ? "w-4 bg-white" : "w-1.5 bg-white/40 hover:bg-white/70"
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -2075,8 +2292,8 @@ export default function App() {
     {/* Dynamic Spacer to prevent content from slipping under fixed navbar */}
     <div 
       className={
-        store.settings.showPromotionBanner && store.settings.promotionBannerText
-          ? "h-[88px] lg:h-[100px]"
+        bannerSlides.length > 0
+          ? "h-[92px] lg:h-[100px]"
           : "h-[56px] lg:h-[64px]"
       }
     />
@@ -2656,8 +2873,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Google Business Real Commercial Reputation & Reviews Section */}
-            <ReviewsSection themeMode={store.settings.themeMode} />
+            {/* Google Business Real Commercial Reputation & Reviews Section Disabled */}
 
             <div className="max-w-7xl mx-auto px-6 mt-8 pt-8 border-t border-zinc-800/10 text-center text-[11px] space-y-2">
               <p className="leading-relaxed opacity-75">
@@ -2941,6 +3157,18 @@ export default function App() {
               </button>
 
               <button
+                onClick={() => navigateAdminSection("reviews")}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
+                  adminSection === "reviews"
+                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
+                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                }`}
+              >
+                <Star className="h-4 w-4 text-amber-400 fill-amber-400" />
+                <span>Opiniones Google ⭐</span>
+              </button>
+
+              <button
                 onClick={() => navigateAdminSection("security")}
                 className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
                   adminSection === "security"
@@ -2998,10 +3226,11 @@ export default function App() {
                   {adminSection === "footer" && "Configuración de Columnas del Pie de Página"}
                   {adminSection === "products" && "Catálogo General de Productos"}
                   {adminSection === "categories" && "Configuración de Categorías de Tienda"}
-                  {adminSection === "promos" && "Promociones y Administrador de Cupones"}
+                  {adminSection === "promos" && "Cupones y Descuentos"}
                   {adminSection === "security" && "Seguridad y Control de Acceso"}
                   {adminSection === "stock" && "Control y Alertas de Stock Bajo"}
                   {adminSection === "payments" && "Administración de Métodos de Pago (Uruguay)"}
+                  {adminSection === "reviews" && "Ficha de Opiniones de Google Maps y Reputación"}
                 </h2>
                 <p className="text-slate-500 dark:text-zinc-400 text-xs">
                   Modifica los contenidos de tu tienda en tiempo real. Los cambios se sincronizarán directamente con tu base de datos central sin tocar código.
@@ -6144,54 +6373,128 @@ export default function App() {
                 {/* 6. PROMOTIONS AND DISCOUNTS PAGE */}
                 {adminSection === "promos" && (
                   <div className="space-y-4">
+                    {/* General Promotion banner config */}
                     <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4">
-                    <div className="flex items-center gap-2 border-b border-zinc-800/10 dark:border-zinc-800 pb-3 mb-2">
-                      <Tag className="h-4 w-4 text-amber-500" />
-                      <h3 className="font-bold text-sm text-slate-900 dark:text-white">Sección de Promociones & Cupones</h3>
-                    </div>
+                      <div className="flex items-center gap-2 border-b border-zinc-800/10 dark:border-zinc-800 pb-3 mb-2">
+                        <Tag className="h-4 w-4 text-amber-500" />
+                        <h3 className="font-bold text-sm text-slate-900 dark:text-white">Conf. de Cintillo de Descuento (Barra Superior)</h3>
+                      </div>
 
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs leading-relaxed">
-                      <div>
-                        <strong>¿Cómo funcionan los cupones?</strong> Puedes otorgar a tus clientes el cupón <strong>APEX50</strong> o <strong>DESCUENTO10</strong> para simular un 10% de descuento directo en el importe total de sus pedidos antes de realizar la compra por WhatsApp.
+                      <div className="flex items-center justify-between p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs leading-relaxed">
+                        <div>
+                          <strong>¿Cómo funciona el slider superior?</strong> Los cintillos activos se alternan automáticamente cada 5 segundos en la parte superior del eCommerce, informando a los clientes sobre cupones de descuento y envíos sin costo.
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-semibold text-slate-850 dark:text-zinc-200">Activar Cintillo de Promoción General</span>
+                            <span className="text-[10px] text-zinc-400">Habilita un mensaje flotante con texto personalizado o cupones de tu elección.</span>
+                          </div>
+                          
+                          <button
+                            type="button"
+                            onClick={() => setEditingSettings({
+                              ...editingSettings,
+                              showPromotionBanner: editingSettings.showPromotionBanner === false ? true : false
+                            })}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              editingSettings.showPromotionBanner !== false ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-zinc-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                editingSettings.showPromotionBanner !== false ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {editingSettings.showPromotionBanner !== false && (
+                          <div className="space-y-2 animate-fade-in">
+                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Texto de Ofertas & Descuentos en Barra Superior</label>
+                            <input
+                              type="text"
+                              value={editingSettings.promotionBannerText || ""}
+                              onChange={(e) => setEditingSettings({ ...editingSettings, promotionBannerText: e.target.value })}
+                              className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
+                              placeholder="p.ej. 🚚 ¡ENVÍO GRATUITO en compras superiores a $50! Código: JUEM50"
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id="showPromoBannerCheck"
-                          checked={editingSettings.showPromotionBanner}
-                          onChange={(e) => setEditingSettings({ ...editingSettings, showPromotionBanner: e.target.checked })}
-                          className="rounded border-zinc-700 bg-zinc-900 text-indigo-500 focus:ring-0 cursor-pointer h-4 w-4"
-                        />
-                        <label htmlFor="showPromoBannerCheck" className="text-xs text-zinc-300 font-semibold select-none cursor-pointer">
-                          Mostrar barra de promoción cintillo superior en todo el eCommerce
-                        </label>
+                    {/* Free shipping banner config */}
+                    <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4">
+                      <div className="flex items-center gap-2 border-b border-zinc-800/10 dark:border-zinc-800 pb-3 mb-2">
+                        <Truck className="h-4 w-4 text-emerald-500" />
+                        <h3 className="font-bold text-sm text-slate-900 dark:text-white">Conf. de Cintillo de Envío Gratis por Zonas</h3>
                       </div>
 
-                      <div>
-                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Texto de Ofertas & Descuentos en Barra Superior</label>
-                        <input
-                          type="text"
-                          value={editingSettings.promotionBannerText}
-                          onChange={(e) => setEditingSettings({ ...editingSettings, promotionBannerText: e.target.value })}
-                          className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
-                          placeholder="p.ej. ¡Envío gratuito en compras superiores a $50!"
-                        />
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-semibold text-slate-850 dark:text-zinc-200">Activar Cintillo y Lógica de Envío Gratis</span>
+                            <span className="text-[10px] text-zinc-400">Calcula y aplica automáticamente el beneficio si la localidad califica al superar el monto mínimo.</span>
+                          </div>
+                          
+                          <button
+                            type="button"
+                            onClick={() => setEditingSettings({
+                              ...editingSettings,
+                              freeShippingActive: editingSettings.freeShippingActive === false ? true : false
+                            })}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              editingSettings.freeShippingActive !== false ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-zinc-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                editingSettings.freeShippingActive !== false ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {editingSettings.freeShippingActive !== false && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in pt-2 border-t border-slate-100 dark:border-zinc-800/60 font-sans">
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Monto de Compra Mínimo ($)</label>
+                              <input
+                                type="number"
+                                value={editingSettings.freeShippingMinAmount !== undefined ? editingSettings.freeShippingMinAmount : 2000}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, freeShippingMinAmount: Number(e.target.value) })}
+                                placeholder="Ej: 2000"
+                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-slate-50 dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Zonas/Localidades con Envío Gratis (Separadas por comas)</label>
+                              <input
+                                type="text"
+                                value={editingSettings.freeShippingRegions || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, freeShippingRegions: e.target.value })}
+                                placeholder="Ej: Pinamar, Salinas, Marindia, Neptunia"
+                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-slate-50 dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                              />
+                              <p className="text-[9px] text-zinc-400 dark:text-zinc-500 mt-1.5 leading-tight">Cualquier compra con localidad que figure en esta lista recibirá Envío Gratis si supera el monto.</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="pt-4 flex justify-end border-t border-slate-100 dark:border-zinc-850">
+                        <button
+                          onClick={handleSaveSettings}
+                          disabled={saving}
+                          className="py-2.5 px-6 bg-blue-600 text-white rounded-lg font-semibold text-xs transition-all hover:bg-blue-700 hover:scale-[1.01] cursor-pointer"
+                        >
+                          <span>{saving ? "Salvando..." : "Guardar Configuraciones de Cintillo"}</span>
+                        </button>
                       </div>
                     </div>
-
-                    <div className="pt-4 flex justify-end">
-                      <button
-                        onClick={handleSaveSettings}
-                        disabled={saving}
-                        className="py-2.5 px-6 bg-blue-600 text-white rounded-lg font-semibold text-xs transition-all hover:bg-blue-700 hover:scale-[1.01] cursor-pointer"
-                      >
-                        <span>{saving ? "Salvando..." : "Guardar Promociones"}</span>
-                      </button>
-                    </div>
-                  </div>
 
                   {/* Dynamic coupon CRUD card */}
                   <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4">
@@ -6202,7 +6505,17 @@ export default function App() {
 
                     <form onSubmit={handleAddCoupon} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end bg-slate-50 dark:bg-zinc-905/30 p-4 rounded-xl border border-slate-100 dark:border-zinc-850/40">
                       <div>
-                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Código Único (PK/Code)</label>
+                        <div className="flex items-center justify-between gap-1 mb-1.5">
+                          <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Código Único (PK/Code)</label>
+                          <button
+                            type="button"
+                            onClick={handleGenerateRandomCouponCode}
+                            className="text-[9px] font-bold text-indigo-500 hover:text-indigo-600 bg-indigo-500/15 hover:bg-indigo-500/25 px-2 py-0.5 rounded transition cursor-pointer select-none"
+                            title="Generar Código Aleatorio"
+                          >
+                            ⚡ Auto Generar
+                          </button>
+                        </div>
                         <input
                           type="text"
                           required
@@ -7076,7 +7389,64 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* 4. DESTINATARIO PREESTABLECIDO */}
+                      {/* 4. ENVÍO GRATUITO CONFIGURABLE */}
+                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-150 dark:border-zinc-850 rounded-2xl space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl">🎁</span>
+                            <div>
+                              <h4 className="font-bold text-sm text-slate-800 dark:text-zinc-200">Envío Gratis por Zona</h4>
+                              <p className="text-[10px] text-zinc-450 dark:text-zinc-500 font-medium font-sans">Configura un monto mínimo de compra y las zonas/localidades que acceden al envío gratuito.</p>
+                            </div>
+                          </div>
+                          
+                          {/* Toggle switch for Free Shipping */}
+                          <button
+                            type="button"
+                            onClick={() => setEditingSettings({
+                              ...editingSettings,
+                              freeShippingActive: editingSettings.freeShippingActive === false ? true : false
+                            })}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                              editingSettings.freeShippingActive !== false ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-zinc-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                editingSettings.freeShippingActive !== false ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {editingSettings.freeShippingActive !== false && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-zinc-800/60 font-sans">
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Monto de Compra Mínimo ($)</label>
+                              <input
+                                type="number"
+                                value={editingSettings.freeShippingMinAmount !== undefined ? editingSettings.freeShippingMinAmount : 2000}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, freeShippingMinAmount: Number(e.target.value) })}
+                                placeholder="Ej: 2000"
+                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Zonas con Envío Gratis (Separado por comas)</label>
+                              <input
+                                type="text"
+                                value={editingSettings.freeShippingRegions || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, freeShippingRegions: e.target.value })}
+                                placeholder="Ej: Pinamar, Salinas, Marindia, Neptunia"
+                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                              />
+                              <p className="text-[9px] text-zinc-400 dark:text-zinc-500 mt-1.5 leading-tight">Cualquier entrega en la zona de Canelones que figure en este campo recibirá Envío Gratis si el subtotal supera el monto indicado.</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 5. DESTINATARIO PREESTABLECIDO */}
                       <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-150 dark:border-zinc-850 rounded-2xl space-y-4">
                         <div className="flex items-center gap-3">
                           <span className="text-2xl">👤</span>
@@ -7133,6 +7503,607 @@ export default function App() {
                         <span>Sincronizar y Guardar Cambios de Carrito</span>
                       </button>
                     </div>
+                  </div>
+                )}
+
+                {/* 9.5 GOOGLE REVIEWS SETTINGS */}
+                {adminSection === "reviews" && (
+                  <div className="space-y-6 animate-fade-in select-none">
+                    <div className="p-6 bg-slate-55 rounded-3xl border border-slate-150 dark:bg-zinc-950/40 dark:border-zinc-850/50 space-y-4">
+                      
+                      {/* Banner Info */}
+                      <div className="flex gap-4 items-start pb-4 border-b border-slate-150 dark:border-zinc-850">
+                        <div className="p-3 bg-amber-500/10 text-amber-500 rounded-2xl shrink-0">
+                          <Star className="w-6 h-6 fill-amber-500 text-amber-500" />
+                        </div>
+                        <div className="space-y-1">
+                          <h3 className="font-extrabold text-base text-slate-800 dark:text-zinc-100">Configuración de Opiniones de Google</h3>
+                          <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed">
+                            Aumenta drásticamente las ventas de tu tienda mostrando pruebas sociales reales y creíbles de tus clientes de Uruguay. Puedes sincronizar opiniones reales desde Google Maps o personalizar tu propia lista de testimonios de confianza con fotos de perfil personalizadas.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Origen Selector */}
+                      <div className="space-y-3">
+                        <label className="block text-[11px] font-extrabold uppercase tracking-widest text-slate-500 dark:text-zinc-400">
+                          Origen de las Opiniones
+                        </label>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {/* Option Custom */}
+                          <button
+                            type="button"
+                            onClick={() => setEditingSettings({ ...editingSettings, googleReviewsSource: "custom" })}
+                            className={`p-4 rounded-2xl border text-left flex items-start gap-3 transition-all cursor-pointer ${
+                              (editingSettings.googleReviewsSource || "custom") === "custom"
+                                ? "border-indigo-500 bg-indigo-500/5 ring-1 ring-indigo-500/10"
+                                : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-850"
+                            }`}
+                          >
+                            <span className="w-5 h-5 rounded-full border-1.5 flex items-center justify-center border-slate-350 dark:border-zinc-650 mt-0.5">
+                              {(editingSettings.googleReviewsSource || "custom") === "custom" && (
+                                <span className="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
+                              )}
+                            </span>
+                            <div className="space-y-0.5">
+                              <span className="font-extrabold text-xs block text-slate-800 dark:text-zinc-100">
+                                Manuales / Lista de Alta Conversión
+                              </span>
+                              <span className="text-[10px] text-slate-500 dark:text-zinc-400 block leading-tight">
+                                Testimonios premium pre-elaborados mencionando productos reales de Uruguay. Optimiza las ventas sin depender de APIs de terceros.
+                              </span>
+                            </div>
+                          </button>
+
+                          {/* Option API */}
+                          <button
+                            type="button"
+                            onClick={() => setEditingSettings({ ...editingSettings, googleReviewsSource: "api" })}
+                            className={`p-4 rounded-2xl border text-left flex items-start gap-3 transition-all cursor-pointer ${
+                              editingSettings.googleReviewsSource === "api"
+                                ? "border-indigo-500 bg-indigo-500/5 ring-1 ring-indigo-500/10"
+                                : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-850"
+                            }`}
+                          >
+                            <span className="w-5 h-5 rounded-full border-1.5 flex items-center justify-center border-slate-350 dark:border-zinc-650 mt-0.5">
+                              {editingSettings.googleReviewsSource === "api" && (
+                                <span className="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
+                              )}
+                            </span>
+                            <div className="space-y-0.5">
+                              <span className="font-extrabold text-xs block text-slate-800 dark:text-zinc-100">
+                                Sincronización Tiempo Real Google Places API
+                              </span>
+                              <span className="text-[10px] text-slate-500 dark:text-zinc-400 block leading-tight">
+                                Conecta directamente tu comercio de Google My Business a través de la API oficial de Google Maps para traer opiniones de tu local físico.
+                              </span>
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Custom Mode Extra Settings */}
+                      {(editingSettings.googleReviewsSource || "custom") === "custom" && (
+                        <div className="space-y-4 pt-4 border-t border-slate-150/50 dark:border-zinc-850/60">
+                          <label className="block text-[11px] font-black uppercase tracking-widest text-indigo-500">
+                            Estadísticas Sembradas de la Tienda
+                          </label>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-500 dark:text-zinc-400">
+                                Calificación General Promedio
+                              </label>
+                              <input
+                                type="number"
+                                step="0.1"
+                                min="1.0"
+                                max="5.0"
+                                value={editingSettings.googleReviewsRating ?? 4.9}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, googleReviewsRating: parseFloat(e.target.value) || 4.9 })}
+                                className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-500 dark:text-zinc-400">
+                                Cantidad Total de Opiniones
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={editingSettings.googleReviewsTotal ?? 184}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, googleReviewsTotal: parseInt(e.target.value) || 184 })}
+                                className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* API Keys Configuration Mode */}
+                      {editingSettings.googleReviewsSource === "api" && (
+                        <div className="space-y-4 pt-4 border-t border-slate-150/50 dark:border-zinc-850/60 animate-fade-in">
+                          <label className="block text-[11px] font-black uppercase tracking-widest text-emerald-500 flex items-center gap-1">
+                            <Sliders className="w-3.5 h-3.5" />
+                            <span>Credenciales de API de Google Maps & Google Cloud</span>
+                          </label>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-500 dark:text-zinc-400">
+                                Clave API de Google Places (Places API Key)
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="AIzaSy..."
+                                value={editingSettings.googlePlacesApiKey || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, googlePlacesApiKey: e.target.value })}
+                                className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-500 dark:text-zinc-400">
+                                Google Place ID (Identificador de Local)
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="p.ej. ChIJHZFnxeUhoJURtA0cWV3PH2A"
+                                value={editingSettings.googlePlaceId || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, googlePlaceId: e.target.value })}
+                                className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Google Maps Place Finder Widget */}
+                          <div className="p-4 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/40 space-y-3">
+                            <span className="block text-[10px] font-extrabold uppercase tracking-widest text-indigo-500 flex items-center gap-1.5">
+                              <MapPin className="w-3.5 h-3.5" />
+                              <span>Buscador de Negocios en Google Maps (Place Finder / Buscador de ID)</span>
+                            </span>
+                            <p className="text-[10px] text-slate-500 dark:text-zinc-400 leading-normal font-sans">
+                              Escribe el nombre comercial de tu local físico (por ejemplo, <strong>Ventas Juem Montevideo</strong> o tu nombre registrado) tal como figura en Google Maps para buscar tu Place ID oficial de inmediato.
+                            </p>
+                            
+                            <div className="flex gap-2 font-sans">
+                              <input
+                                type="text"
+                                placeholder="Escribe el nombre de tu local..."
+                                value={googlePlaceSearchQuery}
+                                onChange={(e) => setGooglePlaceSearchQuery(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    handleSearchGooglePlace();
+                                  }
+                                }}
+                                className="flex-1 px-3 py-1.5 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                              />
+                              <button
+                                type="button"
+                                onClick={handleSearchGooglePlace}
+                                disabled={googlePlaceSearchLoading}
+                                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-600/40 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                              >
+                                {googlePlaceSearchLoading ? (
+                                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Search className="w-3.5 h-3.5" />
+                                )}
+                                <span>Buscar Local</span>
+                              </button>
+                            </div>
+
+                            {googlePlaceSearchError && (
+                              <p className="text-[10.5px] text-red-500 font-medium font-sans">⚠️ {googlePlaceSearchError}</p>
+                            )}
+
+                            {googlePlaceSearchResults.length > 0 && (
+                              <div className="space-y-1.5 pt-1.5 max-h-[190px] overflow-y-auto pr-1 font-sans">
+                                <span className="block text-[9px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">
+                                  Haz clic en tu local comercial para enlazarlo:
+                                </span>
+                                {googlePlaceSearchResults.map((candidate: any) => (
+                                  <button
+                                    key={candidate.place_id}
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingSettings({
+                                        ...editingSettings,
+                                        googlePlaceId: candidate.place_id
+                                      });
+                                      showAdminToast(`ID de local seleccionado: ${candidate.name}`, "success");
+                                    }}
+                                    className={`w-full p-3 rounded-xl border text-left flex flex-col gap-0.5 transition-all cursor-pointer ${
+                                      editingSettings.googlePlaceId === candidate.place_id
+                                        ? "border-emerald-500 bg-emerald-500/5 dark:bg-emerald-500/10 ring-1 ring-emerald-500/30"
+                                        : "border-slate-150 dark:border-zinc-800 bg-white dark:bg-zinc-950 hover:bg-slate-50 dark:hover:bg-zinc-900"
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between w-full gap-2 font-sans">
+                                      <span className="font-extrabold text-[11px] text-slate-800 dark:text-zinc-200">
+                                        {candidate.name}
+                                      </span>
+                                      {candidate.rating && (
+                                        <span className="flex items-center gap-0.5 text-[10px] text-amber-500 font-extrabold shrink-0">
+                                          ⭐ {candidate.rating}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="text-[9.5px] text-slate-500 dark:text-zinc-400 block truncate leading-tight">
+                                      {candidate.formatted_address}
+                                    </span>
+                                    <span className="text-[9px] text-indigo-500 font-mono block mt-0.5 truncate bg-indigo-500/5 dark:bg-indigo-500/10 px-1.5 py-0.5 rounded w-fit">
+                                      ID: {candidate.place_id}
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                            <div className="space-y-1.5">
+                              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-500 dark:text-zinc-400">
+                                ID de Cliente Google OAuth (Client ID)
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="p.ej. 636443717801-..."
+                                value={editingSettings.googleClientId || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, googleClientId: e.target.value })}
+                                className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-500 dark:text-zinc-400">
+                                Secreto de Cliente Google OAuth (Client Secret)
+                              </label>
+                              <input
+                                type="password"
+                                placeholder="••••••••••••••••••••"
+                                value={editingSettings.googleClientSecret || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, googleClientSecret: e.target.value })}
+                                className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Connection Card Section */}
+                          <div className="p-4 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/60 space-y-4">
+                            <span className="block text-[10px] font-extrabold uppercase tracking-widest text-slate-500 dark:text-zinc-400">
+                              Estado de Sincronización Google My Business
+                            </span>
+
+                            {editingSettings.googleMyBusinessConnected ? (
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
+                                <div className="flex items-center gap-3">
+                                  {editingSettings.googleMerchantPicture ? (
+                                    <img
+                                      src={editingSettings.googleMerchantPicture}
+                                      alt="Google Merchant profile"
+                                      className="w-10 h-10 rounded-full border border-emerald-500/35 object-cover"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  ) : (
+                                    <div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-extrabold text-xs">
+                                      {(editingSettings.googleMerchantName || "M").charAt(0).toUpperCase()}
+                                    </div>
+                                  )}
+                                  <div className="space-y-0.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-extrabold text-xs text-slate-800 dark:text-zinc-100">
+                                        {editingSettings.googleMerchantName || "Comercio Vinculado"}
+                                      </span>
+                                      <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-extrabold text-[8px] uppercase tracking-wider flex items-center gap-0.5">
+                                        <CheckCircle2 className="w-2 h-2" />
+                                        <span>Enlazado</span>
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] text-slate-500 dark:text-zinc-400 block font-mono">
+                                      {editingSettings.googleMerchantEmail || "google-my-business@gmail.com"}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingSettings({
+                                      ...editingSettings,
+                                      googleMyBusinessConnected: false,
+                                      googleMerchantName: "",
+                                      googleMerchantEmail: "",
+                                      googleMerchantPicture: ""
+                                    });
+                                    showAdminToast("Se ha desenlazado la cuenta de Google My Business.", "neutral");
+                                  }}
+                                  className="px-3 py-1.5 rounded-xl border border-red-200 dark:border-red-900/40 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20 text-[10px] font-bold transition-all cursor-pointer"
+                                >
+                                  Desconectar Cuenta
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+                                <div className="space-y-0.5">
+                                  <span className="font-extrabold text-xs text-slate-800 dark:text-zinc-100 block">
+                                    Cuenta Desconectada
+                                  </span>
+                                  <span className="text-[10px] text-slate-500 dark:text-zinc-400 block max-w-md leading-relaxed">
+                                    Haz clic en el botón de la derecha para conectarte con OAuth y verificar la reputación de tu local.
+                                  </span>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={handleGoogleConnect}
+                                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[11px] font-extrabold tracking-wide uppercase transition-all shadow-md shadow-indigo-600/15 cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+                                >
+                                  <RefreshCw className="w-3.5 h-3.5" />
+                                  <span>Conectar con Google</span>
+                                </button>
+                              </div>
+                            )}
+
+                            {/* URIs Instruction Alert */}
+                            <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-800 text-[10px] leading-relaxed text-slate-500 dark:text-zinc-400 space-y-1 font-sans">
+                              <span className="font-extrabold text-slate-700 dark:text-zinc-300 block uppercase tracking-wide">
+                                📋 URI de Redirección Autorizada para Google Console:
+                              </span>
+                              <p className="font-mono bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800/80 p-2 rounded-lg text-slate-800 dark:text-zinc-200 select-all overflow-x-auto text-[9.5px]">
+                                {window.location.protocol}//{window.location.host}/auth/callback/
+                              </p>
+                              <p className="leading-tight pt-1">
+                                Para que la conexión de Google My Business funcione, debes copiar este enlace exacto y pegarlo dentro de la pestaña de <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" className="underline font-bold text-indigo-600 dark:text-indigo-400">Google Cloud Credentials</a> en tu sección de <strong>"URIs de redireccionamiento autorizados"</strong>.
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="p-3.5 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400 text-xs leading-relaxed space-y-1">
+                            <span className="font-bold block">💡 ¿Dónde consigo mi Google Place ID?</span>
+                            <p>
+                              Puedes buscar el Place ID de cualquier comercio de Google Maps usando la herramienta oficial gratuita:{" "}
+                              <a 
+                                href="https://developers.google.com/maps/documentation/places/web-service/place-id" 
+                                target="_blank" 
+                                rel="noreferrer noopener"
+                                className="underline font-bold text-indigo-600 dark:text-indigo-400"
+                              >
+                                Google Maps Place ID Finder Tool
+                              </a>. 
+                              Copia el código hash que empiece con "ChI" e ingrésalo arriba.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                    </div>
+
+                    {/* CUSTOM REVIEWS LIST MANAGER */}
+                    {(editingSettings.googleReviewsSource || "custom") === "custom" && (
+                      <div className="p-6 bg-slate-55 rounded-3xl border border-slate-150 dark:bg-zinc-950/40 dark:border-zinc-850/50 space-y-6">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-4 border-b border-slate-150 dark:border-zinc-850">
+                          <div>
+                            <h4 className="font-black text-xs text-slate-800 dark:text-zinc-100 uppercase tracking-widest">Opiniones Manuales Registradas</h4>
+                            <p className="text-[11px] text-slate-500 dark:text-zinc-400">Agrega, edita o elimina testimonios realistas para el carrusel de opiniones.</p>
+                          </div>
+                          
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const backup = [
+                                  {
+                                    author_name: "Christian O.",
+                                    profile_photo_url: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150&q=80",
+                                    rating: 5,
+                                    relative_time_description: "Hace 3 días",
+                                    text: "Impresionante la atención por WhatsApp y la rapidez del envío. Compré el poncho buzo pijama plush de corderito y es súper abrigado, excelente calidad y talle correcto.",
+                                    time: Date.now() / 1000 - 3 * 24 * 60 * 60,
+                                    avatar_color: "emerald"
+                                  },
+                                  {
+                                    author_name: "Valentina R.",
+                                    profile_photo_url: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&h=150&q=80",
+                                    rating: 5,
+                                    relative_time_description: "Hace 1 semana",
+                                    text: "Excelente todo. Me asesoraron al instante por los talles de las medias pantalón térmicas efecto piel con corderito. Son re abrigadas y estiran súper bien. El envío express me llegó en menos de 2 horas en Montevideo.",
+                                    time: Date.now() / 1000 - 7 * 24 * 60 * 60,
+                                    avatar_color: "blue"
+                                  },
+                                  {
+                                    author_name: "Gastón B.",
+                                    profile_photo_url: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80",
+                                    rating: 5,
+                                    relative_time_description: "Hace 2 semanas",
+                                    text: "Compré el soporte de pared para tablet ranurado por impresión 3D, quedó súper firme y prolijo. Increíble terminación, no parece impreso en plástico común, el material es re resistente. Recomendado 100%.",
+                                    time: Date.now() / 1000 - 14 * 24 * 60 * 60,
+                                    avatar_color: "indigo"
+                                  },
+                                  {
+                                    author_name: "María Noel F.",
+                                    profile_photo_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80",
+                                    rating: 5,
+                                    relative_time_description: "Hace 3 semanas",
+                                    text: "Compré la lámpara UV mata mosquitos por recomendación porque en casa se llenaba de mosquitos, y la verdad un éxito. Es súper silenciosa, la tenemos prendida toda la noche en el cuarto. Envío rapidísimo a Canelones.",
+                                    time: Date.now() / 1000 - 21 * 24 * 60 * 60,
+                                    avatar_color: "purple"
+                                  }
+                                ];
+                                setEditingSettings({
+                                  ...editingSettings,
+                                  googleReviewsCustomList: backup
+                                });
+                                showAdminToast("Se han precargado los 5 testimonios de alta conversión.", "success");
+                              }}
+                              className="px-3 py-1.5 text-[11px] font-bold bg-indigo-500/10 text-indigo-500 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+                            >
+                              Precargar Testimonios ★
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentList = editingSettings.googleReviewsCustomList || [];
+                                const newReview = {
+                                  author_name: "Nuevo Cliente " + (currentList.length + 1),
+                                  profile_photo_url: "",
+                                  rating: 5,
+                                  relative_time_description: "Hace 1 día",
+                                  text: "Excelente servicio y calidad de atención por WhatsApp. El pedido llegó súper rápido y súper bien empaquetado.",
+                                  time: Date.now() / 1000,
+                                  avatar_color: ["blue", "emerald", "indigo", "purple", "amber"][Math.floor(Math.random() * 5)]
+                                };
+                                setEditingSettings({
+                                  ...editingSettings,
+                                  googleReviewsCustomList: [newReview, ...currentList]
+                                });
+                                showAdminToast("Mensaje: Se ha añadido un borrador al inicio de tu lista.", "success");
+                              }}
+                              className="px-3.5 py-1.5 text-[11px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl flex items-center gap-1 transition cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Agregar Nueva</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* List representation */}
+                        {(!editingSettings.googleReviewsCustomList || editingSettings.googleReviewsCustomList.length === 0) ? (
+                          <div className="p-8 text-center rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800 text-slate-400">
+                            No tienes opiniones manuales cargadas todavía. Actualmente el sistema muestra testimonios por defecto de manera inteligente. Haz clic en "Precargar Testimonios" o "Agregar Nueva" para tomar control absoluto.
+                          </div>
+                        ) : (
+                          <div className="space-y-4 max-h-[450px] overflow-y-auto pr-1">
+                            {editingSettings.googleReviewsCustomList.map((item, idx) => (
+                              <div 
+                                key={idx} 
+                                className="p-4 bg-white dark:bg-zinc-900 border border-slate-150 dark:border-zinc-850 rounded-2xl space-y-3 relative group"
+                              >
+                                {/* Quick Delete Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const filterList = (editingSettings.googleReviewsCustomList || []).filter((_, i) => i !== idx);
+                                    setEditingSettings({
+                                      ...editingSettings,
+                                      googleReviewsCustomList: filterList
+                                    });
+                                    showAdminToast("Se ha quitado la opinión seleccionada.", "success");
+                                  }}
+                                  className="absolute top-4 right-4 p-1.5 text-zinc-400 hover:text-red-500 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-950 transition cursor-pointer"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+
+                                {/* Header of item editor */}
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                  {/* Author Name */}
+                                  <div className="space-y-1">
+                                    <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Nombre del Autor</label>
+                                    <input
+                                      type="text"
+                                      value={item.author_name}
+                                      onChange={(e) => {
+                                        const clone = [...(editingSettings.googleReviewsCustomList || [])];
+                                        clone[idx] = { ...clone[idx], author_name: e.target.value };
+                                        setEditingSettings({ ...editingSettings, googleReviewsCustomList: clone });
+                                      }}
+                                      className="w-full px-2 py-1.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                                    />
+                                  </div>
+
+                                  {/* Stars select */}
+                                  <div className="space-y-1">
+                                    <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Calificación (Puntos)</label>
+                                    <select
+                                      value={item.rating}
+                                      onChange={(e) => {
+                                        const clone = [...(editingSettings.googleReviewsCustomList || [])];
+                                        clone[idx] = { ...clone[idx], rating: parseInt(e.target.value) || 5 };
+                                        setEditingSettings({ ...editingSettings, googleReviewsCustomList: clone });
+                                      }}
+                                      className="w-full px-2 py-1.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-semibold"
+                                    >
+                                      <option value="5">⭐⭐⭐⭐⭐ (5 Estrellas)</option>
+                                      <option value="4">⭐⭐⭐⭐ (4 Estrellas)</option>
+                                      <option value="3">⭐⭐⭐ (3 Estrellas)</option>
+                                    </select>
+                                  </div>
+
+                                  {/* Relative description */}
+                                  <div className="space-y-1 pr-6">
+                                    <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-405">Tiempo de antigüedad</label>
+                                    <input
+                                      type="text"
+                                      value={item.relative_time_description}
+                                      onChange={(e) => {
+                                        const clone = [...(editingSettings.googleReviewsCustomList || [])];
+                                        clone[idx] = { ...clone[idx], relative_time_description: e.target.value };
+                                        setEditingSettings({ ...editingSettings, googleReviewsCustomList: clone });
+                                      }}
+                                      className="w-full px-2 py-1.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* Text content input and profile picture info */}
+                                <div className="grid grid-cols-1 sm:grid-cols-1 gap-2">
+                                  {/* Image profile optional URL */}
+                                  <div className="space-y-1">
+                                    <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400 col-span-2">URL de foto de perfil (Opcional - vacío usa siglas)</label>
+                                    <input
+                                      type="text"
+                                      value={item.profile_photo_url || ""}
+                                      placeholder="https://images.unsplash.com/photo-..."
+                                      onChange={(e) => {
+                                        const clone = [...(editingSettings.googleReviewsCustomList || [])];
+                                        clone[idx] = { ...clone[idx], profile_photo_url: e.target.value };
+                                        setEditingSettings({ ...editingSettings, googleReviewsCustomList: clone });
+                                      }}
+                                      className="w-full px-2 py-1.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                                    />
+                                  </div>
+
+                                  {/* Review Paragraph */}
+                                  <div className="space-y-1">
+                                    <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Cuerpo de la reseña de opinión</label>
+                                    <textarea
+                                      rows={2}
+                                      value={item.text}
+                                      onChange={(e) => {
+                                        const clone = [...(editingSettings.googleReviewsCustomList || [])];
+                                        clone[idx] = { ...clone[idx], text: e.target.value };
+                                        setEditingSettings({ ...editingSettings, googleReviewsCustomList: clone });
+                                      }}
+                                      className="w-full px-2 py-1.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white resize-none"
+                                    />
+                                  </div>
+                                </div>
+
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                      </div>
+                    )}
+
+                    {/* Submit Saving command */}
+                    <div className="pt-4 flex justify-end border-t border-slate-150 dark:border-zinc-850">
+                      <button
+                        type="button"
+                        onClick={handleSaveSettings}
+                        className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold uppercase tracking-wide flex items-center gap-2 cursor-pointer transition shadow-lg shadow-indigo-600/10 active:scale-95"
+                      >
+                        <Save className="h-4 w-4" />
+                        <span>Sincronizar y Guardar Opiniones de Google</span>
+                      </button>
+                    </div>
+
                   </div>
                 )}
 

@@ -91,9 +91,28 @@ export interface SiteSettings {
   deliveryActive?: boolean;
   deliveryMethods?: DeliveryMethod[];
   invoiceOptionActive?: boolean;
+  freeShippingActive?: boolean;
+  freeShippingMinAmount?: number;
+  freeShippingRegions?: string;
   defaultFirstName?: string;
   defaultLastName?: string;
   defaultPhone?: string;
+  googleReviewsSource?: 'api' | 'custom';
+  googleReviewsRating?: number;
+  googleReviewsTotal?: number;
+  googleReviewsCustomList?: Array<{
+    author_name: string;
+    profile_photo_url?: string;
+    rating: number;
+    relative_time_description: string;
+    text: string;
+    time: number;
+    avatar_color?: string;
+  }>;
+  googlePlacesApiKey?: string;
+  googlePlaceId?: string;
+  googleClientId?: string;
+  googleClientSecret?: string;
 }
 
 export interface Category {

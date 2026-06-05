@@ -461,6 +461,28 @@ export default function Checkout({
   const discountAmountUYU = Math.round((subtotalUYU * appliedDiscount) / 100);
   const totalUYU = Math.max(0, subtotalUYU - discountAmountUYU);
 
+  // Check if current delivery matches free shipping guidelines
+  const checkIfFreeShipping = (): boolean => {
+    if (settings.freeShippingActive === false) return false;
+    if (shippingType !== "delivery") return false;
+
+    const minAmount = settings.freeShippingMinAmount !== undefined ? settings.freeShippingMinAmount : 2000;
+    if (subtotalUYU < minAmount) return false;
+
+    const regionsStr = settings.freeShippingRegions || "Pinamar, Salinas, Marindia, Neptunia";
+    const regions = regionsStr
+      .split(",")
+      .map(r => r.trim().toLowerCase())
+      .filter(Boolean);
+
+    if (regions.length === 0) return true;
+
+    const activeZone = (neighborhood || "").trim().toLowerCase();
+    return regions.includes(activeZone);
+  };
+
+  const hasFreeShipping = checkIfFreeShipping();
+
   const exchangeRate = parseFloat(settings.exchangeRate as any) || 40;
   const totalUSD = totalUYU / exchangeRate;
 
@@ -702,7 +724,9 @@ export default function Checkout({
       phone: phone.trim(),
       rut: wantsInvoice ? `RUT: ${rutNumber.trim()} (${companyName.trim()}) - Dir. Fiscal: ${fiscalAddress.trim()}` : "Consumidor Final (No RUT)",
       address: finalShippingAddress,
-      shippingType: shippingType === "pickup" ? "Retiro en Local" : `Envío a Domicilio (${deliveryCarrierInfo})`
+      shippingType: shippingType === "pickup" 
+        ? "Retiro en Local" 
+        : `Envío a Domicilio (${deliveryCarrierInfo})${hasFreeShipping ? " 🎁 [¡ENVÍO GRATIS!]" : ""}`
     };
 
     if (paymentMethod === "mercadopago") {
@@ -1526,7 +1550,7 @@ export default function Checkout({
                 </div>
 
                 {/* Info Note regarding paying at destination for agencies */}
-                {(selectedDeliveryMethod === "ues" || selectedDeliveryMethod === "dac" || selectedDeliveryMethod === "depunta") && (
+                {(selectedDeliveryMethod === "ues" || selectedDeliveryMethod === "dac" || selectedDeliveryMethod === "depunta") && !hasFreeShipping && (
                   <div className={`p-3.5 rounded-xl border flex items-start gap-3 mt-4 text-xs transition-colors ${
                     isDark 
                       ? "bg-amber-950/20 border-amber-900/40 text-amber-300" 
@@ -1539,6 +1563,25 @@ export default function Checkout({
                       </span>
                       <p className="leading-relaxed font-bold text-amber-100">
                         El costo del paquete lo paga el cliente al recibirlo.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Free Shipping Alert Box */}
+                {hasFreeShipping && (
+                  <div className={`p-4 rounded-xl border flex items-start gap-3 mt-4 text-xs transition-colors ${
+                    isDark 
+                      ? "bg-emerald-950/30 border-emerald-500/40 text-emerald-300" 
+                      : "bg-emerald-50 border-emerald-200 text-emerald-800"
+                  }`}>
+                    <span className="text-xl">🎁</span>
+                    <div>
+                      <span className="font-extrabold uppercase tracking-widest text-[10px] block text-emerald-400 mb-1">
+                        ¡Envío Gratis Aplicado!
+                      </span>
+                      <p className="leading-relaxed">
+                        Tu compra supera el monto de <strong>${settings.freeShippingMinAmount !== undefined ? settings.freeShippingMinAmount : 2000}</strong> y la zona de entrega (<strong>{neighborhood}</strong>) califica para el beneficio único en la zona de {settings.freeShippingRegions || "Pinamar, Salinas, Marindia, Neptunia"}. ¡Tu envío no tendrá costo!
                       </p>
                     </div>
                   </div>
@@ -1849,6 +1892,20 @@ export default function Checkout({
                   <div className="flex justify-between items-center text-xs text-emerald-450 uppercase tracking-wide">
                     <span>Descuento ({appliedDiscount}%)</span>
                     <span className="font-mono font-bold text-emerald-400">-$ {discountAmountUYU} UYU</span>
+                  </div>
+                )}
+                {shippingType === "delivery" && (
+                  <div className="flex justify-between items-center text-xs text-zinc-400 uppercase tracking-wide pt-0.5">
+                    <span>Costo de Envío</span>
+                    {hasFreeShipping ? (
+                      <span className="font-sans text-[10px] font-black tracking-wide text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-full">
+                        🎁 ¡GRATIS!
+                      </span>
+                    ) : (
+                      <span className="font-sans text-[10px] text-zinc-400 font-semibold italic">
+                        Cobro en destino
+                      </span>
+                    )}
                   </div>
                 )}
                 

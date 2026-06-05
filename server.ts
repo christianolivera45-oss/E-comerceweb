@@ -12,7 +12,18 @@ import multer from "multer";
 import { MercadoPagoConfig, Preference, Payment } from "mercadopago";
 
 const storage = multer.memoryStorage();
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // Max 5MB
+  fileFilter: (req, file, cb) => {
+    const allowedMimes = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
+    if (allowedMimes.includes(file.mimetype.toLowerCase())) {
+      cb(null, true);
+    } else {
+      cb(new Error("MIME_TYPE_NOT_ALLOWED") as any, false);
+    }
+  }
+});
 
 const { Pool } = pg;
 
@@ -356,7 +367,111 @@ function getDbPool(force = false) {
 }
 
 function hashPassword(password: string): string {
-  return crypto.createHash("sha256").update(password + "juem-salt-1248").digest("hex");
+  const salt = process.env.JWT_SECRET || "juem-salt-1248";
+  return crypto.createHash("sha256").update(password + salt).digest("hex");
+}
+
+async function approveOrderAndDeductStock(orderId: string, paymentId: string, verifiedPaymentAmount: number): Promise<string> {
+  const pool = getDbPool();
+  if (pool && !dbUnavailable) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN;");
+      
+      // Lock the order to prevent concurrent updates
+      const orderRes = await client.query("SELECT current_status FROM public.orders WHERE id = $1 FOR UPDATE;", [orderId]);
+      if (orderRes.rows.length === 0) {
+        await client.query("ROLLBACK;");
+        return "not_found";
+      }
+      
+      const prevStatus = orderRes.rows[0].current_status;
+      if (prevStatus === "pago_aprobado") {
+        await client.query("COMMIT;");
+        return "already_approved";
+      }
+      
+      // Update order status with verified status
+      await client.query("UPDATE public.orders SET current_status = 'pago_aprobado', updated_at = NOW() WHERE id = $1;", [orderId]);
+      
+      // Fetch item list and lock materials to deduct stock
+      const itemsRes = await client.query("SELECT product_id, variant_id, quantity, product_name FROM public.order_items WHERE order_id = $1;", [orderId]);
+      
+      for (const item of itemsRes.rows) {
+        const qty = Number(item.quantity);
+        if (item.variant_id) {
+          // Lock variant for update
+          await client.query("SELECT stock FROM public.product_variants WHERE id = $1 FOR UPDATE;", [item.variant_id]);
+          // Deduct stock down to greatest of 0 or stock - qty
+          await client.query("UPDATE public.product_variants SET stock = GREATEST(0, stock - $1), updated_at = NOW() WHERE id = $2;", [qty, item.variant_id]);
+        } else if (item.product_id) {
+          // Lock product for update
+          await client.query("SELECT stock FROM public.products WHERE id = $1 FOR UPDATE;", [item.product_id]);
+          // Deduct stock down to greatest of 0 or stock - qty
+          await client.query("UPDATE public.products SET stock = GREATEST(0, stock - $1), updated_at = NOW() WHERE id = $2;", [qty, item.product_id]);
+        }
+      }
+      
+      await client.query("COMMIT;");
+      console.log(`[Seguridad Stock] Transacción completada con éxito. Stock descontado para Orden ${orderId}.`);
+      
+      // Force state reload
+      const dbState = await getDbState();
+      currentStoreState = dbState;
+      return "approved_now";
+    } catch (txErr) {
+      await client.query("ROLLBACK;");
+      console.error("[Seguridad Stock] Error en la transacción de descuento de stock:", txErr);
+      throw txErr;
+    } finally {
+      client.release();
+    }
+  } else {
+    // Falls back to in-memory/JSON store
+    if (currentStoreState.orders) {
+      let alreadyApproved = false;
+      currentStoreState.orders = currentStoreState.orders.map(o => {
+        if (o.id === orderId) {
+          if (o.status === "pago_aprobado") {
+            alreadyApproved = true;
+          } else {
+            o.status = "pago_aprobado";
+            o.updatedAt = new Date().toISOString();
+            
+            // Deduct in-memory stock
+            if (o.items && Array.isArray(o.items)) {
+              for (const it of o.items) {
+                const prod = currentStoreState.products?.find(p => String(p.id) === String(it.productId));
+                if (prod) {
+                  if (it.variantId) {
+                    const variant = prod.variants?.find((v: any) => String(v.id) === String(it.variantId));
+                    if (variant) {
+                      variant.stock = Math.max(0, (variant.stock || 0) - (it.quantity || 1));
+                    }
+                  } else {
+                    prod.stock = Math.max(0, (prod.stock || 0) - (it.quantity || 1));
+                  }
+                }
+              }
+            }
+          }
+        }
+        return o;
+      });
+      
+      if (!alreadyApproved) {
+        try {
+          fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+          return "approved_now";
+        } catch (fsErr) {
+          console.error("Error writing updated local order & stock to store file:", fsErr);
+        }
+      } else {
+        return "already_approved";
+      }
+    }
+    return "not_found";
+  }
 }
 
 async function getDbState(): Promise<ShopState> {
@@ -962,10 +1077,12 @@ async function initPostgresStore(): Promise<ShopState | null> {
     const adminCheck = await pool.query("SELECT COUNT(*) FROM admin_credentials;");
     if (parseInt(adminCheck.rows[0].count) === 0) {
       console.log("Seeding admin credentials Table...");
-      const defaultHash = hashPassword("olivera45");
+      const seedUsername = process.env.ADMIN_USERNAME || "Juem";
+      const seedPassword = process.env.ADMIN_PASSWORD || "olivera45";
+      const defaultHash = hashPassword(seedPassword);
       await pool.query(
-        "INSERT INTO admin_credentials (username, password_hash) VALUES ('Juem', $1);",
-        [defaultHash]
+        "INSERT INTO admin_credentials (username, password_hash) VALUES ($1, $2);",
+        [seedUsername, defaultHash]
       );
     }
 
@@ -1018,6 +1135,18 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
+  // Verify that mandatory credentials/secrets exist in production
+  if (process.env.NODE_ENV === "production" || process.env.NODE_ENV === "prod") {
+    if (!process.env.JWT_SECRET) {
+      console.error("❌ ERROR CRÍTICO DE SEGURIDAD: La variable 'JWT_SECRET' es estrictamente obligatoria en entornos de producción.");
+      process.exit(1);
+    }
+    if (!process.env.ADMIN_USERNAME || !process.env.ADMIN_PASSWORD) {
+      console.error("❌ ERROR CRÍTICO DE SEGURIDAD: Las variables 'ADMIN_USERNAME' y 'ADMIN_PASSWORD' son estrictamente obligatorias en entornos de producción.");
+      process.exit(1);
+    }
+  }
+
   app.use(express.json({ limit: "15mb" })); // Support large images or custom payloads
 
   // Sync cache with store.json
@@ -1058,8 +1187,10 @@ async function startServer() {
     const token = authHeader.substring(7);
     
     const creds = currentStoreState.adminCredentials;
-    const expectedUsername = creds?.username || "Juem";
-    const expectedPasswordHash = creds?.passwordHash || hashPassword("olivera45");
+    const expectedUsername = process.env.ADMIN_USERNAME || creds?.username || "Juem";
+    const expectedPasswordHash = process.env.ADMIN_PASSWORD 
+      ? hashPassword(process.env.ADMIN_PASSWORD) 
+      : (creds?.passwordHash || hashPassword("olivera45"));
     
     // Create stable deterministic token to ensure stateless/ephemeral scaling resilience
     const stableToken = hashPassword(expectedUsername + ":" + expectedPasswordHash);
@@ -1095,8 +1226,10 @@ async function startServer() {
 
     const { username, password } = req.body;
     const creds = currentStoreState.adminCredentials;
-    const expectedUsername = creds?.username || "Juem";
-    const expectedPasswordHash = creds?.passwordHash || hashPassword("olivera45");
+    const expectedUsername = process.env.ADMIN_USERNAME || creds?.username || "Juem";
+    const expectedPasswordHash = process.env.ADMIN_PASSWORD 
+      ? hashPassword(process.env.ADMIN_PASSWORD) 
+      : (creds?.passwordHash || hashPassword("olivera45"));
     
     if (password && username === expectedUsername && hashPassword(password) === expectedPasswordHash) {
       // If session token is missing, generate one dynamically and persist it
@@ -1174,6 +1307,10 @@ async function startServer() {
       return res.status(400).json({ success: false, message: "La nueva contraseña debe tener un mínimo de 6 caracteres por seguridad." });
     }
 
+    if (process.env.ADMIN_PASSWORD || process.env.ADMIN_USERNAME) {
+      return res.status(400).json({ success: false, message: "Las credenciales están configuradas a nivel de servidor mediante variables de entorno y no pueden modificarse desde este panel." });
+    }
+
     const creds = currentStoreState.adminCredentials;
     const expectedPasswordHash = creds?.passwordHash || hashPassword("olivera45");
     if (hashPassword(currentPassword) !== expectedPasswordHash) {
@@ -1208,7 +1345,21 @@ async function startServer() {
   });
 
   // POST upload to Cloudinary (Full-stack API proxy for credentials safety)
-  app.post("/api/cloudinary/upload", upload.single("image"), (req, res) => {
+  app.post("/api/cloudinary/upload", (req, res, next) => {
+    // Invoke multer manually to catch limits and filter errors gracefully
+    upload.single("image")(req, res, (err: any) => {
+      if (err) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ success: false, message: "El tamaño del archivo supera el límite permitido de 5MB." });
+        }
+        if (err.message === "MIME_TYPE_NOT_ALLOWED") {
+          return res.status(400).json({ success: false, message: "Tipo de archivo no permitido. Solo se aceptan imágenes válidas (JPEG, JPG, PNG, WEBP, GIF)." });
+        }
+        return res.status(400).json({ success: false, message: `Error al cargar el archivo: ${err.message}` });
+      }
+      next();
+    });
+  }, (req, res) => {
     const authHeader = req.headers.authorization;
     if (!isValidToken(authHeader)) {
       return res.status(403).json({ success: false, message: "Acceso denegado: solo personal de administración autorizado puede subir archivos." });
@@ -1219,7 +1370,7 @@ async function startServer() {
     const apiSecret = process.env.CLOUDINARY_API_SECRET;
 
     if (!cloudName || !apiKey || !apiSecret) {
-      return res.status(400).json({ 
+      return res.status(500).json({ 
         success: false, 
         message: "Configuración de Cloudinary incompleta en el servidor. Por favor, define CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY y CLOUDINARY_API_SECRET en tus variables de entorno." 
       });
@@ -1229,6 +1380,19 @@ async function startServer() {
       return res.status(400).json({ success: false, message: "No se proporcionó ningún archivo de imagen para subir." });
     }
 
+    // Double extension and file name validation
+    const originalName = req.file.originalname || "";
+    const ext = path.extname(originalName).toLowerCase();
+    const allowedExtensions = [".jpg", ".jpeg", ".png", ".webp", ".gif"];
+    if (!allowedExtensions.includes(ext)) {
+      return res.status(400).json({ success: false, message: "Extensión de imagen no permitida. Por favor, use formatos estándar JPG, JPEG, PNG, WEBP o GIF." });
+    }
+
+    const dotsCount = originalName.split(".").length - 1;
+    if (dotsCount > 1) {
+      return res.status(400).json({ success: false, message: "Se detectó un nombre de archivo sospechoso con múltiples extensiones." });
+    }
+
     // Configure cloudinary connection lazily
     cloudinary.config({
       cloud_name: cloudName,
@@ -1236,11 +1400,11 @@ async function startServer() {
       api_secret: apiSecret
     });
 
-    // Create stream and feed binary packet
+    // Create stream and feed binary packet (force resource_type to image to reject fake non-image binary extensions)
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: "ventas_juem_cloudinary",
-        resource_type: "auto"
+        resource_type: "image"
       },
       (error, result) => {
         if (error) {
@@ -1443,52 +1607,117 @@ async function startServer() {
       const serverTotal = Math.max(0, serverSubtotal - serverDiscountAmount + verifiedShippingCost);
 
       if (pool && !dbUnavailable) {
-        // Insert secure calculated values into postgres
-        const orderRes = await pool.query(`
-          INSERT INTO public.orders (customer_name, customer_email, customer_phone, subtotal, discount_amount, shipping_cost, total, applied_coupon_code, current_status, notes)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-          RETURNING id, created_at;
-        `, [
-          sanitizedName, 
-          sanitizedEmail, 
-          sanitizedPhone || null, 
-          serverSubtotal, 
-          serverDiscountAmount, 
-          verifiedShippingCost, 
-          serverTotal, 
-          couponCode || null, 
-          status, 
-          sanitizedNotes || null
-        ]);
-        
-        orderId = orderRes.rows[0].id;
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN;");
+          
+          // Verify stock with FOR UPDATE lock on every item to prevent race-condition oversellings
+          for (const item of verifiedItems) {
+            if (item.variantId) {
+              const vRes = await client.query(
+                "SELECT stock, size_value, color_name FROM public.product_variants WHERE id = $1 FOR UPDATE;",
+                [item.variantId]
+              );
+              if (vRes.rows.length === 0) {
+                throw new Error(`La variante seleccionada para el producto '${item.productName}' ya no está disponible.`);
+              }
+              const stockAvailable = vRes.rows[0].stock;
+              if (item.quantity > stockAvailable) {
+                const desc = `${vRes.rows[0].size_value || ""}${vRes.rows[0].color_name ? " - " + vRes.rows[0].color_name : ""}`;
+                throw new Error(`Lo sentimos, el producto '${item.productName}' (${desc}) no tiene suficiente stock disponible. Stock disponible: ${stockAvailable}.`);
+              }
+            } else {
+              const pRes = await client.query(
+                "SELECT stock FROM public.products WHERE id = $1 FOR UPDATE;",
+                [item.productId]
+              );
+              if (pRes.rows.length === 0) {
+                throw new Error(`El producto '${item.productName}' ya no está disponible.`);
+              }
+              const stockAvailable = pRes.rows[0].stock;
+              if (item.quantity > stockAvailable) {
+                throw new Error(`Lo sentimos, el producto '${item.productName}' no tiene suficiente stock disponible. Stock disponible: ${stockAvailable}.`);
+              }
+            }
+          }
 
-        const isUuid = (val: any) => typeof val === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
-
-        for (const item of verifiedItems) {
-          const cleanVariantId = isUuid(item.variantId) ? item.variantId : null;
-          await pool.query(`
-            INSERT INTO public.order_items (order_id, product_id, variant_id, product_name, sku, size_selected, color_selected, unit_price, quantity, total_price)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
+          // Insert secure calculated values into postgres
+          const orderRes = await client.query(`
+            INSERT INTO public.orders (customer_name, customer_email, customer_phone, subtotal, discount_amount, shipping_cost, total, applied_coupon_code, current_status, notes)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            RETURNING id, created_at;
           `, [
-            orderId,
-            item.productId,
-            cleanVariantId,
-            item.productName,
-            item.sku || null,
-            item.sizeSelected || null,
-            item.colorSelected || null,
-            item.unitPrice,
-            item.quantity,
-            item.totalPrice
+            sanitizedName, 
+            sanitizedEmail, 
+            sanitizedPhone || null, 
+            serverSubtotal, 
+            serverDiscountAmount, 
+            verifiedShippingCost, 
+            serverTotal, 
+            couponCode || null, 
+            status, 
+            sanitizedNotes || null
           ]);
-        }
+          
+          orderId = orderRes.rows[0].id;
 
+          const isUuid = (val: any) => typeof val === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
+          for (const item of verifiedItems) {
+            const cleanVariantId = isUuid(item.variantId) ? item.variantId : null;
+            await client.query(`
+              INSERT INTO public.order_items (order_id, product_id, variant_id, product_name, sku, size_selected, color_selected, unit_price, quantity, total_price)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
+            `, [
+              orderId,
+              item.productId,
+              cleanVariantId,
+              item.productName,
+              item.sku || null,
+              item.sizeSelected || null,
+              item.colorSelected || null,
+              item.unitPrice,
+              item.quantity,
+              item.totalPrice
+            ]);
+          }
+
+          await client.query("COMMIT;");
+        } catch (txErr: any) {
+          await client.query("ROLLBACK;");
+          console.error("Error creating order inside transaction:", txErr);
+          return res.status(400).json({ success: false, message: txErr.message || "Error al verificar stock y crear pedido." });
+        } finally {
+          client.release();
+        }
+        
         // Force reload cache with database state
         const dbState = await getDbState();
         currentStoreState = dbState;
       } else {
-        // Safe, verified file-system backup fallback
+        // Safe, verified file-system backup fallback:
+        // Pre-emptively verify in-memory stock limits before generating the offline order
+        for (const item of verifiedItems) {
+          const dbProd = officialProducts.find(p => Number(p.id) === Number(item.productId));
+          if (!dbProd) {
+            return res.status(400).json({ success: false, message: `El producto '${item.productName}' ya no está disponible.` });
+          }
+          if (item.variantId) {
+            const matchVar = dbProd.variants?.find((v: any) => String(v.id) === String(item.variantId));
+            if (!matchVar) {
+              return res.status(400).json({ success: false, message: `La variante seleccionada para el producto '${item.productName}' ya no está disponible.` });
+            }
+            if (item.quantity > (matchVar.stock || 0)) {
+              const desc = `${matchVar.size || ""}${matchVar.color ? " - " + matchVar.color : ""}`;
+              return res.status(400).json({ success: false, message: `Lo sentimos, el producto '${item.productName}' (${desc}) no tiene suficiente stock disponible. Stock disponible: ${matchVar.stock || 0}.` });
+            }
+          } else {
+            if (item.quantity > (dbProd.stock || 0)) {
+              return res.status(400).json({ success: false, message: `Lo sentimos, el producto '${item.productName}' no tiene suficiente stock disponible. Stock disponible: ${dbProd.stock || 0}.` });
+            }
+          }
+        }
+
         orderId = "local-ord-" + crypto.randomBytes(8).toString("hex");
         const newOrderObj = {
           id: orderId,
@@ -1685,7 +1914,8 @@ async function startServer() {
       res.json({ 
         success: true, 
         preferenceId: resData.id, 
-        initPoint: resData.init_point 
+        initPoint: resData.init_point,
+        sandboxInitPoint: resData.sandbox_init_point 
       });
 
     } catch (err: any) {
@@ -1694,6 +1924,7 @@ async function startServer() {
     }
   });
 
+  // GET fallback redirect page after Mercado Pago redirect
   app.get("/api/payments/mercadopago/feedback", async (req, res) => {
     // Extract query parameters
     const paymentId = (req.query.payment_id || req.query.collection_id || "") as string;
@@ -1741,20 +1972,26 @@ async function startServer() {
     // Persist real verified status back to our systems so the merchant never loses order updates!
     if (orderId) {
       try {
-        const pool = getDbPool();
-        if (pool && !dbUnavailable) {
-          await pool.query("UPDATE public.orders SET current_status = $1, updated_at = NOW() WHERE id = $2;", [finalOrderState, orderId]);
-          console.log(`[DB Sinc] Pedido ${orderId} actualizado con seguridad a estado: ${finalOrderState}`);
+        if (isApproved) {
+          // Use our transactional, row-locking safe stock deduction routine
+          const result = await approveOrderAndDeductStock(orderId, paymentId, verifiedPaymentAmount);
+          console.log(`[Feedback Redirect Sinc] Resultado de aprobación de stock para Orden ${orderId}: ${result}`);
         } else {
-          if (currentStoreState.orders) {
-            currentStoreState.orders = currentStoreState.orders.map(o => {
-              if (o.id === orderId) {
-                return { ...o, status: finalOrderState, updatedAt: new Date().toISOString() };
-              }
-              return o;
-            });
-            fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
-            console.log(`[JSON Sinc] Pedido local ${orderId} actualizado a estado: ${finalOrderState}`);
+          const pool = getDbPool();
+          if (pool && !dbUnavailable) {
+            await pool.query("UPDATE public.orders SET current_status = $1, updated_at = NOW() WHERE id = $2 AND current_status != 'pago_aprobado';", [finalOrderState, orderId]);
+            console.log(`[DB Sinc] Pedido ${orderId} actualizado con seguridad a estado pendiente/rechazado: ${finalOrderState}`);
+          } else {
+            if (currentStoreState.orders) {
+              currentStoreState.orders = currentStoreState.orders.map(o => {
+                if (o.id === orderId && o.status !== "pago_aprobado") {
+                  return { ...o, status: finalOrderState, updatedAt: new Date().toISOString() };
+                }
+                return o;
+              });
+              fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+              console.log(`[JSON Sinc] Pedido local ${orderId} actualizado a estado pendiente/rechazado: ${finalOrderState}`);
+            }
           }
         }
         
@@ -2007,6 +2244,96 @@ async function startServer() {
     `;
 
     res.send(responseHtml);
+  });
+
+  // POST/GET Webhook IPN push receiver for Mercado Pago (Priority 1 official handler)
+  app.all("/api/payments/mercadopago/webhook", async (req, res) => {
+    try {
+      console.log("[MercadoPago Webhook] Notificación recibida:", {
+        query: req.query,
+        body: req.body
+      });
+
+      let paymentId = "";
+      if (req.body && req.body.data && req.body.data.id) {
+        paymentId = String(req.body.data.id);
+      } else if (req.body && req.body.id && req.body.type === "payment") {
+        paymentId = String(req.body.id);
+      } else if (req.query && req.query.id && (req.query.topic === "payment" || req.query.type === "payment")) {
+        paymentId = String(req.query.id);
+      } else if (req.query && req.query["data.id"]) {
+        paymentId = String(req.query["data.id"]);
+      } else if (req.body && req.body.resource) {
+        const match = req.body.resource.match(/\/payments\/(\d+)/);
+        if (match) paymentId = match[1];
+      }
+
+      // If webhook was sent for something other than a payment (e.g. merchant_order), exit early with 200
+      if (!paymentId) {
+        console.log("[MercadoPago Webhook] No se encontró ID de pago en la notificación. Ignorando con éxito.");
+        return res.status(200).json({ success: true, message: "Notification ignored: payment ID not present" });
+      }
+
+      console.log(`[MercadoPago Webhook] Identificando ID de pago recibido: ${paymentId}`);
+
+      const settings = (currentStoreState.settings || {}) as any;
+      const accessToken = settings.mercadopagoAccessToken?.trim() || process.env.MERCADOPAGO_ACCESS_TOKEN?.trim();
+
+      if (!accessToken) {
+        console.error("[MercadoPago Webhook] No hay Access Token configurado para Mercado Pago.");
+        return res.status(500).json({ success: false, message: "Configuration error: access token missing on server" });
+      }
+
+      const mpClient = new MercadoPagoConfig({ accessToken });
+      const payment = new Payment(mpClient);
+      const mpPaymentData = await payment.get({ id: paymentId });
+
+      const verifiedStatus = mpPaymentData.status;
+      const orderId = mpPaymentData.external_reference; // Retrieve our matching Order UUID
+      const verifiedPaymentAmount = mpPaymentData.transaction_amount || 0;
+
+      console.log(`[MercadoPago Webhook] Datos del SDK: Orden ID = ${orderId}, Estado = ${verifiedStatus}, Monto = $${verifiedPaymentAmount}`);
+
+      if (!orderId) {
+        console.warn(`[MercadoPago Webhook] No se encontró la referencia externa (external_reference/orderId) para el pago ${paymentId}.`);
+        return res.status(200).json({ success: true, message: "Reference not found" });
+      }
+
+      if (verifiedStatus === "approved") {
+        const result = await approveOrderAndDeductStock(orderId, paymentId, verifiedPaymentAmount);
+        console.log(`[MercadoPago Webhook] Resultado de aprobación de stock para Orden ${orderId}: ${result}`);
+      } else if (verifiedStatus === "rejected") {
+        // Update order status to rejected securely
+        const pool = getDbPool();
+        if (pool && !dbUnavailable) {
+          await pool.query("UPDATE public.orders SET current_status = 'pago_rechazado', updated_at = NOW() WHERE id = $1 AND current_status != 'pago_aprobado';", [orderId]);
+        } else {
+          if (currentStoreState.orders) {
+            currentStoreState.orders = currentStoreState.orders.map(o => {
+              if (o.id === orderId && o.status !== "pago_aprobado") {
+                return { ...o, status: "pago_rechazado" as any, updatedAt: new Date().toISOString() };
+              }
+              return o;
+            });
+            fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+          }
+        }
+        console.log(`[MercadoPago Webhook] Orden ${orderId} actualizada a 'pago_rechazado'.`);
+      } else {
+        console.log(`[MercadoPago Webhook] Estado de pago '${verifiedStatus}' sin acciones necesarias.`);
+      }
+
+      // Force state refresh
+      const dbState = await getDbState();
+      currentStoreState = dbState;
+
+      // Always return 200 OK to Mercado Pago to stop event notifications stream
+      res.status(200).json({ success: true, message: "Received and validated successfully" });
+    } catch (err: any) {
+      console.error("[MercadoPago Webhook Critical Error]", err);
+      // Return 200 with success: false so Mercado Pago stops polling if it's fatal, or tries again for networking
+      res.status(200).json({ success: false, error: err.message || String(err) });
+    }
   });
 
   // Handle healthcheck

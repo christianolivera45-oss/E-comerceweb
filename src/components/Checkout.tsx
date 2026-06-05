@@ -235,22 +235,23 @@ export default function Checkout({
 
         const digitsOnly = cleanVal.replace(/\D/g, "");
         if (digitsOnly.length < 8) return "El teléfono debe tener un mínimo de 8 dígitos.";
+        if (digitsOnly.length > 12) return "El teléfono no puede tener más de 12 dígitos.";
 
         // Validar formato de teléfono uruguayo
         let isUruguayFormat = false;
         if (digitsOnly.startsWith("598")) {
           const rest = digitsOnly.slice(3);
-          if (/^(0?9|2|4)/.test(rest) && rest.length >= 7) {
+          if (/^(0?9|2|4)/.test(rest) && rest.length >= 7 && rest.length <= 9) {
             isUruguayFormat = true;
           }
         } else {
-          if (/^(0?9|2|4)/.test(digitsOnly)) {
+          if (/^(0?9|2|4)/.test(digitsOnly) && (digitsOnly.length === 8 || digitsOnly.length === 9)) {
             isUruguayFormat = true;
           }
         }
 
         if (!isUruguayFormat) {
-          return "El formato debe ser un teléfono uruguayo válido (ej: 099123456 o 24001234).";
+          return "Debe ser un teléfono uruguayo válido: 8 dígitos para fijos (ej: 24001234) o 9 dígitos para celulares (ej: 099123456).";
         }
         return "";
       }
@@ -1033,6 +1034,7 @@ export default function Checkout({
                     <input
                       required
                       type="tel"
+                      maxLength={15}
                       placeholder="Ej: 099123456"
                       value={phone}
                       onChange={(e) => handleFieldChange("phone", e.target.value)}
@@ -1051,6 +1053,9 @@ export default function Checkout({
                       }`}
                     />
                   </div>
+                  <p className={`text-[10px] mt-1 px-1 leading-normal ${isDark ? "text-zinc-500" : "text-zinc-500"}`}>
+                    Formatos uruguayos: celular de 9 dígitos (ej: 099123456) o fijo de 8 dígitos (ej: 24001234). Admite +598 si lo deseas.
+                  </p>
                   {touchedFields["phone"] && validationErrors["phone"] && (
                     <p className="text-[11px] text-red-500 font-bold mt-1 px-1 flex items-center gap-1 font-mono">
                       <span>⚠️</span> {validationErrors["phone"]}
@@ -1425,155 +1430,156 @@ export default function Checkout({
                 </div>
 
                 {/* Carrier checkboxes precisely from image */}
-                <div className="space-y-2.5">
+                <div className="space-y-2.5 mt-6">
                   <label className="block text-xs font-bold uppercase tracking-wider px-1 text-zinc-450 mb-1">
                     Elegí la Forma de Envío a Domicilio:
                   </label>
                   
                   {deliveryMethods.map((method) => {
                     const isSelected = selectedDeliveryMethod === method.id;
+                    const isAgency = method.id === "ues" || method.id === "dac" || method.id === "depunta";
                     return (
-                      <div
-                        key={method.id}
-                        onClick={() => setSelectedDeliveryMethod(method.id)}
-                        className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-4 ${
-                          isSelected
-                            ? "border-sky-500 bg-sky-950/15"
-                            : isDark ? "bg-zinc-900/60 border-zinc-850 hover:border-zinc-800" : "bg-white border-gray-255 hover:border-gray-205"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center justify-center flex-shrink-0">
-                            <div className={`h-4.5 w-4.5 rounded-full border-2 flex items-center justify-center ${
-                              isSelected ? "border-sky-500" : "border-zinc-600"
-                            }`}>
-                              {isSelected && <div className="h-2 w-2 rounded-full bg-sky-500" />}
-                            </div>
-                          </div>
-                          
+                      <div key={method.id} className="space-y-2">
+                        <div
+                          onClick={() => setSelectedDeliveryMethod(method.id)}
+                          className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-4 ${
+                            isSelected
+                              ? "border-sky-500 bg-sky-950/15"
+                              : isDark ? "bg-zinc-900/60 border-zinc-850 hover:border-zinc-800" : "bg-white border-gray-255 hover:border-gray-205"
+                          }`}
+                        >
                           <div className="flex items-center gap-3">
-                            {method.iconType === "motorcycle" && (
-                              <div className="flex-shrink-0 shadow-sm border border-pink-100/30 rounded-lg overflow-hidden bg-white">
-                                <svg className="w-14 h-9" viewBox="0 0 48 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <rect width="48" height="32" rx="6" fill="#FCE7F3" />
-                                  <g transform="translate(6, 4)">
-                                    <circle cx="9" cy="20" r="3.5" fill="#1F2937" />
-                                    <circle cx="9" cy="20" r="1.2" fill="#FFFFFF" />
-                                    <circle cx="27" cy="20" r="3.5" fill="#1F2937" />
-                                    <circle cx="27" cy="20" r="1.2" fill="#FFFFFF" />
-                                    <path d="M 9 20 L 13 16 L 22 16 L 27 20" stroke="#EC4899" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                                    <path d="M 27 20 L 25 10 L 22 10" stroke="#EC4899" strokeWidth="2" strokeLinecap="round" />
-                                    <circle cx="18" cy="8" r="2.5" fill="#374151" />
-                                    <path d="M 15 11 L 21 11 L 20 16 L 16 16 Z" fill="#3B82F6" />
-                                    <path d="M 20 12 L 23 12" stroke="#374151" strokeWidth="1" />
-                                    <rect x="7" y="7" width="7" height="7" rx="1" fill="#D97706" />
-                                    <line x1="10.5" y1="7" x2="10.5" y2="14" stroke="#78350F" strokeWidth="0.8" />
-                                  </g>
-                                </svg>
+                            <div className="flex items-center justify-center flex-shrink-0">
+                              <div className={`h-4.5 w-4.5 rounded-full border-2 flex items-center justify-center ${
+                                isSelected ? "border-sky-500" : "border-zinc-600"
+                              }`}>
+                                {isSelected && <div className="h-2 w-2 rounded-full bg-sky-500" />}
                               </div>
-                            )}
-                            {method.iconType === "truck_orange" && (
-                              <div className="flex-shrink-0 shadow-sm border border-orange-100/30 rounded-lg overflow-hidden bg-white">
-                                <svg className="w-14 h-9" viewBox="0 0 48 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <rect width="48" height="32" rx="6" fill="#FFEDD5" />
-                                  <g transform="translate(6, 4)">
-                                    <path d="M 22 6 H 29 L 32 11 L 32 17 H 22 Z" fill="#F97316" />
-                                    <path d="M 24 8 H 28 L 29.5 11 H 24 Z" fill="#E0F2FE" stroke="#0284C7" strokeWidth="0.5" />
-                                    <rect x="2" y="4" width="20" height="13" rx="1.5" fill="#EA580C" />
-                                    <circle cx="7" cy="18" r="3" fill="#1F2937" />
-                                    <circle cx="7" cy="18" r="1" fill="#E5E7EB" />
-                                    <circle cx="26" cy="18" r="3" fill="#1F2937" />
-                                    <circle cx="26" cy="18" r="1" fill="#E5E7EB" />
-                                    <rect x="0" y="14" width="2" height="3" fill="#9CA3AF" />
-                                    <rect x="31" y="15" width="2" height="2" fill="#E5E7EB" />
-                                  </g>
-                                </svg>
-                              </div>
-                            )}
-                            {method.iconType === "ues" && (
-                              <div className="flex-shrink-0 shadow-xs rounded-lg overflow-hidden border border-gray-200">
-                                <svg className="w-14 h-9" viewBox="0 0 54 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <rect width="54" height="32" rx="6" fill="#FFFFFF" />
-                                  <g transform="translate(5, 5)">
-                                    <path d="M 2 11 C 2 6.5 5.5 5 10 5 L 34 5 C 38.5 5 42 7.5 42 11 C 42 14.5 38.5 17 34 17 L 10 17 C 5.5 17 2 15.5 2 11 Z" fill="#EA580C" />
-                                    <path d="M 5 6 L 10 11 L 5 16 H 8 L 13 11 L 8 6 Z" fill="#FFFFFF" />
-                                    <text x="16" y="14.5" fill="#FFFFFF" fontSize="10.5" fontWeight="900" fontFamily="sans-serif" fontStyle="italic" letterSpacing="-0.5">Ues</text>
-                                  </g>
-                                </svg>
-                              </div>
-                            )}
-                            {method.iconType === "dac" && (
-                              <div className="flex-shrink-0 shadow-xs rounded-lg overflow-hidden border border-gray-200">
-                                <svg className="w-14 h-9" viewBox="0 0 54 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <rect width="54" height="32" rx="6" fill="#FFFFFF" />
-                                  <g transform="translate(2, 4)">
-                                    <path d="M 4 8 L 10 12 L 4 16 Z" fill="#047857" />
-                                    <path d="M 10 8 L 16 12 L 10 16 Z" fill="#B91C1C" />
-                                    <text x="19" y="14" fill="#111827" fontSize="11" fontWeight="900" fontFamily="sans-serif" letterSpacing="0.2">DAC</text>
-                                    <text x="4" y="22" fill="#4B5563" fontSize="4.8" fontWeight="850" fontFamily="sans-serif" letterSpacing="0.1">GRUPO AGENCIA</text>
-                                  </g>
-                                </svg>
-                              </div>
-                            )}
-                            {method.iconType === "depunta" && (
-                              <div className="flex-shrink-0 shadow-xs rounded-lg overflow-hidden border border-gray-200">
-                                <svg className="w-14 h-9" viewBox="0 0 54 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <rect width="54" height="32" rx="6" fill="#FFFFFF" />
-                                  <g transform="translate(4, 4)">
-                                    <circle cx="11" cy="12" r="8" fill="#B91C1C" />
-                                    <text x="11.2" y="14.5" fill="#FFFFFF" fontSize="7" fontWeight="900" fontFamily="sans-serif" textAnchor="middle">DE</text>
-                                    <text x="21.5" y="15" fill="#111827" fontSize="9.5" fontWeight="900" fontFamily="sans-serif" letterSpacing="0.2">PUNTA</text>
-                                  </g>
-                                </svg>
-                              </div>
-                            )}
-
-                            {!(["motorcycle", "truck_orange", "ues", "dac", "depunta"].includes(method.iconType)) && (
-                              <div className="flex-shrink-0 shadow-xs rounded-lg overflow-hidden border border-gray-200 w-14 h-9 bg-zinc-800 text-zinc-400 flex items-center justify-center">
-                                <Truck className="h-5 w-5" />
-                              </div>
-                            )}
-
-                            <div>
-                              <span className={`text-xs block font-bold leading-tight ${isDark ? "text-zinc-100" : "text-zinc-800"}`}>
-                                {method.title}
-                              </span>
-                              {method.subtext && (
-                                <span className="text-[10px] text-zinc-450 italic font-mono block mt-0.5">{method.subtext}</span>
+                            </div>
+                            
+                            <div className="flex items-center gap-3">
+                              {method.iconType === "motorcycle" && (
+                                <div className="flex-shrink-0 shadow-sm border border-pink-100/30 rounded-lg overflow-hidden bg-white">
+                                  <svg className="w-14 h-9" viewBox="0 0 48 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="48" height="32" rx="6" fill="#FCE7F3" />
+                                    <g transform="translate(6, 4)">
+                                      <circle cx="9" cy="20" r="3.5" fill="#1F2937" />
+                                      <circle cx="9" cy="20" r="1.2" fill="#FFFFFF" />
+                                      <circle cx="27" cy="20" r="3.5" fill="#1F2937" />
+                                      <circle cx="27" cy="20" r="1.2" fill="#FFFFFF" />
+                                      <path d="M 9 20 L 13 16 L 22 16 L 27 20" stroke="#EC4899" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                                      <path d="M 27 20 L 25 10 L 22 10" stroke="#EC4899" strokeWidth="2" strokeLinecap="round" />
+                                      <circle cx="18" cy="8" r="2.5" fill="#374151" />
+                                      <path d="M 15 11 L 21 11 L 20 16 L 16 16 Z" fill="#3B82F6" />
+                                      <path d="M 20 12 L 23 12" stroke="#374151" strokeWidth="1" />
+                                      <rect x="7" y="7" width="7" height="7" rx="1" fill="#D97706" />
+                                      <line x1="10.5" y1="7" x2="10.5" y2="14" stroke="#78350F" strokeWidth="0.8" />
+                                    </g>
+                                  </svg>
+                                </div>
                               )}
+                              {method.iconType === "truck_orange" && (
+                                <div className="flex-shrink-0 shadow-sm border border-orange-100/30 rounded-lg overflow-hidden bg-white">
+                                  <svg className="w-14 h-9" viewBox="0 0 48 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="48" height="32" rx="6" fill="#FFEDD5" />
+                                    <g transform="translate(6, 4)">
+                                      <path d="M 22 6 H 29 L 32 11 L 32 17 H 22 Z" fill="#F97316" />
+                                      <path d="M 24 8 H 28 L 29.5 11 H 24 Z" fill="#E0F2FE" stroke="#0284C7" strokeWidth="0.5" />
+                                      <rect x="2" y="4" width="20" height="13" rx="1.5" fill="#EA580C" />
+                                      <circle cx="7" cy="18" r="3" fill="#1F2937" />
+                                      <circle cx="7" cy="18" r="1" fill="#E5E7EB" />
+                                      <circle cx="26" cy="18" r="3" fill="#1F2937" />
+                                      <circle cx="26" cy="18" r="1" fill="#E5E7EB" />
+                                      <rect x="0" y="14" width="2" height="3" fill="#9CA3AF" />
+                                      <rect x="31" y="15" width="2" height="2" fill="#E5E7EB" />
+                                    </g>
+                                  </svg>
+                                </div>
+                              )}
+                              {method.iconType === "ues" && (
+                                <div className="flex-shrink-0 shadow-xs rounded-lg overflow-hidden border border-gray-200">
+                                  <svg className="w-14 h-9" viewBox="0 0 54 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="54" height="32" rx="6" fill="#FFFFFF" />
+                                    <g transform="translate(5, 5)">
+                                      <path d="M 2 11 C 2 6.5 5.5 5 10 5 L 34 5 C 38.5 5 42 7.5 42 11 C 42 14.5 38.5 17 34 17 L 10 17 C 5.5 17 2 15.5 2 11 Z" fill="#EA580C" />
+                                      <path d="M 5 6 L 10 11 L 5 16 H 8 L 13 11 L 8 6 Z" fill="#FFFFFF" />
+                                      <text x="16" y="14.5" fill="#FFFFFF" fontSize="10.5" fontWeight="900" fontFamily="sans-serif" fontStyle="italic" letterSpacing="-0.5">Ues</text>
+                                    </g>
+                                  </svg>
+                                </div>
+                              )}
+                              {method.iconType === "dac" && (
+                                <div className="flex-shrink-0 shadow-xs rounded-lg overflow-hidden border border-gray-200">
+                                  <svg className="w-14 h-9" viewBox="0 0 54 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="54" height="32" rx="6" fill="#FFFFFF" />
+                                    <g transform="translate(2, 4)">
+                                      <path d="M 4 8 L 10 12 L 4 16 Z" fill="#047857" />
+                                      <path d="M 10 8 L 16 12 L 10 16 Z" fill="#B91C1C" />
+                                      <text x="19" y="14" fill="#111827" fontSize="11" fontWeight="900" fontFamily="sans-serif" letterSpacing="0.2">DAC</text>
+                                      <text x="4" y="22" fill="#4B5563" fontSize="4.8" fontWeight="850" fontFamily="sans-serif" letterSpacing="0.1">GRUPO AGENCIA</text>
+                                    </g>
+                                  </svg>
+                                </div>
+                              )}
+                              {method.iconType === "depunta" && (
+                                <div className="flex-shrink-0 shadow-xs rounded-lg overflow-hidden border border-gray-200">
+                                  <svg className="w-14 h-9" viewBox="0 0 54 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="54" height="32" rx="6" fill="#FFFFFF" />
+                                    <g transform="translate(4, 4)">
+                                      <circle cx="11" cy="12" r="8" fill="#B91C1C" />
+                                      <text x="11.2" y="14.5" fill="#FFFFFF" fontSize="7" fontWeight="900" fontFamily="sans-serif" textAnchor="middle">DE</text>
+                                      <text x="21.5" y="15" fill="#111827" fontSize="9.5" fontWeight="900" fontFamily="sans-serif" letterSpacing="0.2">PUNTA</text>
+                                    </g>
+                                  </svg>
+                                </div>
+                              )}
+
+                              {!(["motorcycle", "truck_orange", "ues", "dac", "depunta"].includes(method.iconType)) && (
+                                <div className="flex-shrink-0 shadow-xs rounded-lg overflow-hidden border border-gray-200 w-14 h-9 bg-zinc-800 text-zinc-400 flex items-center justify-center">
+                                  <Truck className="h-5 w-5" />
+                                </div>
+                              )}
+
+                              <div>
+                                <span className={`text-xs block font-bold leading-tight ${isDark ? "text-zinc-100" : "text-zinc-800"}`}>
+                                  {method.title}
+                                </span>
+                                {method.subtext && (
+                                  <span className="text-[10px] text-zinc-450 italic font-mono block mt-0.5">{method.subtext}</span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
+
+                        {isSelected && isAgency && !hasFreeShipping && (
+                          <div className={`p-3.5 rounded-xl border flex items-start gap-3 mt-1.5 text-xs transition-all mx-1 animate-fade-in ${
+                            isDark 
+                              ? "bg-amber-955/20 border-amber-900/40 text-amber-305 text-amber-300"
+                              : "bg-amber-50 border-amber-200 text-amber-805"
+                          }`}>
+                            <HelpCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <span className="font-extrabold uppercase tracking-wide text-[10px] block mb-1">
+                                Envío Por Agencia a pagar en destino:
+                              </span>
+                              <p className={`leading-relaxed font-bold ${isDark ? "text-amber-100" : "text-amber-900"}`}>
+                                El costo del paquete lo paga el cliente al recibirlo.
+                              </p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
                 </div>
-
-                {/* Info Note regarding paying at destination for agencies */}
-                {(selectedDeliveryMethod === "ues" || selectedDeliveryMethod === "dac" || selectedDeliveryMethod === "depunta") && !hasFreeShipping && (
-                  <div className={`p-3.5 rounded-xl border flex items-start gap-3 mt-4 text-xs transition-colors ${
-                    isDark 
-                      ? "bg-amber-950/20 border-amber-900/40 text-amber-300" 
-                      : "bg-amber-50 border-amber-200 text-amber-805"
-                  }`}>
-                    <HelpCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-extrabold uppercase tracking-wide text-[10px] block mb-1">
-                        Envío Por Agencia a pagar en destino:
-                      </span>
-                      <p className="leading-relaxed font-bold text-amber-100">
-                        El costo del paquete lo paga el cliente al recibirlo.
-                      </p>
-                    </div>
-                  </div>
-                )}
 
                 {/* Free Shipping Alert Box */}
                 {hasFreeShipping && (
                   <div className={`p-4 rounded-xl border flex items-start gap-3 mt-4 text-xs transition-colors ${
                     isDark 
                       ? "bg-emerald-950/30 border-emerald-500/40 text-emerald-300" 
-                      : "bg-emerald-50 border-emerald-200 text-emerald-800"
+                      : "bg-emerald-50 border-emerald-200 text-emerald-805"
                   }`}>
                     <span className="text-xl">🎁</span>
                     <div>
@@ -1587,11 +1593,10 @@ export default function Checkout({
                   </div>
                 )}
 
-
               </div>
             )}
-              </div>
-            )}
+          </div>
+        )}
             {checkoutStep === "payment" && (
               <div className="space-y-6 animate-fade-in">
                 {/* Back Link to edit details */}

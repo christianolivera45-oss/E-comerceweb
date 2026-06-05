@@ -89,6 +89,8 @@ import { DashboardGeneral } from "./components/DashboardGeneral";
 import { DashboardOrders } from "./components/DashboardOrders";
 import WhatsAppWidget from "./components/WhatsAppWidget";
 import ImageGalleryEditor from "./components/ImageGalleryEditor";
+import GoogleReviewsCompact from "./components/GoogleReviewsCompact";
+import AddToCartModal from "./components/AddToCartModal";
 
 
 export const normalizeText = (text: string): string => {
@@ -202,7 +204,11 @@ const DEFAULT_SETTINGS: SiteSettings = {
   primaryColor: "#2563eb",
   accentColor: "#10b981",
   themeMode: "dark",
-  promotionBannerText: "🚚 ¡ENVÍO GRATUITO en compras superiores a $50! Código: JUEM50",
+  promotionBannerText: "🚚 ¡ENVÍO GRATUITO en compras superiores a $50! Código: APEX50",
+  promotionBannerText2: "🎁 ¡Envío GRATIS en compras mayores de $2000 para Pinamar, Salinas, Marindia, Neptunia! Elige tu de agencia favorita y nosotros lo cubrimos.",
+  promotionBannerBgColor: "#4f46e5",
+  promotionBannerTextColor: "#ffffff",
+  promotionBannerTransition: "slide",
   showPromotionBanner: true,
   lowStockThreshold: 5,
   mercadopagoActive: true,
@@ -288,6 +294,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   defaultFirstName: "Christian",
   defaultLastName: "Olivera",
   defaultPhone: "095085181",
+  googleReviewsEnabled: true,
   googleReviewsSource: "custom",
   googleReviewsRating: 4.9,
   googleReviewsTotal: 184,
@@ -824,6 +831,15 @@ export default function App() {
   // Active product details view
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
+  // Added product popup modal tracking state
+  const [addedItemModal, setAddedItemModal] = useState<{
+    product: Product;
+    quantity: number;
+    size?: string;
+    color?: string;
+    isOpen: boolean;
+  } | null>(null);
+
   // Authentication
   const [authToken, setAuthToken] = useState<string | null>(() => {
     const token = localStorage.getItem("apex_admin_token");
@@ -1050,26 +1066,51 @@ export default function App() {
   // Memoize top-bar slider dynamic slides for reactivity and performance
   const bannerSlides = useMemo(() => {
     const slides = [];
-    if (store.settings.showPromotionBanner && store.settings.promotionBannerText) {
-      slides.push({
-        id: "promo",
-        text: store.settings.promotionBannerText,
-        icon: <Tag className="h-3.5 w-3.5 inline shrink-0" />
-      });
+    const seenTexts = new Set<string>();
+
+    if (store.settings.showPromotionBanner) {
+      if (store.settings.promotionBannerText) {
+        const text1 = store.settings.promotionBannerText.trim();
+        if (text1) {
+          slides.push({
+            id: "promo",
+            text: text1,
+            icon: <Tag className="h-3.5 w-3.5 inline shrink-0" />
+          });
+          seenTexts.add(text1);
+        }
+      }
+      if (store.settings.promotionBannerText2) {
+        const text2 = store.settings.promotionBannerText2.trim();
+        if (text2 && !seenTexts.has(text2)) {
+          slides.push({
+            id: "promo2",
+            text: text2,
+            icon: <Tag className="h-3.5 w-3.5 inline shrink-0" />
+          });
+          seenTexts.add(text2);
+        }
+      }
     }
     if (store.settings.freeShippingActive !== false) {
       const minAmount = store.settings.freeShippingMinAmount !== undefined ? store.settings.freeShippingMinAmount : 2000;
       const regions = store.settings.freeShippingRegions || "Pinamar, Salinas, Marindia, Neptunia";
-      slides.push({
-        id: "shipping",
-        text: `🎁 ¡Envío GRATIS en compras mayores de $${minAmount} para ${regions}! Elige tu agencia favorita y nosotros lo cubrimos.`,
-        icon: <Truck className="h-4 w-4 inline shrink-0 text-emerald-300 animate-pulse" />
-      });
+      const textShipping = `🎁 ¡Envío GRATIS en compras mayores de $${minAmount} para ${regions}! Elige tu de agencia favorita y nosotros lo cubrimos.`;
+      
+      if (!seenTexts.has(textShipping)) {
+        slides.push({
+          id: "shipping",
+          text: textShipping,
+          icon: <Truck className="h-4 w-4 inline shrink-0 text-emerald-300 animate-pulse" />
+        });
+        seenTexts.add(textShipping);
+      }
     }
     return slides;
   }, [
     store.settings.showPromotionBanner,
     store.settings.promotionBannerText,
+    store.settings.promotionBannerText2,
     store.settings.freeShippingActive,
     store.settings.freeShippingMinAmount,
     store.settings.freeShippingRegions
@@ -1088,6 +1129,30 @@ export default function App() {
   }, [bannerSlides.length]);
 
   const activeBannerIdx = currentBannerIdx >= bannerSlides.length ? 0 : currentBannerIdx;
+
+  const bannerTransitionType = store.settings?.promotionBannerTransition || 'slide';
+  const bannerAnimationProps = useMemo(() => {
+    if (bannerTransitionType === 'fade') {
+      return {
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        exit: { opacity: 0 }
+      };
+    }
+    if (bannerTransitionType === 'zoom') {
+      return {
+        initial: { opacity: 0, scale: 0.88 },
+        animate: { opacity: 1, scale: 1 },
+        exit: { opacity: 0, scale: 1.12 }
+      };
+    }
+    // 'slide' (default)
+    return {
+      initial: { opacity: 0, y: 15 },
+      animate: { opacity: 1, y: 0 },
+      exit: { opacity: 0, y: -15 }
+    };
+  }, [bannerTransitionType]);
 
   const handlePrevBanner = () => {
     if (bannerSlides.length <= 1) return;
@@ -1139,6 +1204,9 @@ export default function App() {
       const res = await fetch("/api/store");
       if (!res.ok) throw new Error("No se pudo obtener la configuración de la tienda");
       const data = (await res.json()) as ShopState;
+      if (data && data.settings) {
+        data.settings = { ...DEFAULT_SETTINGS, ...data.settings };
+      }
       setStore(data);
       setEditingSettings(data.settings);
       setNewCategoryOrder((data.dbCategories || []).length + 1);
@@ -1198,6 +1266,15 @@ export default function App() {
       });
     }
     saveCartToLocalStorage(newCart);
+
+    // Trigger the beautiful confirmation modal instead of just adding silently
+    setAddedItemModal({
+      product,
+      quantity: qty,
+      size,
+      color,
+      isOpen: true
+    });
   };
 
   const handleUpdateQuantity = (productId: string, quantity: number, size?: string, color?: string) => {
@@ -2005,7 +2082,7 @@ export default function App() {
       }`}>
         {/* Top Banner Message for Promotions & Free Shipping Slider */}
         {bannerSlides.length > 0 && (
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white h-9 px-4 md:px-12 text-center text-[11px] md:text-xs font-semibold relative z-30 flex items-center justify-between overflow-hidden font-sans group">
+          <div className="theme-promo-banner h-9 px-4 md:px-12 text-center text-[11px] md:text-xs font-semibold relative z-30 flex items-center justify-between overflow-hidden font-sans group transition-all duration-300">
             {/* Left Manual Arrow */}
             {bannerSlides.length > 1 && (
               <button 
@@ -2020,19 +2097,21 @@ export default function App() {
             {/* Slider Content Frame */}
             <div className="flex-1 h-full flex items-center justify-center">
               <AnimatePresence mode="wait">
-                <motion.div
-                  key={activeBannerIdx}
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -15 }}
-                  transition={{ duration: 0.35, ease: "easeInOut" }}
-                  className="flex items-center justify-center gap-2 w-full h-full pb-1.5"
-                >
-                  {bannerSlides[activeBannerIdx] && bannerSlides[activeBannerIdx].icon}
-                  <span className="truncate max-w-[70vw] sm:max-w-[75vw] md:max-w-3xl select-all pointer-events-auto">
-                    {bannerSlides[activeBannerIdx] && bannerSlides[activeBannerIdx].text}
-                  </span>
-                </motion.div>
+                {bannerSlides[activeBannerIdx] && (
+                  <motion.div
+                    key={activeBannerIdx}
+                    initial={bannerAnimationProps.initial}
+                    animate={bannerAnimationProps.animate}
+                    exit={bannerAnimationProps.exit}
+                    transition={{ duration: 0.35, ease: "easeInOut" }}
+                    className="flex items-center justify-center gap-2 w-full h-full"
+                  >
+                    {bannerSlides[activeBannerIdx].icon}
+                    <span className="truncate max-w-[70vw] sm:max-w-[75vw] md:max-w-3xl select-all pointer-events-auto">
+                      {bannerSlides[activeBannerIdx].text}
+                    </span>
+                  </motion.div>
+                )}
               </AnimatePresence>
             </div>
 
@@ -2045,21 +2124,6 @@ export default function App() {
               >
                 <ChevronRight className="h-3.5 w-3.5" />
               </button>
-            )}
-
-            {/* Pagination dots (bottom tiny bars) */}
-            {bannerSlides.length > 1 && (
-              <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-40 select-none">
-                {bannerSlides.map((_, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setCurrentBannerIdx(idx)}
-                    className={`h-0.5 rounded-full transition-all duration-300 cursor-pointer ${
-                      idx === activeBannerIdx ? "w-4 bg-white" : "w-1.5 bg-white/40 hover:bg-white/70"
-                    }`}
-                  />
-                ))}
-              </div>
             )}
           </div>
         )}
@@ -2873,7 +2937,12 @@ export default function App() {
               </div>
             </div>
 
-            {/* Google Business Real Commercial Reputation & Reviews Section Disabled */}
+            {store.settings.googleReviewsEnabled !== false && (
+              <GoogleReviewsCompact 
+                themeMode={store.settings.themeMode} 
+                googlePlaceId={store.settings.googlePlaceId} 
+              />
+            )}
 
             <div className="max-w-7xl mx-auto px-6 mt-8 pt-8 border-t border-zinc-800/10 text-center text-[11px] space-y-2">
               <p className="leading-relaxed opacity-75">
@@ -6412,15 +6481,81 @@ export default function App() {
                         </div>
 
                         {editingSettings.showPromotionBanner !== false && (
-                          <div className="space-y-2 animate-fade-in">
-                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Texto de Ofertas & Descuentos en Barra Superior</label>
-                            <input
-                              type="text"
-                              value={editingSettings.promotionBannerText || ""}
-                              onChange={(e) => setEditingSettings({ ...editingSettings, promotionBannerText: e.target.value })}
-                              className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
-                              placeholder="p.ej. 🚚 ¡ENVÍO GRATUITO en compras superiores a $50! Código: JUEM50"
-                            />
+                          <div className="space-y-4 animate-fade-in border-t border-slate-100 dark:border-zinc-800/60 pt-4 mt-2">
+                            <div className="space-y-2">
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Texto de Ofertas 1 (Mensaje Principal)</label>
+                              <input
+                                type="text"
+                                value={editingSettings.promotionBannerText || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, promotionBannerText: e.target.value })}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
+                                placeholder="p.ej. 🚚 ¡ENVÍO GRATUITO en compras superiores a $50! Código: APEX50"
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Texto de Ofertas 2 (Mensaje Secundario de Rotación)</label>
+                              <input
+                                type="text"
+                                value={editingSettings.promotionBannerText2 || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, promotionBannerText2: e.target.value })}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
+                                placeholder="p.ej. 🎁 ¡Envío GRATIS en compras mayores de $2000! Elige tu de agencia favorita y nosotros lo cubrimos."
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div className="space-y-2">
+                                <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Color de Fondo</label>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="color"
+                                    value={editingSettings.promotionBannerBgColor || "#4f46e5"}
+                                    onChange={(e) => setEditingSettings({ ...editingSettings, promotionBannerBgColor: e.target.value })}
+                                    className="w-10 h-8 p-1 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg cursor-pointer"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={editingSettings.promotionBannerBgColor || "#4f46e5"}
+                                    onChange={(e) => setEditingSettings({ ...editingSettings, promotionBannerBgColor: e.target.value })}
+                                    className="flex-1 px-3 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white"
+                                    placeholder="#4f46e5"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="space-y-2">
+                                <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Color de Texto</label>
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="color"
+                                    value={editingSettings.promotionBannerTextColor || "#ffffff"}
+                                    onChange={(e) => setEditingSettings({ ...editingSettings, promotionBannerTextColor: e.target.value })}
+                                    className="w-10 h-8 p-1 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg cursor-pointer"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={editingSettings.promotionBannerTextColor || "#ffffff"}
+                                    onChange={(e) => setEditingSettings({ ...editingSettings, promotionBannerTextColor: e.target.value })}
+                                    className="flex-1 px-3 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white"
+                                    placeholder="#ffffff"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="space-y-2">
+                                <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Efecto de Transición</label>
+                                <select
+                                  value={editingSettings.promotionBannerTransition || 'slide'}
+                                  onChange={(e) => setEditingSettings({ ...editingSettings, promotionBannerTransition: e.target.value as any })}
+                                  className="w-full px-3 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white"
+                                >
+                                  <option value="slide">Deslizar verticalmente (Slide)</option>
+                                  <option value="fade">Desvanecimiento (Fade)</option>
+                                  <option value="zoom">Efecto Escala / Zoom (Zoom)</option>
+                                </select>
+                              </div>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -7524,6 +7659,34 @@ export default function App() {
                         </div>
                       </div>
 
+                      {/* Master Switch */}
+                      <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/30">
+                        <div className="space-y-0.5 pr-4">
+                          <span className="font-extrabold text-xs block text-slate-800 dark:text-zinc-100">
+                            Mostrar widget de Opiniones en la web
+                          </span>
+                          <span className="text-[10px] text-slate-500 dark:text-zinc-400 block leading-tight">
+                            Habilita o deshabilita por completo la visualización de la reputación en el pie de página de la tienda online.
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setEditingSettings({ 
+                            ...editingSettings, 
+                            googleReviewsEnabled: editingSettings.googleReviewsEnabled === false ? true : false 
+                          })}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            editingSettings.googleReviewsEnabled !== false ? "bg-indigo-600" : "bg-slate-200 dark:bg-zinc-700"
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                              editingSettings.googleReviewsEnabled !== false ? "translate-x-5" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
                       {/* Origen Selector */}
                       <div className="space-y-3">
                         <label className="block text-[11px] font-extrabold uppercase tracking-widest text-slate-500 dark:text-zinc-400">
@@ -8573,6 +8736,23 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <AddToCartModal
+        isOpen={addedItemModal?.isOpen ?? false}
+        onClose={() => setAddedItemModal(null)}
+        onGoToCheckout={() => {
+          setAddedItemModal(null);
+          setActiveTab("checkout");
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }}
+        product={addedItemModal?.product ?? null}
+        quantity={addedItemModal?.quantity ?? 1}
+        selectedSize={addedItemModal?.size}
+        selectedColor={addedItemModal?.color}
+        themeMode={store.settings.themeMode}
+        allProducts={store.products}
+        onAddCrossSell={handleAddToCart}
+      />
 
     </div>
   );

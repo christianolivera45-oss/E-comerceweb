@@ -62,6 +62,10 @@ export interface SiteSettings {
   accentColor: string; // Interactive elements color
   themeMode: 'dark' | 'light';
   promotionBannerText: string;
+  promotionBannerText2?: string;
+  promotionBannerBgColor?: string;
+  promotionBannerTextColor?: string;
+  promotionBannerTransition?: 'slide' | 'fade' | 'zoom';
   showPromotionBanner: boolean;
   heroSlides?: HeroSlide[];
   logoType?: 'text' | 'image';
@@ -97,6 +101,7 @@ export interface SiteSettings {
   defaultFirstName?: string;
   defaultLastName?: string;
   defaultPhone?: string;
+  googleReviewsEnabled?: boolean;
   googleReviewsSource?: 'api' | 'custom';
   googleReviewsRating?: number;
   googleReviewsTotal?: number;

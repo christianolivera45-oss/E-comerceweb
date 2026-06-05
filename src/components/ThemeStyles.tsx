@@ -10,6 +10,13 @@ export default function ThemeStyles({ settings }: ThemeStylesProps) {
       :root {
         --color-primary: ${settings.primaryColor || "#3b82f6"};
         --color-accent: ${settings.accentColor || "#10b981"};
+        --color-promo-bg: ${settings.promotionBannerBgColor || "#4f46e5"};
+        --color-promo-text: ${settings.promotionBannerTextColor || "#ffffff"};
+      }
+      
+      .theme-promo-banner {
+        background: var(--color-promo-bg);
+        color: var(--color-promo-text);
       }
       
       .theme-btn-primary {

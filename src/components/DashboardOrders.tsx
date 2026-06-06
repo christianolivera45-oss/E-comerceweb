@@ -14,19 +14,23 @@ import {
   DollarSign, 
   ShoppingBag,
   ExternalLink,
-  Tag as TagIcon
+  Tag as TagIcon,
+  Trash2
 } from "lucide-react";
 
 interface DashboardOrdersProps {
   store: ShopState;
   onUpdateStatus: (id: string, status: string) => Promise<void>;
+  onDeleteOrder: (id: string) => Promise<void>;
 }
 
-export const DashboardOrders: React.FC<DashboardOrdersProps> = ({ store, onUpdateStatus }) => {
+export const DashboardOrders: React.FC<DashboardOrdersProps> = ({ store, onUpdateStatus, onDeleteOrder }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isDeletingLoading, setIsDeletingLoading] = useState<string | null>(null);
 
   const orders: Order[] = store.orders || [];
 
@@ -250,7 +254,7 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({ store, onUpdat
             <p className="text-zinc-400 dark:text-zinc-500 text-[11px] mt-1">Los pedidos aparecerán inmediatamente una vez que los clientes avancen en su proceso de checkout o Mercado Pago.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-[550px] overflow-y-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50/50 dark:bg-zinc-900/30 border-b border-slate-100 dark:border-zinc-850">
@@ -313,6 +317,42 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({ store, onUpdat
                             >
                               <Phone className="h-3.5 w-3.5" />
                             </button>
+
+                            {deletingId === order.id ? (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={async () => {
+                                    setIsDeletingLoading(order.id);
+                                    try {
+                                      await onDeleteOrder(order.id);
+                                    } finally {
+                                      setIsDeletingLoading(null);
+                                      setDeletingId(null);
+                                    }
+                                  }}
+                                  title="Confirmar eliminación del pedido"
+                                  className="px-2 py-1 bg-rose-600 text-white text-[10px] hover:bg-rose-700 uppercase font-black rounded cursor-pointer"
+                                >
+                                  {isDeletingLoading === order.id ? "..." : "Sí"}
+                                </button>
+                                <button
+                                  onClick={() => setDeletingId(null)}
+                                  title="Cancelar"
+                                  className="px-1.5 py-1 bg-zinc-200 dark:bg-zinc-850 text-zinc-650 dark:text-zinc-350 text-[10px] hover:bg-zinc-300 hover:dark:bg-zinc-800 rounded cursor-pointer"
+                                >
+                                  No
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setDeletingId(order.id)}
+                                title="Eliminar pedido permanentemente"
+                                className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 rounded-lg transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+
                             <button
                               onClick={() => toggleRow(order.id)}
                               className="p-1.5 bg-slate-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg transition-colors cursor-pointer"
@@ -320,6 +360,9 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({ store, onUpdat
                               {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                             </button>
                           </div>
+                          {deletingId === order.id && (
+                            <span className="block text-[8px] text-rose-500 dark:text-rose-400 font-bold mt-1 uppercase animate-pulse">¿Borrar?</span>
+                          )}
                         </td>
                       </tr>
 

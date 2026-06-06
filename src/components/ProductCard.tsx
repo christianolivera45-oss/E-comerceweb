@@ -64,6 +64,14 @@ export default function ProductCard({
     return `$${Math.round(cheapestOption.price)}`;
   };
 
+  const optimizeImageUrl = (url: string) => {
+    if (!url) return "";
+    if (url.includes("unsplash.com")) {
+      return url.replace("auto=format", "fm=webp") + (url.includes("w=") ? "" : "&w=600");
+    }
+    return url;
+  };
+
   return (
     <div
       className={`group relative flex flex-col rounded-2xl border overflow-hidden transition-all duration-300 hover:shadow-xl hover:shadow-black/20 ${
@@ -78,10 +86,11 @@ export default function ProductCard({
         className="relative aspect-square overflow-hidden bg-zinc-950/25 cursor-pointer"
       >
         <img
-          src={cheapestOption.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80"}
+          src={optimizeImageUrl(cheapestOption.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80")}
           alt={product.name}
           className="h-full w-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-105"
           referrerPolicy="no-referrer"
+          loading="lazy"
         />
 
         {/* Promo Badge */}

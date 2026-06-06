@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { X, ShoppingCart, MessageSquare, ShieldCheck, Truck, RefreshCw, ChevronLeft, ChevronRight, AlertCircle, Share2, Maximize2, Cpu, Wrench, Clock, Calendar } from "lucide-react";
+import { X, ShoppingCart, MessageSquare, ShieldCheck, Truck, RefreshCw, ChevronLeft, ChevronRight, AlertCircle, Share2, Maximize2, Cpu, Wrench, Clock, Calendar, Home } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Product, SiteSettings, is3DProduct } from "../types";
 import ProductCard from "./ProductCard";
@@ -254,6 +254,33 @@ Me gustaría coordinar stock, fabricación y envío.`;
 
   const isDiscounted = product.originalPrice && product.originalPrice > dynamicPrice;
 
+  const solvedCategory = dbCategories.find(c => String(c.id) === String(product.categoria_id)) || { nombre: product.category, id: product.categoria_id || "todos" };
+
+  const breadcrumbSchema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Inicio",
+        "item": typeof window !== "undefined" ? `${window.location.protocol}//${window.location.host}/` : "https://ventas-juem.com/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": solvedCategory.nombre || "Categoría",
+        "item": typeof window !== "undefined" ? `${window.location.protocol}//${window.location.host}/${solvedCategory.id || "todos"}` : "https://ventas-juem.com/todos"
+      },
+      {
+        "@type": "ListItem",
+        "position": 3,
+        "name": product.name,
+        "item": typeof window !== "undefined" ? `${window.location.protocol}//${window.location.host}/producto/${product.id}` : "https://ventas-juem.com/"
+      }
+    ]
+  };
+
   return (
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-10 animate-fade-in">
       <style>{`
@@ -267,6 +294,32 @@ Me gustaría coordinar stock, fabricación y envío.`;
           scrollbar-width: none !important; /* Firefox */
         }
       `}</style>
+
+      {/* Schema.org BreadcrumbList structured data */}
+      <script type="application/ld+json">
+        {JSON.stringify(breadcrumbSchema)}
+      </script>
+
+      {/* Dynamic SEO Breadcrumbs */}
+      <nav aria-label="Breadcrumb" className={`flex items-center space-x-1 px-1 sm:space-x-2 text-[10px] sm:text-xs font-semibold mb-3 sm:mb-5 tracking-wide ${isThemeDark ? "text-zinc-400" : "text-zinc-650"}`}>
+        <button 
+          onClick={onClose}
+          className="flex items-center gap-1 hover:text-indigo-500 hover:underline transition-colors cursor-pointer"
+        >
+          <Home className="w-3.5 h-3.5" />
+          <span>Inicio</span>
+        </button>
+        
+        <ChevronRight className="w-3 h-3 text-zinc-450" />
+        
+        <span className="capitalize">{solvedCategory.nombre || "Categoría"}</span>
+        
+        <ChevronRight className="w-3 h-3 text-zinc-450" />
+        
+        <span className={isThemeDark ? "text-zinc-100 font-bold truncate max-w-[140px] sm:max-w-none" : "text-zinc-850 font-bold truncate max-w-[140px] sm:max-w-none"}>
+          {product.name}
+        </span>
+      </nav>
 
 
 
@@ -370,7 +423,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
                       : "border-slate-205 bg-white hover:border-slate-350 opacity-85"
                   }`}
                 >
-                  <img src={imgUrl} className="w-full h-full object-contain p-1" referrerPolicy="no-referrer" />
+                  <img src={imgUrl} alt={`${product.name} - Miniatura ${idx + 1}`} className="w-full h-full object-contain p-1" referrerPolicy="no-referrer" />
                 </button>
               ))}
             </div>
@@ -790,7 +843,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
                         : "border-white/10 bg-black/40 hover:border-white/30 opacity-70 hover:opacity-100"
                     }`}
                   >
-                    <img src={imgUrl} className="w-full h-full object-contain p-0.5" referrerPolicy="no-referrer" />
+                    <img src={imgUrl} alt={`${product.name} - Galería Completa ${idx + 1}`} className="w-full h-full object-contain p-0.5" referrerPolicy="no-referrer" />
                   </button>
                 ))}
               </div>

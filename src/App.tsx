@@ -104,6 +104,18 @@ export const normalizeText = (text: string): string => {
     .trim();
 };
 
+export const generateSlug = (text: string): string => {
+  if (!text) return "";
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // remove accents
+    .replace(/[^a-z0-9\s-]/g, "")    // remove special characters
+    .trim()
+    .replace(/\s+/g, "-")            // space to dash
+    .replace(/-+/g, "-");            // collapse multiple dashes
+};
+
 export const calculateRelevance = (
   product: Product,
   query: string,
@@ -716,7 +728,18 @@ export default function App() {
     }
 
     if (prodId) {
-      const prod = productsList.find(p => String(p.id) === String(prodId));
+      const prod = productsList.find(p => {
+        const idMatches = String(p.id) === String(prodId);
+        const nameSlug = p.name ? generateSlug(p.name) : "";
+        const slugMatches = nameSlug && nameSlug === prodId;
+        const dashIndex = prodId.indexOf("-");
+        let idFromDashMatches = false;
+        if (dashIndex > 0) {
+          const possibleId = prodId.substring(0, dashIndex);
+          idFromDashMatches = String(p.id) === possibleId;
+        }
+        return idMatches || slugMatches || idFromDashMatches;
+      });
       if (prod) {
         setSelectedProduct(prod);
       } else {
@@ -1164,15 +1187,56 @@ export default function App() {
     setCurrentBannerIdx((prev) => (prev + 1) % bannerSlides.length);
   };
 
-  // Dynamic Tab Title and Favicon Synchronization based on admin settings
+  // Dynamic Tab Title, Favicon, Meta Description, Categories and Canonical URL Synchronization based on admin settings & selected product
   useEffect(() => {
     if (!store.settings) return;
 
     // 1. Sync Document Title
-    const currentTitle = store.settings.siteTitle || "Ventas Juem";
+    const baseTitle = store.settings.siteTitle || "Ventas Juem";
+    const currentTitle = selectedProduct 
+      ? `${selectedProduct.name} | ${baseTitle}`
+      : baseTitle;
     document.title = currentTitle;
 
-    // 2. Sync Favicon Link
+    // 2. Sync Meta Tags
+    const setMetaTag = (id: string, attributeName: string, attributeValue: string, content: string) => {
+      let meta = document.getElementById(id) || document.querySelector(`meta[${attributeName}="${attributeValue}"]`);
+      if (!meta) {
+        meta = document.createElement("meta");
+        meta.setAttribute(attributeName, attributeValue);
+        if (id) meta.id = id;
+        document.getElementsByTagName("head")[0].appendChild(meta);
+      }
+      meta.setAttribute("content", content);
+    };
+
+    const currentDesc = selectedProduct
+      ? (selectedProduct.description || "").substring(0, 160)
+      : (store.settings.siteSubtitle || "Moda, tecnología y accesorios con envío a todo el país.");
+
+    setMetaTag("seo-description", "name", "description", currentDesc);
+    setMetaTag("og-title", "property", "og:title", currentTitle);
+    setMetaTag("og-description", "property", "og:description", currentDesc);
+    setMetaTag("twitter-title", "name", "twitter:title", currentTitle);
+    setMetaTag("twitter-description", "name", "twitter:description", currentDesc);
+
+    const currentImg = selectedProduct?.imageUrl || store.settings.bannerImageUrl || "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1200&q=80";
+    setMetaTag("og-image", "property", "og:image", currentImg);
+    setMetaTag("twitter-image", "name", "twitter:image", currentImg);
+
+    // Sync Canonical
+    let canonical = document.querySelector("link[rel='canonical']");
+    if (!canonical) {
+      canonical = document.createElement("link");
+      canonical.setAttribute("rel", "canonical");
+      document.getElementsByTagName("head")[0].appendChild(canonical);
+    }
+    const currentUrl = selectedProduct 
+      ? `${window.location.protocol}//${window.location.host}/producto/${generateSlug(selectedProduct.name)}`
+      : `${window.location.protocol}//${window.location.host}${window.location.pathname}`;
+    canonical.setAttribute("href", currentUrl);
+
+    // 3. Sync Favicon Link
     let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
     if (!link) {
       link = document.createElement("link");
@@ -1190,11 +1254,11 @@ export default function App() {
       const base64Svg = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
       link.href = base64Svg;
     }
-  }, [store.settings]);
+  }, [store.settings, selectedProduct]);
 
   const handleOpenProduct = (prod: Product) => {
     setSelectedProduct(prod);
-    const newUrl = `/producto/${prod.id}`;
+    const newUrl = `/producto/${generateSlug(prod.name)}`;
     window.history.pushState(null, "", newUrl);
   };
 
@@ -2083,17 +2147,6 @@ export default function App() {
         {/* Top Banner Message for Promotions & Free Shipping Slider */}
         {bannerSlides.length > 0 && (
           <div className="theme-promo-banner h-9 px-4 md:px-12 text-center text-[11px] md:text-xs font-semibold relative z-30 flex items-center justify-between overflow-hidden font-sans group transition-all duration-300">
-            {/* Left Manual Arrow */}
-            {bannerSlides.length > 1 && (
-              <button 
-                onClick={handlePrevBanner}
-                className="absolute left-1.5 md:left-3 p-1 rounded-full text-white bg-white/5 hover:bg-white/15 hover:scale-105 active:scale-95 transition cursor-pointer shrink-0 z-40 select-none opacity-80 group-hover:opacity-100"
-                title="Promoción Anterior"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </button>
-            )}
-
             {/* Slider Content Frame */}
             <div className="flex-1 h-full flex items-center justify-center">
               <AnimatePresence mode="wait">
@@ -2114,17 +2167,6 @@ export default function App() {
                 )}
               </AnimatePresence>
             </div>
-
-            {/* Right Manual Arrow */}
-            {bannerSlides.length > 1 && (
-              <button 
-                onClick={handleNextBanner}
-                className="absolute right-1.5 md:right-3 p-1 rounded-full text-white bg-white/5 hover:bg-white/15 hover:scale-105 active:scale-95 transition cursor-pointer shrink-0 z-40 select-none opacity-80 group-hover:opacity-100"
-                title="Siguiente Promoción"
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-            )}
           </div>
         )}
 
@@ -2381,7 +2423,7 @@ export default function App() {
               dbCategories={store.dbCategories || []}
               onViewProduct={(p) => {
                 setSelectedProduct(p);
-                window.history.pushState(null, "", `/producto/${p.id}`);
+                window.history.pushState(null, "", `/producto/${generateSlug(p.name)}`);
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }}
             />
@@ -3377,6 +3419,29 @@ export default function App() {
                     }
                   } catch (err) {
                     showAdminToast("Error de conexión al guardar el estado del pedido.", "error");
+                  }
+                }}
+                onDeleteOrder={async (id) => {
+                  try {
+                    const response = await fetch(`/api/orders/${id}`, {
+                      method: "DELETE",
+                      headers: {
+                        "Authorization": `Bearer ${localStorage.getItem("apex_admin_token")}`
+                      }
+                    });
+                    const d = await response.json();
+                    if (response.ok && d.success) {
+                      showAdminToast("Pedido eliminado correctamente.", "success");
+                      // Dynamically remove from local store state
+                      setStore(prev => ({
+                        ...prev,
+                        orders: (prev.orders || []).filter(o => o.id !== id)
+                      }));
+                    } else {
+                      showAdminToast(d.message || "Error al eliminar el pedido.", "error");
+                    }
+                  } catch (err) {
+                    showAdminToast("Error de conexión al eliminar el pedido.", "error");
                   }
                 }}
               />

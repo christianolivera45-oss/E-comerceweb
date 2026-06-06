@@ -1804,6 +1804,36 @@ async function startServer() {
     }
   });
 
+  // DELETE remove order manually by administrator
+  app.delete("/api/orders/:id", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación de administrador principal." });
+    }
+
+    const { id } = req.params;
+
+    try {
+      const pool = getDbPool();
+      if (pool && !dbUnavailable) {
+        // Cascade delete on public.order_items is active in DB, so we only need to delete from public.orders
+        await pool.query("DELETE FROM public.orders WHERE id = $1;", [id]);
+        const dbState = await getDbState();
+        currentStoreState = dbState;
+      } else {
+        if (currentStoreState.orders) {
+          currentStoreState.orders = currentStoreState.orders.filter((o: any) => o.id !== id);
+          fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+        }
+      }
+
+      res.json({ success: true, message: "Pedido eliminado correctamente de la base de datos.", state: currentStoreState });
+    } catch (err: any) {
+      console.error("Error deleting order:", err);
+      res.status(500).json({ success: false, message: "No se pudo eliminar el pedido.", error: err.message });
+    }
+  });
+
   // Mercado Pago Uruguay Custom Server Integration Endpoints (Fully Secured against price tampering)
   app.post("/api/payments/mercadopago/preference", async (req, res) => {
     try {
@@ -2752,6 +2782,305 @@ async function startServer() {
     };
   }
 
+  // --- START SEO ENGINE INTEGRATION ---
+  // Helper to slugify content on server side
+  function generateSlug(text: string): string {
+    if (!text) return "";
+    return text
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "") // remove accents
+      .replace(/[^a-z0-9\s-]/g, "")    // remove special characters
+      .trim()
+      .replace(/\s+/g, "-")            // space to dash
+      .replace(/-+/g, "-");            // collapse multiple dashes
+  }
+
+  // Helper to dynamically inject meta tags into index.html for high-tier search engine crawling
+  async function injectSEO(htmlContent: string, req: express.Request): Promise<string> {
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const pathUrl = req.path;
+    const segments = pathUrl.split("/").filter(Boolean);
+    
+    let state = currentStoreState;
+    if (process.env.DATABASE_URL && !dbUnavailable) {
+      try {
+        state = await getDbState();
+      } catch (e) {
+        // Safe fallback in memory
+      }
+    }
+    
+    const settings: any = state.settings || {};
+    let title = settings.siteTitle || "Ventas Juem";
+    let description = settings.siteSubtitle || "Moda, tecnología y accesorios con envío express a todo Uruguay.";
+    let imgUrl = settings.bannerImageUrl || "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1200&q=80";
+    let canonicalUrl = `${baseUrl}${pathUrl}`;
+    let schemaJson = "";
+
+    // Local-focused default description improvements
+    if (!settings.siteSubtitle) {
+      description = "Ventas Juem - Moda, tecnología, calzado y accesorios estéticos con envío a todo el país. Retiro gratis en Ciudad de la Costa, Salinas, Pinamar o Montevideo.";
+    }
+
+    // Detales para un producto en específico
+    if (segments[0] === "producto" && segments[1]) {
+      const prodId = segments[1];
+      const products = state.products || [];
+      const product = products.find(p => {
+        const idMatches = String(p.id) === String(prodId);
+        const nameSlug = p.name ? generateSlug(p.name) : "";
+        const slugMatches = nameSlug && nameSlug === prodId;
+        const dashIndex = prodId.indexOf("-");
+        let idFromDashMatches = false;
+        if (dashIndex > 0) {
+          const possibleId = prodId.substring(0, dashIndex);
+          idFromDashMatches = String(p.id) === possibleId;
+        }
+        return idMatches || slugMatches || idFromDashMatches;
+      });
+      
+      if (product) {
+        title = `${product.name} | ${settings.siteTitle || "Ventas Juem"} Uruguay`;
+        description = product.description ? product.description.substring(0, 160) : description;
+        if (product.imageUrl) {
+          imgUrl = product.imageUrl;
+        }
+        
+        // Google Structured Data (JSON-LD Product Spec)
+        schemaJson = JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "Product",
+          "name": product.name,
+          "image": product.imageUrl,
+          "description": product.description || "",
+          "sku": `PROD-${product.id}`,
+          "offers": {
+            "@type": "Offer",
+            "url": `${baseUrl}/producto/${generateSlug(product.name)}`,
+            "priceCurrency": "UYU",
+            "price": product.price,
+            "itemCondition": "https://schema.org/NewCondition",
+            "availability": (product.stock && product.stock > 0) ? "https://schema.org/InStock" : "https://schema.org/OutOfStock"
+          }
+        }, null, 2);
+      }
+    }
+
+    if (!schemaJson) {
+      // LocalBusiness / Store hybrid markup tailored for Local SEO targeting Ciudad de la Costa, Salinas, Pinamar, and Montevideo
+      schemaJson = JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "LocalBusiness",
+        "additionalType": "https://schema.org/Store",
+        "name": settings.siteTitle || "Ventas Juem",
+        "description": `${description} Ventas y envíos express coordinados para Montevideo, Ciudad de la Costa, Salinas, Pinamar y Maldonado.`,
+        "url": baseUrl,
+        "telephone": settings.whatsappNumber || "",
+        "priceRange": "$$",
+        "image": imgUrl,
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": settings.pickupAddress || "Av. Giannattasio & Calle Uruguay",
+          "addressLocality": "Ciudad de la Costa",
+          "addressRegion": "Canelones / Montevideo",
+          "postalCode": "15000",
+          "addressCountry": "UY"
+        },
+        "geo": {
+          "@type": "GeoCoordinates",
+          "latitude": -34.8258,
+          "longitude": -55.9525
+        },
+        "openingHoursSpecification": {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday"
+          ],
+          "opens": "09:00",
+          "closes": "20:00"
+        }
+      }, null, 2);
+    }
+
+    let output = htmlContent;
+    
+    // Replace standard variables in HTML structure
+    output = output.replace(/<title>.*?<\/title>/gi, `<title>${title}</title>`);
+    output = output.replace(
+      /<meta name="description" content=".*?" id="seo-description" \/>/gi, 
+      `<meta name="description" content="${description.replace(/"/g, '&quot;')}" id="seo-description" />`
+    );
+    output = output.replace(
+      /<link rel="canonical" href=".*?" id="seo-canonical" \/>/gi,
+      `<link rel="canonical" href="${canonicalUrl}" id="seo-canonical" />`
+    );
+
+    // Open Graph Replaces
+    output = output.replace(
+      /<meta property="og:title" content=".*?" id="og-title" \/>/gi, 
+      `<meta property="og:title" content="${title.replace(/"/g, '&quot;')}" id="og-title" />`
+    );
+    output = output.replace(
+      /<meta property="og:description" content=".*?" id="og-description" \/>/gi, 
+      `<meta property="og:description" content="${description.replace(/"/g, '&quot;')}" id="og-description" />`
+    );
+    output = output.replace(
+      /<meta property="og:image" content=".*?" id="og-image" \/>/gi, 
+      `<meta property="og:image" content="${imgUrl}" id="og-image" />`
+    );
+    output = output.replace(
+      /<meta property="og:url" content=".*?" id="og-url" \/>/gi, 
+      `<meta property="og:url" content="${canonicalUrl}" id="og-url" />`
+    );
+
+    // Twitter-spec
+    output = output.replace(
+      /<meta name="twitter:title" content=".*?" id="twitter-title" \/>/gi, 
+      `<meta name="twitter:title" content="${title.replace(/"/g, '&quot;')}" id="twitter-title" />`
+    );
+    output = output.replace(
+      /<meta name="twitter:description" content=".*?" id="twitter-description" \/>/gi, 
+      `<meta name="twitter:description" content="${description.replace(/"/g, '&quot;')}" id="twitter-description" />`
+    );
+    output = output.replace(
+      /<meta name="twitter:image" content=".*?" id="twitter-image" \/>/gi, 
+      `<meta name="twitter:image" content="${imgUrl}" id="twitter-image" />`
+    );
+
+    // Schema Structure
+    output = output.replace(
+      /<script type="application\/ld\+json" id="seo-schema">[\s\S]*?<\/script>/gi,
+      `<script type="application/ld+json" id="seo-schema">\n${schemaJson}\n</script>`
+    );
+
+    return output;
+  }
+
+  // Dynamic robots.txt
+  app.get("/robots.txt", (req, res) => {
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    res.type("text/plain");
+    res.send(`User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/
+
+Sitemap: ${baseUrl}/sitemap.xml
+Sitemap: ${baseUrl}/sitemap-image.xml`);
+  });
+
+  // Dynamic sitemap.xml compiling current categories and products with slugs for Google Index
+  app.get("/sitemap.xml", async (req, res) => {
+    try {
+      const baseUrl = `${req.protocol}://${req.get("host")}`;
+      let state = currentStoreState;
+      if (process.env.DATABASE_URL && !dbUnavailable) {
+        try {
+          state = await getDbState();
+        } catch (e) {
+          // Fallback to memory
+        }
+      }
+      
+      const lastModDate = new Date().toISOString().split("T")[0];
+      
+      let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+      xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+      
+      // 1. Home
+      xml += `  <url>\n`;
+      xml += `    <loc>${baseUrl}/</loc>\n`;
+      xml += `    <lastmod>${lastModDate}</lastmod>\n`;
+      xml += `    <changefreq>daily</changefreq>\n`;
+      xml += `    <priority>1.0</priority>\n`;
+      xml += `  </url>\n`;
+      
+      // 2. Categories mapping
+      const categories = state.dbCategories || [];
+      categories.forEach(cat => {
+        if (cat.active !== false) {
+          xml += `  <url>\n`;
+          xml += `    <loc>${baseUrl}/${cat.id}</loc>\n`;
+          xml += `    <lastmod>${lastModDate}</lastmod>\n`;
+          xml += `    <changefreq>weekly</changefreq>\n`;
+          xml += `    <priority>0.8</priority>\n`;
+          xml += `  </url>\n`;
+        }
+      });
+      
+      // 3. Active products mapping
+      const products = state.products || [];
+      products.forEach(p => {
+        const isWithStock = p.stock !== undefined ? p.stock > 0 : true;
+        if (isWithStock && p.paused !== true && p.active !== false) {
+          xml += `  <url>\n`;
+          xml += `    <loc>${baseUrl}/producto/${generateSlug(p.name)}</loc>\n`;
+          xml += `    <lastmod>${p.createdAt ? p.createdAt.split("T")[0] : lastModDate}</lastmod>\n`;
+          xml += `    <changefreq>weekly</changefreq>\n`;
+          xml += `    <priority>0.9</priority>\n`;
+          xml += `  </url>\n`;
+        }
+      });
+      
+      xml += `</urlset>`;
+      
+      res.header("Content-Type", "application/xml");
+      res.send(xml);
+    } catch (err: any) {
+      console.error("Error generating sitemap:", err);
+      res.status(500).send("No se pudo generar el Sitemap.");
+    }
+  });
+
+  // Dynamic /sitemap-image.xml dedicated sitemap file mapping all high-quality product images for Google Rich Search Results
+  app.get("/sitemap-image.xml", async (req, res) => {
+    try {
+      const baseUrl = `${req.protocol}://${req.get("host")}`;
+      let state = currentStoreState;
+      if (process.env.DATABASE_URL && !dbUnavailable) {
+        try {
+          state = await getDbState();
+        } catch (e) {
+          // Fallback to memory
+        }
+      }
+
+      let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+      xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"\n`;
+      xml += `        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n`;
+
+      const products = state.products || [];
+      products.forEach(p => {
+        const isWithStock = p.stock !== undefined ? p.stock > 0 : true;
+        if (isWithStock && p.paused !== true && p.active !== false && p.imageUrl) {
+          xml += `  <url>\n`;
+          xml += `    <loc>${baseUrl}/producto/${generateSlug(p.name)}</loc>\n`;
+          xml += `    <image:image>\n`;
+          xml += `      <image:loc>${p.imageUrl.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</image:loc>\n`;
+          xml += `      <image:title>${p.name.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</image:title>\n`;
+          xml += `    </image:image>\n`;
+          xml += `  </url>\n`;
+        }
+      });
+
+      xml += `</urlset>`;
+
+      res.header("Content-Type", "application/xml");
+      res.send(xml);
+    } catch (err: any) {
+      console.error("Error generating sitemap-image:", err);
+      res.status(500).send("No se pudo generar el Sitemap de Imágenes.");
+    }
+  });
+  // --- END SEO ENGINE INTEGRATION ---
+
   // Vite integration
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -2761,6 +3090,52 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
+    
+    // Intercept standard index.html routes for dynamic SEO meta-injections
+    app.get("*", async (req, res, next) => {
+      // If requests are for assets or api, skip to standard handler
+      if (req.path.includes(".") || req.path.startsWith("/api/")) {
+        return next();
+      }
+      
+      // Dynamic 301 Redirects for Product URLs from ID to Slug (Duplicate Content Mitigation)
+      const segments = req.path.split("/").filter(Boolean);
+      if (segments[0] === "producto" && segments[1]) {
+        const prodId = segments[1];
+        let state = currentStoreState;
+        if (process.env.DATABASE_URL && !dbUnavailable) {
+          try {
+            state = await getDbState();
+          } catch (e) {
+            // Safe fallback
+          }
+        }
+        const products = state.products || [];
+        const product = products.find(p => String(p.id) === String(prodId));
+        if (product) {
+          const properSlug = generateSlug(product.name);
+          if (properSlug && prodId !== properSlug) {
+            console.log(`[SEO Redirect 301] Permanent redirecting from ${prodId} to ${properSlug}`);
+            return res.redirect(301, `/producto/${properSlug}`);
+          }
+        }
+      }
+      
+      try {
+        const indexHtmlPath = path.join(distPath, "index.html");
+        if (fs.existsSync(indexHtmlPath)) {
+          const rawHtml = fs.readFileSync(indexHtmlPath, "utf-8");
+          const seoHtml = await injectSEO(rawHtml, req);
+          res.send(seoHtml);
+        } else {
+          next();
+        }
+      } catch (err) {
+        console.error("Error applying SEO server side:", err);
+        next();
+      }
+    });
+
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));

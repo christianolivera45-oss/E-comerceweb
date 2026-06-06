@@ -10,6 +10,7 @@ import pg from "pg";
 import { v2 as cloudinary } from "cloudinary";
 import multer from "multer";
 import { MercadoPagoConfig, Preference, Payment } from "mercadopago";
+import { sendEmail, emailDeliveryLogs, generateOrderCreatedEmailHtml, generateOrderStatusChangedEmailHtml } from "./server_emails";
 
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -529,7 +530,8 @@ async function getDbState(): Promise<ShopState> {
 
     // 6. Fetch products where active = true (logical soft delete)
     const prodRes = await pool.query(`
-      SELECT id, name, price, stock, category, featured, image_url, created_at, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors, is_3d, hours_per_unit 
+      SELECT id, name, price, stock, category, featured, image_url, created_at, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors, is_3d, hours_per_unit,
+             size_chart_enabled, size_chart_show_superior, size_chart_show_inferior, size_chart_show_calzado, size_chart_show_recommender, size_chart_data 
       FROM public.products 
       WHERE active = true 
       ORDER BY id DESC;
@@ -596,7 +598,13 @@ async function getDbState(): Promise<ShopState> {
         imagenes: productImagesMap[pid] || [],
         variants: productVariantsMap[pid] || [],
         is3D: row.is_3d === true,
-        hoursPerUnit: row.hours_per_unit !== null && row.hours_per_unit !== undefined ? Number(row.hours_per_unit) : undefined
+        hoursPerUnit: row.hours_per_unit !== null && row.hours_per_unit !== undefined ? Number(row.hours_per_unit) : undefined,
+        sizeChartEnabled: row.size_chart_enabled !== false,
+        sizeChartShowSuperior: row.size_chart_show_superior !== false,
+        sizeChartShowInferior: row.size_chart_show_inferior !== false,
+        sizeChartShowCalzado: row.size_chart_show_calzado !== false,
+        sizeChartShowRecommender: row.size_chart_show_recommender !== false,
+        sizeChartData: row.size_chart_data || undefined
       };
     });
 
@@ -769,18 +777,26 @@ async function saveDbState(state: ShopState): Promise<boolean> {
       const colorsVal = Array.isArray(prod.colors) ? prod.colors : [];
       const is3DVal = !!prod.is3D;
       const hoursPerUnitVal = prod.hoursPerUnit ? Math.floor(prod.hoursPerUnit) : null;
+      const sizeChartEnabledVal = prod.sizeChartEnabled !== false;
+      const sizeChartShowSuperiorVal = prod.sizeChartShowSuperior !== false;
+      const sizeChartShowInferiorVal = prod.sizeChartShowInferior !== false;
+      const sizeChartShowCalzadoVal = prod.sizeChartShowCalzado !== false;
+      const sizeChartShowRecommenderVal = prod.sizeChartShowRecommender !== false;
+      const sizeChartDataVal = prod.sizeChartData ? JSON.stringify(prod.sizeChartData) : null;
 
       let prodId: number;
       if (isNew) {
         const insertRes = await pool.query(`
           INSERT INTO public.products (
-            name, price, stock, category, featured, image_url, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors, is_3d, hours_per_unit
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13, $14, $15)
+            name, price, stock, category, featured, image_url, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors, is_3d, hours_per_unit,
+            size_chart_enabled, size_chart_show_superior, size_chart_show_inferior, size_chart_show_calzado, size_chart_show_recommender, size_chart_data
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
           RETURNING id;
         `, [
           prod.name, priceVal, stockVal, prod.category, featuredVal, prod.imageUrl,
           prod.description || "", prod.categoria_id, originalPriceVal, prod.subcategoria_id,
-          pausedVal, sizesVal, colorsVal, is3DVal, hoursPerUnitVal
+          pausedVal, sizesVal, colorsVal, is3DVal, hoursPerUnitVal,
+          sizeChartEnabledVal, sizeChartShowSuperiorVal, sizeChartShowInferiorVal, sizeChartShowCalzadoVal, sizeChartShowRecommenderVal, sizeChartDataVal
         ]);
         prodId = insertRes.rows[0].id;
         prod.id = String(prodId);
@@ -790,12 +806,15 @@ async function saveDbState(state: ShopState): Promise<boolean> {
           UPDATE public.products SET
             name = $1, price = $2, stock = $3, category = $4, featured = $5, image_url = $6, description = $7,
             categoria_id = $8, original_price = $9, subcategoria_id = $10, active = true, paused = $11, sizes = $12, colors = $13,
-            is_3d = $14, hours_per_unit = $15
-          WHERE id = $16;
+            is_3d = $14, hours_per_unit = $15,
+            size_chart_enabled = $16, size_chart_show_superior = $17, size_chart_show_inferior = $18, size_chart_show_calzado = $19, size_chart_show_recommender = $20, size_chart_data = $21
+          WHERE id = $22;
         `, [
           prod.name, priceVal, stockVal, prod.category, featuredVal, prod.imageUrl,
           prod.description || "", prod.categoria_id, originalPriceVal, prod.subcategoria_id,
-          pausedVal, sizesVal, colorsVal, is3DVal, hoursPerUnitVal, prodId
+          pausedVal, sizesVal, colorsVal, is3DVal, hoursPerUnitVal,
+          sizeChartEnabledVal, sizeChartShowSuperiorVal, sizeChartShowInferiorVal, sizeChartShowCalzadoVal, sizeChartShowRecommenderVal, sizeChartDataVal,
+          prodId
         ]);
       }
 
@@ -918,6 +937,12 @@ async function initPostgresStore(): Promise<ShopState | null> {
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS categoria_id TEXT;
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS is_3d BOOLEAN DEFAULT false;
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS hours_per_unit INTEGER;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS size_chart_enabled BOOLEAN DEFAULT true;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS size_chart_show_superior BOOLEAN DEFAULT true;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS size_chart_show_inferior BOOLEAN DEFAULT true;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS size_chart_show_calzado BOOLEAN DEFAULT true;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS size_chart_show_recommender BOOLEAN DEFAULT true;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS size_chart_data JSONB;
     `);
 
     // Create product_images table if not exists
@@ -1284,6 +1309,69 @@ async function startServer() {
         valid: false,
         message: "Sesión inválida, expirada o sin permisos de administrador."
       });
+    }
+  });
+
+  // Fetch email delivery and simulation logs
+  app.get("/api/admin/emails/logs", (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación." });
+    }
+    res.json({ success: true, logs: emailDeliveryLogs });
+  });
+
+  // Clear email delivery logs
+  app.delete("/api/admin/emails/logs", (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación." });
+    }
+    emailDeliveryLogs.length = 0; // Empty the in-memory array
+    res.json({ success: true, message: "Historial de correos vaciado correctamente." });
+  });
+
+  // Send a test email to check SMTP connection
+  app.post("/api/admin/emails/test", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación." });
+    }
+
+    const { toEmail } = req.body;
+    if (!toEmail) {
+      return res.status(400).json({ success: false, message: "El correo electrónico de destino es obligatorio." });
+    }
+
+    try {
+      const testEmailHtml = `
+        <div style="font-family: Arial, sans-serif; padding: 30px; background-color: #f8fafc; color: #0f172a; max-width: 500px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px;">
+          <h2 style="color: #5346ff; margin-top: 0;">🧪 Correo electrónico de Prueba exitoso</h2>
+          <p>Este es un correo electrónico enviado para comprobar los ajustes de conexión de tu servidor de correos.</p>
+          <hr style="border: none; border-top: 1px solid #cbd5e1; margin: 20px 0;" />
+          <div style="font-size: 11px; color: #64748b;">
+            <strong>Servidor SMTP:</strong> ${currentStoreState.settings.emailSenderSmtpHost || "No Configurado (Simulación)"} <br />
+            <strong>Usuario SMTP:</strong> ${currentStoreState.settings.emailSenderSmtpUser || "No Configurado"} <br />
+            <strong>Fecha/Hora de Prueba:</strong> ${new Date().toLocaleString()}
+          </div>
+        </div>
+      `;
+
+      const result = await sendEmail({
+        settings: currentStoreState.settings,
+        to: toEmail,
+        subject: `🧪 Test de conexión - ${currentStoreState.settings.siteTitle || "Tienda"}`,
+        html: testEmailHtml
+      });
+
+      if (result.status === "failure") {
+        return res.status(500).json({ success: false, message: `Fallo al enviar correo de prueba: ${result.error}`, status: result.status });
+      }
+
+      res.json({ success: true, message: "Prueba ejecutada correctamente.", status: result.status });
+    } catch (err: any) {
+      console.error("Error running email SMTP test:", err);
+      res.status(500).json({ success: false, message: `Error inesperado: ${err.message}` });
     }
   });
 
@@ -1758,6 +1846,32 @@ async function startServer() {
         }
       }
 
+      // Automatic email notification
+      try {
+        const completeOrderForEmail = {
+          id: orderId,
+          customerName: sanitizedName,
+          customerEmail: sanitizedEmail,
+          customerPhone: sanitizedPhone,
+          subtotal: serverSubtotal,
+          discountAmount: serverDiscountAmount,
+          shippingCost: verifiedShippingCost,
+          total: serverTotal,
+          couponCode: couponCode || null,
+          notes: sanitizedNotes,
+          items: verifiedItems
+        };
+        const { subject, html } = generateOrderCreatedEmailHtml(completeOrderForEmail, currentStoreState.settings);
+        sendEmail({
+          settings: currentStoreState.settings,
+          to: sanitizedEmail,
+          subject,
+          html
+        }).catch(err => console.error("Error in sendEmail for created order:", err));
+      } catch (emailErr) {
+        console.error("Error preparing auto email for created order:", emailErr);
+      }
+
       res.status(201).json({ success: true, orderId });
     } catch (err: any) {
       console.error("Error creating order:", err);
@@ -1795,6 +1909,27 @@ async function startServer() {
           });
           fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
         }
+      }
+
+      // Send status update email
+      try {
+        const updatedOrder = currentStoreState.orders?.find(o => String(o.id) === String(id));
+        if (updatedOrder && updatedOrder.customerEmail) {
+          const { subject, html } = generateOrderStatusChangedEmailHtml({
+            order: updatedOrder,
+            oldStatus: "",
+            newStatus: status,
+            settings: currentStoreState.settings
+          });
+          sendEmail({
+            settings: currentStoreState.settings,
+            to: updatedOrder.customerEmail,
+            subject,
+            html
+          }).catch(err => console.error("Error in sendEmail for order status change:", err));
+        }
+      } catch (emailErr) {
+        console.error("Error preparing status change email notify:", emailErr);
       }
 
       res.json({ success: true, message: "Estado de pedido modificado correctamente en la base de datos.", state: currentStoreState });

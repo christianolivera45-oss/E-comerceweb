@@ -33,6 +33,15 @@ export interface Product {
   paused?: boolean; // Pause in eCommerce store front
   is3D?: boolean; // Is a 3D printed product with custom logic
   hoursPerUnit?: number; // Hours needed to 3D print one unit
+  sizeChartEnabled?: boolean;
+  sizeChartShowSuperior?: boolean;
+  sizeChartShowInferior?: boolean;
+  sizeChartShowCalzado?: boolean;
+  sizeChartShowRecommender?: boolean;
+  sizeChartData?: {
+    columns: string[];
+    rows: Record<string, string>[];
+  };
 }
 
 export interface HeroSlide {
@@ -118,6 +127,14 @@ export interface SiteSettings {
   googlePlaceId?: string;
   googleClientId?: string;
   googleClientSecret?: string;
+  emailSenderEnabled?: boolean;
+  emailSenderSmtpHost?: string;
+  emailSenderSmtpPort?: number;
+  emailSenderSmtpUser?: string;
+  emailSenderSmtpPass?: string;
+  emailSenderFromAddress?: string;
+  emailTemplateOrderCreatedSubject?: string;
+  emailTemplateOrderStatusChangedSubject?: string;
 }
 
 export interface Category {

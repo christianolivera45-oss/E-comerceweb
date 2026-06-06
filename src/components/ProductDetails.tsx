@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { X, ShoppingCart, MessageSquare, ShieldCheck, Truck, RefreshCw, ChevronLeft, ChevronRight, AlertCircle, Share2, Maximize2, Cpu, Wrench, Clock, Calendar, Home } from "lucide-react";
+import { X, ShoppingCart, MessageSquare, ShieldCheck, Truck, RefreshCw, ChevronLeft, ChevronRight, AlertCircle, Share2, Maximize2, Cpu, Wrench, Clock, Calendar, Home, Ruler } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Product, SiteSettings, is3DProduct } from "../types";
 import ProductCard from "./ProductCard";
@@ -32,7 +32,21 @@ export default function ProductDetails({
 }: ProductDetailsProps) {
   const isThemeDark = settings.themeMode === "dark";
   const is3D = is3DProduct(product);
-  const isClothing = !is3D && (product.category.toLowerCase() === "ropa" || (product.sizes && product.sizes.length > 0));
+  const solvedDetailsCategory = dbCategories.find(c => String(c.id) === String(product.categoria_id)) || { nombre: product.category || "", id: product.categoria_id || "todos" };
+  const solvedCategoryName = (solvedDetailsCategory?.nombre || product.category || "").toLowerCase();
+  const isClothingCategory = solvedCategoryName === "ropa" || 
+    solvedCategoryName.includes("vest") || 
+    solvedCategoryName.includes("calza") || 
+    solvedCategoryName.includes("prend") || 
+    solvedCategoryName.includes("buzo") || 
+    solvedCategoryName.includes("abrigo") || 
+    solvedCategoryName.includes("jean") || 
+    solvedCategoryName.includes("remera") || 
+    solvedCategoryName.includes("panta") ||
+    solvedCategoryName.includes("clothing") ||
+    solvedCategoryName.includes("indumentaria");
+
+  const isClothing = !is3D && isClothingCategory;
   const isElectronics = !is3D && product.category.toLowerCase() === "artículos electrónicos";
 
   // Dynamic variants logic
@@ -84,6 +98,80 @@ export default function ProductDetails({
   const [quantity, setQuantity] = useState(1);
   const [addedMessage, setAddedMessage] = useState(false);
   const [copiedShare, setCopiedShare] = useState(false);
+
+  // --- SIZE GUIDE / CHART INTEGRATION STATE ---
+  const [showSizeChart, setShowSizeChart] = useState(false);
+  const [userHeight, setUserHeight] = useState("");
+  const [userWeight, setUserWeight] = useState("");
+  const [userShoeSize, setUserShoeSize] = useState("");
+  
+  const defaultChartTab = useMemo(() => {
+    const list: string[] = [];
+    const hasCustomChart = !!(product.sizeChartData && product.sizeChartData.columns && product.sizeChartData.rows && product.sizeChartData.rows.length > 0);
+    if (hasCustomChart) {
+      list.push("articulo");
+    }
+    if (product.sizeChartShowSuperior !== false) {
+      list.push("superior");
+    }
+    if (product.sizeChartShowInferior !== false) {
+      list.push("inferior");
+    }
+    if (product.sizeChartShowCalzado !== false) {
+      list.push("calzado");
+    }
+    if (product.sizeChartShowRecommender !== false) {
+      list.push("recommender");
+    }
+
+    if (list.length === 0) return "";
+
+    const name = (product.name || "").toLowerCase();
+    const cat = (product.category || "").toLowerCase();
+    
+    let preferred = "superior";
+    if (cat.includes("calzado") || cat.includes("zapato") || cat.includes("zapatilla") || name.includes("calzado") || name.includes("zapati") || name.includes("buzo") === false && (name.includes("zapatos") || name.includes("champio") || name.includes("bota") || name.includes("pantu"))) {
+      preferred = "calzado";
+    } else if (cat.includes("pantalon") || cat.includes("inferior") || cat.includes("shorts") || name.includes("pantalon") || name.includes("jean") || name.includes("jogger") || name.includes("short") || name.includes("calza")) {
+      preferred = "inferior";
+    } else if (hasCustomChart) {
+      preferred = "articulo";
+    }
+
+    if (list.includes(preferred)) {
+      return preferred;
+    }
+    return list[0];
+  }, [product.name, product.category, product.sizeChartData, product.sizeChartShowSuperior, product.sizeChartShowInferior, product.sizeChartShowCalzado, product.sizeChartShowRecommender]);
+
+  const [activeChartTab, setActiveChartTab] = useState(defaultChartTab);
+
+  // Auto-update default active tab when product changes
+  useEffect(() => {
+    setActiveChartTab(defaultChartTab);
+  }, [product.id, defaultChartTab]);
+
+  const recommendedSize = useMemo(() => {
+    const h = parseFloat(userHeight);
+    const w = parseFloat(userWeight);
+    if (!h || !w || h <= 0 || w <= 0) return null;
+    
+    if (w < 55) {
+      if (h < 165) return "S";
+      return "M";
+    } else if (w >= 55 && w < 68) {
+      if (h < 172) return "M";
+      return "L";
+    } else if (w >= 68 && w < 82) {
+      if (h < 180) return "L";
+      return "XL";
+    } else if (w >= 82 && w < 95) {
+      if (h < 188) return "XL";
+      return "XXL";
+    } else {
+      return "XXL/3XL";
+    }
+  }, [userHeight, userWeight]);
 
   // Dynamic stock calculations based on Cartesian variant mapping
   let currentStock = product.stock;
@@ -587,18 +675,30 @@ Me gustaría coordinar stock, fabricación y envío.`;
             {/* Sizes selector matching design ovals */}
             {sizes.length > 0 && (
               <div className="space-y-2">
-                <h4 className={`text-[10px] font-bold tracking-[0.15em] uppercase ${
-                  isThemeDark ? "text-zinc-400" : "text-zinc-500"
-                }`}>
-                  {is3D ? "MATERIAL SELECCIONADO: " : "TALLE SELECCIONADO: "}
-                  {selectedSize ? (
-                    <span className="text-[#5346ff] font-extrabold">{selectedSize}</span>
-                  ) : (
-                    <span className="text-red-500 font-bold dark:text-red-400 animate-pulse text-[9px]">
-                      {is3D ? "(Por favor selecciona un material)" : "(Por favor selecciona un talle)"}
-                    </span>
+                <div className="flex items-center justify-between">
+                  <h4 className={`text-[10px] font-bold tracking-[0.15em] uppercase ${
+                    isThemeDark ? "text-zinc-400" : "text-zinc-500"
+                  }`}>
+                    {is3D ? "MATERIAL SELECCIONADO: " : "TALLE SELECCIONADO: "}
+                    {selectedSize ? (
+                      <span className="text-[#5346ff] font-extrabold">{selectedSize}</span>
+                    ) : (
+                      <span className="text-red-500 font-bold dark:text-red-400 animate-pulse text-[9px]">
+                        {is3D ? "(Por favor selecciona un material)" : "(Por favor selecciona un talle)"}
+                      </span>
+                    )}
+                  </h4>
+                  {isClothing && product.sizeChartEnabled !== false && (
+                    <button
+                      type="button"
+                      onClick={() => setShowSizeChart(true)}
+                      className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-550 hover:text-indigo-650 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors uppercase tracking-[0.05em] cursor-pointer"
+                    >
+                      <Ruler className="w-3.5 h-3.5" />
+                      <span>Guía de talles</span>
+                    </button>
                   )}
-                </h4>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   {sizes.map((sz) => (
                     <button
@@ -849,6 +949,440 @@ Me gustaría coordinar stock, fabricación y envío.`;
               </div>
             )}
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* --- REUSABLE INTERACTIVE SIZE GUIDE MODAL (TABLA DE TALLES) --- */}
+      <AnimatePresence>
+        {showSizeChart && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowSizeChart(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-xs cursor-pointer"
+            />
+
+            {/* Modal Card */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
+              className={`w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl relative flex flex-col max-h-[85vh] border ${
+                isThemeDark 
+                  ? "bg-[#0b0a0e] border-zinc-800 text-zinc-100" 
+                  : "bg-white border-slate-200 text-zinc-800"
+              }`}
+            >
+              {/* Header */}
+              <div className={`p-5 sm:p-6 border-b flex items-start justify-between ${
+                isThemeDark ? "border-zinc-800 bg-[#0f0e13]" : "border-slate-100 bg-slate-50"
+              }`}>
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="p-1.5 rounded-lg bg-[#5346ff]/10 text-[#5346ff]">
+                      <Ruler className="w-5 h-5" />
+                    </div>
+                    <h3 className="text-base sm:text-lg font-bold tracking-tight">
+                      Guia y Tabla de Talles
+                    </h3>
+                  </div>
+                  <p className={`text-xs ${isThemeDark ? "text-zinc-400" : "text-zinc-550"}`}>
+                    Medidas corporales y referencias oficiales para tu compra en Ventas Juem.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSizeChart(false)}
+                  className={`p-1.5 rounded-full transition-colors cursor-pointer ${
+                    isThemeDark 
+                      ? "hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200" 
+                      : "hover:bg-slate-200 text-zinc-500 hover:text-zinc-800"
+                  }`}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Tabs selector */}
+              <div className={`flex border-b overflow-x-auto no-scrollbar scroll-smooth shrink-0 px-4 sm:px-6 ${
+                isThemeDark ? "border-zinc-850 bg-[#0b0a0e]" : "border-slate-150 bg-white"
+              }`}>
+                {(() => {
+                  const hasCustom = !!(product.sizeChartData && product.sizeChartData.columns && product.sizeChartData.rows && product.sizeChartData.rows.length > 0);
+                  const list = [];
+                  if (hasCustom) {
+                    list.push({ id: "articulo", label: "📏 Medidas del Artículo" });
+                  }
+                  if (product.sizeChartShowSuperior !== false) {
+                    list.push({ id: "superior", label: "👕 Superiores" });
+                  }
+                  if (product.sizeChartShowInferior !== false) {
+                    list.push({ id: "inferior", label: "👖 Inferiores" });
+                  }
+                  if (product.sizeChartShowCalzado !== false) {
+                    list.push({ id: "calzado", label: "👟 Calzado" });
+                  }
+                  if (product.sizeChartShowRecommender !== false) {
+                    list.push({ id: "recommender", label: "📏 Calculador Virtual" });
+                  }
+                  return list.map((tb) => (
+                    <button
+                      key={tb.id}
+                      type="button"
+                      onClick={() => setActiveChartTab(tb.id)}
+                      className={`py-3.5 px-4 font-semibold text-xs sm:text-sm tracking-wide border-b-2 transition-all shrink-0 cursor-pointer ${
+                        activeChartTab === tb.id
+                          ? "border-[#5346ff] text-[#5346ff]"
+                          : isThemeDark
+                          ? "border-transparent text-zinc-400 hover:text-zinc-200"
+                          : "border-transparent text-zinc-550 hover:text-zinc-850"
+                      }`}
+                    >
+                      {tb.label}
+                    </button>
+                  ));
+                })()}
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="p-5 sm:p-6 overflow-y-auto max-h-[50vh] space-y-4">
+                
+                {/* 0. CUSTOM PRODUCT CHART TAB */}
+                {activeChartTab === "articulo" && product.sizeChartData && (
+                  <div className="space-y-4 animate-fade-in text-left">
+                    <p className={`text-xs leading-relaxed ${isThemeDark ? "text-zinc-300" : "text-zinc-650"}`}>
+                      Estas son las medidas reales de este artículo para ayudarte a elegir tu talle de manera óptima:
+                    </p>
+                    <div className="overflow-x-auto rounded-xl border border-slate-150 dark:border-zinc-800">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className={isThemeDark ? "bg-[#14121a] text-zinc-300" : "bg-slate-50 text-zinc-600"}>
+                            {(product.sizeChartData.columns || []).map((col) => (
+                              <th key={col} className="p-3 font-semibold border-b border-slate-150 dark:border-zinc-800 whitespace-nowrap">
+                                {col}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className={`divide-y ${isThemeDark ? "divide-zinc-800" : "divide-slate-100"}`}>
+                          {(product.sizeChartData.rows || []).map((row, idx) => (
+                            <tr key={idx} className={`hover:bg-indigo-500/5 ${isThemeDark ? "even:bg-zinc-900/40" : "even:bg-slate-50/50"}`}>
+                              {(product.sizeChartData.columns || []).map((col) => {
+                                const isFirstCol = col === "Talle" || (product.sizeChartData?.columns?.[0] === col);
+                                return (
+                                  <td key={col} className={`p-3 ${isFirstCol ? "font-bold text-[#5346ff] bg-slate-50/30 dark:bg-zinc-900/10" : ""}`}>
+                                    {row[col] || "-"}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* 1. SUPERIOR CHART TAB */}
+                {activeChartTab === "superior" && (
+                  <div className="space-y-4 animate-fade-in text-left">
+                    <p className={`text-xs leading-relaxed ${isThemeDark ? "text-zinc-300" : "text-zinc-650"}`}>
+                      Ideal para Remeras, Buzos, Hoodies y Camperas. Se recomienda medir una prenda propia estirada sobre una cama para comparar de forma precisa.
+                    </p>
+                    <div className="overflow-x-auto rounded-xl border border-slate-150 dark:border-zinc-800">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className={isThemeDark ? "bg-[#14121a] text-zinc-300" : "bg-slate-50 text-zinc-600"}>
+                            <th className="p-3 font-semibold">Talle</th>
+                            <th className="p-3 font-semibold">Sisa (Ancho - cm)</th>
+                            <th className="p-3 font-semibold">Largo total (cm)</th>
+                            <th className="p-3 font-semibold font-mono">Pecho / Axila</th>
+                          </tr>
+                        </thead>
+                        <tbody className={`divide-y ${isThemeDark ? "divide-zinc-800" : "divide-slate-100"}`}>
+                          {[
+                            { t: "XS", w: "48 - 50", h: "64 - 66", d: "Suelto" },
+                            { t: "S", w: "50 - 52", h: "66 - 68", d: "Suelto" },
+                            { t: "M", w: "53 - 55", h: "69 - 71", d: "Estándar" },
+                            { t: "L", w: "56 - 58", h: "72 - 74", d: "Estándar" },
+                            { t: "XL", w: "59 - 61", h: "75 - 77", d: "Suelto" },
+                            { t: "XXL", w: "62 - 64", h: "78 - 80", d: "Clásico" }
+                          ].map((row, i) => (
+                            <tr key={i} className={`hover:bg-indigo-500/5 ${isThemeDark ? "even:bg-zinc-900/40" : "even:bg-slate-50/50"}`}>
+                              <td className="p-3 font-bold text-[#5346ff]">{row.t}</td>
+                              <td className="p-3 font-semibold">{row.w} cm</td>
+                              <td className="p-3">{row.h} cm</td>
+                              <td className={`p-3 text-[10px] font-mono font-medium ${isThemeDark ? "text-zinc-400" : "text-zinc-500"}`}>{row.d}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className={`p-3 rounded-xl border text-[11px] leading-relaxed ${
+                      isThemeDark 
+                        ? "bg-indigo-500/5 border-indigo-550/20 text-indigo-200" 
+                        : "bg-indigo-50/40 border-indigo-100 text-indigo-900"
+                    }`}>
+                      <strong>📏 ¿Cómo medir tus superiores?</strong>
+                      <ul className="list-disc list-inside mt-1 space-y-0.5">
+                        <li><strong>Ancho (Sisa):</strong> Mide horizontalmente de costura a costura, justo debajo de cada axila.</li>
+                        <li><strong>Largo:</strong> Mide verticalmente en la espalda, desde el borde superior del cuello hasta el bajo de la prenda.</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. INFERIOR CHART TAB */}
+                {activeChartTab === "inferior" && (
+                  <div className="space-y-4 animate-fade-in text-left">
+                    <p className={`text-xs leading-relaxed ${isThemeDark ? "text-zinc-300" : "text-zinc-650"}`}>
+                      Perfecto para Joggings, Pantalones deportivos, Calzas, Shorts y Bermudas. Utiliza la tabla de correspondencia de talle numérico para Uruguay.
+                    </p>
+                    <div className="overflow-x-auto rounded-xl border border-slate-150 dark:border-zinc-800">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className={isThemeDark ? "bg-[#14121a] text-zinc-300" : "bg-slate-50 text-zinc-600"}>
+                            <th className="p-3 font-semibold">Talle</th>
+                            <th className="p-3 font-semibold">Equiv. Numérica</th>
+                            <th className="p-3 font-semibold">Cintura (cm)</th>
+                            <th className="p-3 font-semibold">Largo total (cm)</th>
+                          </tr>
+                        </thead>
+                        <tbody className={`divide-y ${isThemeDark ? "divide-zinc-800" : "divide-slate-100"}`}>
+                          {[
+                            { t: "S", w: "36 - 38", c: "70 - 78", h: "98 - 100" },
+                            { t: "M", w: "40 - 42", c: "78 - 86", h: "101 - 103" },
+                            { t: "L", w: "44 - 46", c: "86 - 94", h: "104 - 105" },
+                            { t: "XL", w: "48 - 50", c: "94 - 102", h: "106 - 108" },
+                            { t: "XXL", w: "52 - 54", c: "102 - 110", h: "109 - 111" }
+                          ].map((row, i) => (
+                            <tr key={i} className={`hover:bg-indigo-500/5 ${isThemeDark ? "even:bg-zinc-900/40" : "even:bg-slate-50/50"}`}>
+                              <td className="p-3 font-bold text-[#5346ff]">{row.t}</td>
+                              <td className="p-3 font-semibold">{row.w}</td>
+                              <td className="p-3">{row.c} cm</td>
+                              <td className="p-3">{row.h} cm</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className={`p-3 rounded-xl border text-[11px] leading-relaxed ${
+                      isThemeDark 
+                        ? "bg-indigo-500/5 border-indigo-550/20 text-indigo-200" 
+                        : "bg-indigo-50/40 border-indigo-100 text-indigo-900"
+                    }`}>
+                      <strong>👖 ¿Cómo medir pantalones u inferiores?</strong>
+                      <ul className="list-disc list-inside mt-1 space-y-0.5">
+                        <li><strong>Cintura:</strong> Mide el contorno de tu cintura natural o de forma directa el extremo del elástico sin estirar excesivamente.</li>
+                        <li><strong>Largo:</strong> Desde la pretina hasta el dobladillo inferior a lo largo del lateral de la pierna.</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. CALZADO CHART TAB */}
+                {activeChartTab === "calzado" && (
+                  <div className="space-y-4 animate-fade-in text-left">
+                    <p className={`text-xs leading-relaxed ${isThemeDark ? "text-zinc-300" : "text-zinc-650"}`}>
+                      Sincronización oficial de talles de calzado. <strong>Atención:</strong> En Uruguay solemos guiarnos por el talle europeo (EU) o la medida en centímetros de plantilla.
+                    </p>
+                    <div className="overflow-x-auto rounded-xl border border-slate-150 dark:border-zinc-800">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className={isThemeDark ? "bg-[#14121a] text-zinc-300" : "bg-slate-50 text-zinc-600"}>
+                            <th className="p-3 font-semibold">Talle UY</th>
+                            <th className="p-3 font-semibold">Talle EU</th>
+                            <th className="p-3 font-semibold">Talle US (M)</th>
+                            <th className="p-3 font-semibold">Largo Plantilla</th>
+                          </tr>
+                        </thead>
+                        <tbody className={`divide-y ${isThemeDark ? "divide-zinc-800" : "divide-slate-100"}`}>
+                          {[
+                            { uy: "35", eu: "36", us: "4.5", cm: "22.5 cm" },
+                            { uy: "36", eu: "37", us: "5.5", cm: "23.5 cm" },
+                            { uy: "37", eu: "38", us: "6.0", cm: "24.0 cm" },
+                            { uy: "38", eu: "39", us: "7.0", cm: "24.5 cm" },
+                            { uy: "39", eu: "40", us: "8.0", cm: "25.5 cm" },
+                            { uy: "40", eu: "41", us: "8.5", cm: "26.0 cm" },
+                            { uy: "41", eu: "42", us: "9.5", cm: "27.0 cm" },
+                            { uy: "42", eu: "43", us: "10.0", cm: "27.5 cm" },
+                            { uy: "43", eu: "44", us: "11.0", cm: "28.5 cm" }
+                          ].map((row, i) => (
+                            <tr key={i} className={`hover:bg-indigo-500/5 ${isThemeDark ? "even:bg-zinc-900/40" : "even:bg-slate-50/50"}`}>
+                              <td className="p-3 font-bold text-[#5346ff]">{row.uy} UY</td>
+                              <td className="p-3 font-semibold">{row.eu} EU</td>
+                              <td className="p-3 text-zinc-500">{row.us} US</td>
+                              <td className="p-3 font-semibold text-emerald-650 dark:text-emerald-400">{row.cm}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className={`p-3 rounded-xl border text-[11px] leading-relaxed ${
+                      isThemeDark 
+                        ? "bg-indigo-500/5 border-indigo-550/20 text-zinc-300" 
+                        : "bg-indigo-50/40 border-indigo-100 text-zinc-650"
+                    }`}>
+                      <strong>👟 Guía infalible para medir tus pies:</strong>
+                      <ol className="list-decimal list-inside mt-1 space-y-0.5">
+                        <li>Coloca un papel blanco pegado a la pared en el piso.</li>
+                        <li>Colócate de pie con el talón tocando la pared de fondo.</li>
+                        <li>Haz una línea en el extremo del dedo más largo.</li>
+                        <li>Mide la distancia con una regla y súmale 0.5 cm para mayor comodidad. ¡Ese es tu largo de plantilla perfecto!</li>
+                      </ol>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. INTERACTIVE RECOMMENDER TAB */}
+                {activeChartTab === "recommender" && (
+                  <div className="space-y-4 animate-fade-in text-left">
+                    <p className={`text-xs leading-relaxed ${isThemeDark ? "text-zinc-300" : "text-zinc-650"}`}>
+                      Ingresa tu estatura y peso aproximado. Nuestro motor inteligente estimará el talle que mejor se ajusta a tu contextura física para prendas superiores de corte clásico.
+                    </p>
+
+                    <div className={`p-5 rounded-2xl border flex flex-col md:flex-row gap-5 items-stretch ${
+                      isThemeDark ? "bg-[#14121a]/60 border-zinc-800" : "bg-slate-50 border-slate-100"
+                    }`}>
+                      <div className="flex-1 space-y-3.5">
+                        <div>
+                          <label className={`block text-[11px] font-bold tracking-wide uppercase mb-1.5 ${
+                            isThemeDark ? "text-zinc-400" : "text-zinc-500"
+                          }`}>
+                            Estatura (cm)
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min="100"
+                              max="240"
+                              placeholder="Ej: 175"
+                              value={userHeight}
+                              onChange={(e) => setUserHeight(e.target.value)}
+                              className={`w-full px-4 py-2 border rounded-xl text-sm font-bold text-center focus:outline-none focus:ring-1 focus:ring-[#5346ff] ${
+                                isThemeDark 
+                                  ? "bg-zinc-900 border-zinc-700 text-white" 
+                                  : "bg-white border-slate-200 text-zinc-900"
+                              }`}
+                            />
+                            <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-zinc-400 font-bold">cm</span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className={`block text-[11px] font-bold tracking-wide uppercase mb-1.5 ${
+                            isThemeDark ? "text-zinc-400" : "text-zinc-500"
+                          }`}>
+                            Peso estimado (kg)
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min="30"
+                              max="180"
+                              placeholder="Ej: 74"
+                              value={userWeight}
+                              onChange={(e) => setUserWeight(e.target.value)}
+                              className={`w-full px-4 py-2 border rounded-xl text-sm font-bold text-center focus:outline-none focus:ring-1 focus:ring-[#5346ff] ${
+                                isThemeDark 
+                                  ? "bg-zinc-900 border-zinc-700 text-white" 
+                                  : "bg-white border-slate-200 text-zinc-900"
+                              }`}
+                            />
+                            <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-zinc-400 font-bold">kg</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Calibrator results block */}
+                      <div className={`flex-grow md:max-w-[220px] rounded-xl p-4 flex flex-col items-center justify-center border text-center transition-all ${
+                        recommendedSize 
+                          ? isThemeDark ? "bg-indigo-500/5 border-indigo-500/25 text-indigo-300" : "bg-indigo-50 border-indigo-100 text-indigo-900"
+                          : isThemeDark ? "bg-zinc-900/40 border-zinc-800 text-zinc-400" : "bg-slate-100 border-slate-200 text-zinc-500"
+                      }`}>
+                        {recommendedSize ? (
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-bold tracking-wider uppercase opacity-75">Talle Recomendado:</p>
+                            <h4 className="text-4xl sm:text-5xl font-extrabold text-[#5346ff] tracking-tight">
+                              {recommendedSize}
+                            </h4>
+                            <p className="text-[10px] italic pt-1 max-w-[180px] mx-auto leading-relaxed opacity-90">
+                              Recomendación orientadora basada en nuestro calce clásico de prendas.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <p className="text-xs font-bold leading-normal max-w-[180px] mx-auto">
+                              Introduce tu estatura y peso para ver tu talle recomendado.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Shoe size helper tool added here */}
+                    <div className="space-y-2 pt-1">
+                      <label className={`block text-[11px] font-bold tracking-wide uppercase ${
+                        isThemeDark ? "text-zinc-400" : "text-zinc-500"
+                      }`}>
+                        Asistente Expres de Zapatillas / Championes
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          placeholder="Tu talle habitual (Ej: 41)"
+                          min="30"
+                          max="50"
+                          value={userShoeSize}
+                          onChange={(e) => setUserShoeSize(e.target.value)}
+                          className={`flex-1 px-4 py-2 border rounded-xl text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-[#5346ff] ${
+                            isThemeDark 
+                              ? "bg-zinc-900 border-zinc-700 text-white" 
+                              : "bg-white border-slate-200 text-zinc-900"
+                          }`}
+                        />
+                      </div>
+                      {userShoeSize && (() => {
+                        const numericShoeVal = parseInt(userShoeSize);
+                        if (numericShoeVal > 25 && numericShoeVal < 50) {
+                          const calculatedCms = Math.round((numericShoeVal * 0.67 - 1) * 10) / 10;
+                          return (
+                            <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 font-semibold flex items-center gap-1">
+                              <span>✨ El largo de tu plantilla aproximada para talle {numericShoeVal} UY es de <strong>{calculatedCms} cm</strong>.</span>
+                            </p>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  </div>
+                )}
+
+              </div>
+
+              {/* Bottom Actions footer inside size chart */}
+              <div className={`p-4 sm:p-5 border-t flex flex-col sm:flex-row gap-3 items-center justify-between shrink-0 ${
+                isThemeDark ? "border-zinc-850 bg-[#0f0e13]" : "border-slate-100 bg-slate-50"
+              }`}>
+                <p className={`text-[10px] leading-snug max-w-sm text-center sm:text-left ${
+                  isThemeDark ? "text-zinc-400" : "text-zinc-500"
+                }`}>
+                  📌 Envíos a Montevideo, Ciudad de la Costa, Salinas, Pinamar, Maldonado y todo el país. Retiros disponibles en la Costa.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowSizeChart(false)}
+                  className="w-full sm:w-auto px-6 py-2 rounded-xl text-xs sm:text-sm font-bold bg-[#5346ff] border-transparent text-white hover:bg-[#4336ee] cursor-pointer select-none"
+                >
+                  Entendido, Volver
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

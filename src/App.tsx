@@ -43,6 +43,7 @@ import {
   HelpCircle,
   Menu,
   X,
+  Ruler,
   ChevronRight,
   ChevronLeft,
   TrendingUp,
@@ -74,6 +75,9 @@ import {
   Sofa,
   CreditCard,
   Star,
+  Mail,
+  Send,
+  Info,
   MapPin
 } from "lucide-react";
 import { Product, SiteSettings, ShopState, CartItem, Category, Subcategory, ProductVariant, is3DProduct } from "./types";
@@ -312,7 +316,15 @@ const DEFAULT_SETTINGS: SiteSettings = {
   googleReviewsTotal: 184,
   googleReviewsCustomList: [],
   googleClientId: "",
-  googleClientSecret: ""
+  googleClientSecret: "",
+  emailSenderEnabled: false,
+  emailSenderSmtpHost: "",
+  emailSenderSmtpPort: 465,
+  emailSenderSmtpUser: "",
+  emailSenderSmtpPass: "",
+  emailSenderFromAddress: "Ventas Juem <no-reply@tu-tienda.com>",
+  emailTemplateOrderCreatedSubject: "¡Gracias por tu compra! Tu pedido #{{orderId}} ha sido recibido",
+  emailTemplateOrderStatusChangedSubject: "Actualización de tu pedido #{{orderId}} - {{statusText}}"
 };
 
 const ICON_LABELS: Record<string, string> = {
@@ -625,6 +637,50 @@ const SUBCATEGORY_KEYWORDS: Record<string, string[]> = {
   organizacion: ["estante", "caja", "reloj pared", "perchero", "organiz", "cajón", "cajon", "almacenamiento", "percheros"]
 };
 
+export function getProductSizeChartData(p: Partial<Product>) {
+  const sizes = p.sizes || [];
+  const defaultCols = ["Talle", "Sisa / Ancho (cm)", "Largo Total (cm)"];
+  
+  let data = p.sizeChartData;
+  if (!data) {
+    data = {
+      columns: defaultCols,
+      rows: []
+    };
+  }
+  
+  // Clean column header list to ensure 'Talle' is first
+  if (!data.columns || data.columns.length === 0) {
+    data.columns = defaultCols;
+  }
+  if (data.columns[0] !== "Talle") {
+    data.columns = ["Talle", ...data.columns.filter(c => c !== "Talle")];
+  }
+  
+  // Align rows with active sizes
+  const rows = [...(data.rows || [])];
+  
+  const mergedRows = sizes.map(sz => {
+    const existing = rows.find(r => r["Talle"] === sz);
+    if (existing) {
+      return existing;
+    } else {
+      const newRow: Record<string, string> = { "Talle": sz };
+      data?.columns.forEach(col => {
+        if (col !== "Talle") {
+          newRow[col] = "";
+        }
+      });
+      return newRow;
+    }
+  });
+  
+  return {
+    columns: data.columns,
+    rows: mergedRows
+  };
+}
+
 export default function App() {
   // Store state loaded from api
   const [store, setStore] = useState<ShopState>({
@@ -661,6 +717,7 @@ export default function App() {
   // Search & Navigation
   const [activeTab, setActiveTab] = useState<"storefront" | "admin" | "checkout">("storefront");
   const [adminSection, setAdminSection] = useState<"general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales" | "reviews">("dashboard");
+  const [showAdminDevicePreview, setShowAdminDevicePreview] = useState(true);
   const [mobileAdminMenuOpen, setMobileAdminMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -703,12 +760,15 @@ export default function App() {
     }
   };
 
-  const navigateAdminSection = (section: "general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales" | "reviews") => {
+  const navigateAdminSection = (section: "general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales" | "reviews" | "emails") => {
     setAdminSection(section);
     setEditingProduct(null);
     setIsNewProductMode(false);
     setMobileAdminMenuOpen(false);
     window.history.pushState(null, "", `/admin/${section}`);
+    if (section === "emails") {
+      fetchEmailLogs();
+    }
   };
 
   // URL routing helpers
@@ -764,6 +824,10 @@ export default function App() {
       else if (sub === "payments") setAdminSection("payments");
       else if (sub === "sales") setAdminSection("sales");
       else if (sub === "reviews") setAdminSection("reviews");
+      else if (sub === "emails") {
+        setAdminSection("emails");
+        fetchEmailLogs();
+      }
       else setAdminSection("dashboard");
 
       // Verify session token integrity on every URL change
@@ -974,6 +1038,81 @@ export default function App() {
         window.scrollTo({ top: 300, behavior: "smooth" });
       }
     }, 80);
+  };
+
+  const [emailLogs, setEmailLogs] = useState<any[]>([]);
+  const [sendingTest, setSendingTest] = useState(false);
+  const [testEmailAddress, setTestEmailAddress] = useState("");
+  const [emailLogsLoading, setEmailLogsLoading] = useState(false);
+
+  const fetchEmailLogs = async () => {
+    setEmailLogsLoading(true);
+    try {
+      const activeToken = localStorage.getItem("apex_admin_token") || authToken;
+      const res = await fetch("/api/admin/emails/logs", {
+        headers: { "Authorization": `Bearer ${activeToken}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEmailLogs(data.logs || []);
+      }
+    } catch (e) {
+      console.error("Error fetching email logs", e);
+    } finally {
+      setEmailLogsLoading(false);
+    }
+  };
+
+  const handleSendTestEmail = async () => {
+    if (!testEmailAddress.trim()) {
+      showAdminToast("Por favor, ingresa un destinatario válido.", "error");
+      return;
+    }
+    setSendingTest(true);
+    try {
+      const activeToken = localStorage.getItem("apex_admin_token") || authToken;
+      const res = await fetch("/api/admin/emails/test", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${activeToken}`
+        },
+        body: JSON.stringify({ toEmail: testEmailAddress.trim() })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.status === "simulated") {
+          showAdminToast("¡Envío simulado correctamente! (Revisa el historial de correos abajo)", "success");
+        } else {
+          showAdminToast("¡Prueba de conexión SMTP ejecutada con éxito!", "success");
+        }
+        fetchEmailLogs();
+      } else {
+        showAdminToast(`Fallo: ${data.message}`, "error");
+      }
+    } catch (e: any) {
+      showAdminToast("Error en la conexión con el servidor.", "error");
+    } finally {
+      setSendingTest(false);
+    }
+  };
+
+  const handleClearEmailLogs = async () => {
+    if (!confirm("¿Seguro que deseas vaciar el historial de correos?")) return;
+    try {
+      const activeToken = localStorage.getItem("apex_admin_token") || authToken;
+      const res = await fetch("/api/admin/emails/logs", {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${activeToken}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        showAdminToast("Historial vaciado correctamente", "success");
+        setEmailLogs([]);
+      }
+    } catch (e) {
+      showAdminToast("Error al vaciar historial", "error");
+    }
   };
 
   const [editingSettings, setEditingSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
@@ -1510,7 +1649,16 @@ export default function App() {
       featured: !!newProduct.featured,
       createdAt: new Date().toISOString(),
       sizes: newProduct.sizes || [],
-      colors: newProduct.colors || []
+      colors: newProduct.colors || [],
+      sizeChartEnabled: newProduct.sizeChartEnabled !== false,
+      sizeChartShowSuperior: newProduct.sizeChartShowSuperior !== false,
+      sizeChartShowInferior: newProduct.sizeChartShowInferior !== false,
+      sizeChartShowCalzado: newProduct.sizeChartShowCalzado !== false,
+      sizeChartShowRecommender: newProduct.sizeChartShowRecommender !== false,
+      sizeChartData: newProduct.sizeChartData || {
+        columns: ["Talle", "Sisa / Ancho (cm)", "Largo Total (cm)"],
+        rows: []
+      }
     };
 
     const updatedProducts = [created, ...store.products];
@@ -3291,6 +3439,18 @@ export default function App() {
                 <span>Seguridad de Acceso</span>
               </button>
 
+              <button
+                onClick={() => navigateAdminSection("emails")}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
+                  adminSection === "emails"
+                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
+                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                }`}
+              >
+                <Mail className="h-4 w-4" />
+                <span>Emails Automáticos 📧</span>
+              </button>
+
               <div className="pt-8 text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-4 px-3">
                 Soporte de Sistema
               </div>
@@ -3343,8 +3503,32 @@ export default function App() {
                   {adminSection === "payments" && "Administración de Métodos de Pago (Uruguay)"}
                   {adminSection === "reviews" && "Ficha de Opiniones de Google Maps y Reputación"}
                 </h2>
-                <p className="text-slate-500 dark:text-zinc-400 text-xs">
-                  Modifica los contenidos de tu tienda en tiempo real. Los cambios se sincronizarán directamente con tu base de datos central sin tocar código.
+                <p className="text-slate-550 dark:text-zinc-400 text-xs flex flex-col sm:flex-row sm:items-center gap-3 mt-1.5 leading-relaxed">
+                  <span>Modifica los contenidos de tu tienda en tiempo real. Los cambios se sincronizarán directamente con tu base de datos central sin tocar código.</span>
+                  
+                  {adminSection !== "dashboard" && adminSection !== "sales" && adminSection !== "security" && adminSection !== "stock" && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminDevicePreview(!showAdminDevicePreview)}
+                      className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-xs shrink-0 cursor-pointer self-start sm:self-center ${
+                        showAdminDevicePreview 
+                          ? "bg-[#5346ff]/10 text-[#5346ff] hover:bg-[#5346ff]/15 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-900/30"
+                          : "bg-emerald-100 text-emerald-700 hover:bg-emerald-250 dark:bg-emerald-950/20 dark:text-emerald-400 dark:hover:bg-emerald-900/30 border border-emerald-300/40 dark:border-emerald-800/40"
+                      }`}
+                    >
+                      {showAdminDevicePreview ? (
+                        <>
+                          <EyeOff className="w-3.5 h-3.5" />
+                          <span>Ocultar Vista Previa (Expandir)</span>
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Mostrar Vista Previa</span>
+                        </>
+                      )}
+                    </button>
+                  )}
                 </p>
               </div>
 
@@ -3449,7 +3633,7 @@ export default function App() {
               <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               
               {/* SECTION A: THE PRINCIPAL CONTROL FORM */}
-              <div className="lg:col-span-7 space-y-4">
+              <div className={`${showAdminDevicePreview ? "lg:col-span-7" : "lg:col-span-12"} space-y-4`}>
                 
                 {/* 1. GENERAL & BRANDING EDITOR */}
                 {adminSection === "general" && (
@@ -4544,116 +4728,119 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Categorías secundarias adicionales para Nuevo Producto */}
-                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60">
-                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">
-                        Categorías Adicionales / Secundarias <span className="text-zinc-400 dark:text-zinc-500 font-normal lowercase">(los artículos aparecerán en todas las categorías marcadas)</span>
-                      </label>
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        {(store.dbCategories || [])
-                          .sort((a,b) => (a.orden || 0) - (b.orden || 0))
-                          .filter(c => c.id !== newProduct.categoria_id)
-                          .map((c) => {
-                            const isChecked = !!(newProduct.categorias_adicionales && newProduct.categorias_adicionales.includes(c.id));
-                            return (
-                              <button
-                                type="button"
-                                key={c.id}
-                                onClick={() => {
-                                  const list = newProduct.categorias_adicionales || [];
-                                  const updated = list.includes(c.id)
-                                    ? list.filter(id => id !== c.id)
-                                    : [...list, c.id];
-                                  setNewProduct({
-                                    ...newProduct,
-                                    categorias_adicionales: updated
-                                  });
-                                }}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all cursor-pointer select-none active:scale-95 ${
-                                  isChecked
-                                    ? "bg-[#5346ff]/10 text-[#5346ff] border-[#5346ff]/40 dark:bg-[#5346ff]/20 dark:text-[#9086ff] dark:border-[#5346ff]/60"
-                                    : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-850 hover:bg-slate-100 dark:hover:bg-zinc-850"
-                                }`}
-                              >
-                                <span>{c.nombre}</span>
-                                {isChecked && <span className="text-[#5346ff] dark:text-[#9086ff]">✓</span>}
-                              </button>
-                            );
-                          })}
-                        {(store.dbCategories || []).filter(c => c.id !== newProduct.categoria_id).length === 0 && (
-                          <span className="text-[10px] text-zinc-400 italic">No hay otras categorías creadas para seleccionar.</span>
-                        )}
+                    {/* Categorías y Subcategorías Adicionales / Secundarias para Nuevo Producto */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Categorías secundarias adicionales para Nuevo Producto */}
+                      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60 flex flex-col">
+                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">
+                          Categorías Adicionales / Secundarias <span className="text-zinc-400 dark:text-zinc-500 font-normal lowercase">(los artículos aparecerán en todas las categorías marcadas)</span>
+                        </label>
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          {(store.dbCategories || [])
+                            .sort((a,b) => (a.orden || 0) - (b.orden || 0))
+                            .filter(c => c.id !== newProduct.categoria_id)
+                            .map((c) => {
+                              const isChecked = !!(newProduct.categorias_adicionales && newProduct.categorias_adicionales.includes(c.id));
+                              return (
+                                <button
+                                  type="button"
+                                  key={c.id}
+                                  onClick={() => {
+                                    const list = newProduct.categorias_adicionales || [];
+                                    const updated = list.includes(c.id)
+                                      ? list.filter(id => id !== c.id)
+                                      : [...list, c.id];
+                                    setNewProduct({
+                                      ...newProduct,
+                                      categorias_adicionales: updated
+                                    });
+                                  }}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all cursor-pointer select-none active:scale-95 ${
+                                    isChecked
+                                      ? "bg-[#5346ff]/10 text-[#5346ff] border-[#5346ff]/40 dark:bg-[#5346ff]/20 dark:text-[#9086ff] dark:border-[#5346ff]/60"
+                                      : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-850 hover:bg-slate-100 dark:hover:bg-zinc-850"
+                                  }`}
+                                >
+                                  <span>{c.nombre}</span>
+                                  {isChecked && <span className="text-[#5346ff] dark:text-[#9086ff]">✓</span>}
+                                </button>
+                              );
+                            })}
+                          {(store.dbCategories || []).filter(c => c.id !== newProduct.categoria_id).length === 0 && (
+                            <span className="text-[10px] text-zinc-400 italic">No hay otras categorías creadas para seleccionar.</span>
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Subcategorías secundarias adicionales para Nuevo Producto */}
-                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60">
-                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
-                        <span>Subcategorías Adicionales / Secundarias</span>
-                        <span className="text-zinc-400 dark:text-zinc-500 font-normal lowercase">(haz clic para desplegar cada menú y marcar)</span>
-                      </label>
-                      <div className="space-y-2 mt-2">
-                        {(store.dbCategories || [])
-                          .sort((a,b) => (a.orden || 0) - (b.orden || 0))
-                          .map((cat) => {
-                            // Find subcategories belonging to this category
-                            const subs = (store.dbSubcategories || []).filter(
-                              s => s.categoria_id === cat.id && s.id !== newProduct.subcategoria_id
-                            );
-                            if (subs.length === 0) return null;
+                      {/* Subcategorías secundarias adicionales para Nuevo Producto */}
+                      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60 flex flex-col">
+                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex flex-wrap items-center justify-between gap-1">
+                          <span>Subcategorías Adicionales / Secundarias</span>
+                          <span className="text-zinc-400 dark:text-zinc-500 font-normal lowercase">(haz clic para desplegar cada menú y marcar)</span>
+                        </label>
+                        <div className="space-y-2 mt-2">
+                          {(store.dbCategories || [])
+                            .sort((a,b) => (a.orden || 0) - (b.orden || 0))
+                            .map((cat) => {
+                              // Find subcategories belonging to this category
+                              const subs = (store.dbSubcategories || []).filter(
+                                s => s.categoria_id === cat.id && s.id !== newProduct.subcategoria_id
+                              );
+                              if (subs.length === 0) return null;
 
-                            const activeSubCount = subs.filter(
-                              s => !!(newProduct.subcategorias_adicionales && newProduct.subcategorias_adicionales.includes(s.id))
-                            ).length;
-                            
-                            return (
-                              <details key={cat.id} className="group border border-slate-200/50 dark:border-zinc-800/50 rounded-lg bg-white dark:bg-zinc-950/40 overflow-hidden" open={activeSubCount > 0}>
-                                <summary className="flex items-center justify-between px-3 py-2 text-[11px] text-slate-700 dark:text-zinc-300 font-extrabold cursor-pointer select-none hover:bg-slate-100/50 dark:hover:bg-zinc-900/50 duration-150 list-none [&::-webkit-details-marker]:hidden">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-[9px] text-slate-400 dark:text-zinc-500 transition-transform duration-200 group-open:rotate-90">▶</span>
-                                    <span className="uppercase text-[10px] tracking-wider font-mono">{cat.nombre}</span>
+                              const activeSubCount = subs.filter(
+                                s => !!(newProduct.subcategorias_adicionales && newProduct.subcategorias_adicionales.includes(s.id))
+                              ).length;
+                              
+                              return (
+                                <details key={cat.id} className="group border border-slate-200/50 dark:border-zinc-800/50 rounded-lg bg-white dark:bg-zinc-950/40 overflow-hidden" open={activeSubCount > 0}>
+                                  <summary className="flex items-center justify-between px-3 py-2 text-[11px] text-slate-700 dark:text-zinc-300 font-extrabold cursor-pointer select-none hover:bg-slate-100/50 dark:hover:bg-zinc-900/50 duration-150 list-none [&::-webkit-details-marker]:hidden">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[9px] text-slate-400 dark:text-zinc-500 transition-transform duration-200 group-open:rotate-90">▶</span>
+                                      <span className="uppercase text-[10px] tracking-wider font-mono">{cat.nombre}</span>
+                                    </div>
+                                    {activeSubCount > 0 && (
+                                      <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-[#5346ff]/10 text-[#5346ff] dark:bg-[#5346ff]/20 dark:text-[#9086ff]">
+                                        {activeSubCount} {activeSubCount === 1 ? "seleccionada" : "seleccionadas"}
+                                      </span>
+                                    )}
+                                  </summary>
+                                  <div className="p-2.5 border-t border-slate-100 dark:border-zinc-800/30 bg-slate-50/40 dark:bg-zinc-950/20 flex flex-wrap gap-1.5">
+                                    {subs.map((s) => {
+                                      const isChecked = !!(newProduct.subcategorias_adicionales && newProduct.subcategorias_adicionales.includes(s.id));
+                                      return (
+                                        <button
+                                          type="button"
+                                          key={s.id}
+                                          onClick={() => {
+                                            const list = newProduct.subcategorias_adicionales || [];
+                                            const updated = list.includes(s.id)
+                                              ? list.filter(id => id !== s.id)
+                                              : [...list, s.id];
+                                            setNewProduct({
+                                              ...newProduct,
+                                              subcategorias_adicionales: updated
+                                            });
+                                          }}
+                                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 border transition-all cursor-pointer select-none active:scale-95 ${
+                                            isChecked
+                                              ? "bg-[#5346ff]/10 text-[#5346ff] border-[#5346ff]/35 dark:bg-[#5346ff]/20 dark:text-[#9086ff] dark:border-[#5346ff]/50"
+                                              : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-850 hover:bg-slate-100 dark:hover:bg-zinc-850"
+                                          }`}
+                                        >
+                                          <span>{s.nombre}</span>
+                                          {isChecked && <span className="text-[#5346ff] dark:text-[#9086ff]">✓</span>}
+                                        </button>
+                                      );
+                                    })}
                                   </div>
-                                  {activeSubCount > 0 && (
-                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-[#5346ff]/10 text-[#5346ff] dark:bg-[#5346ff]/20 dark:text-[#9086ff]">
-                                      {activeSubCount} {activeSubCount === 1 ? "seleccionada" : "seleccionadas"}
-                                    </span>
-                                  )}
-                                </summary>
-                                <div className="p-2.5 border-t border-slate-100 dark:border-zinc-800/30 bg-slate-50/40 dark:bg-zinc-950/20 flex flex-wrap gap-1.5">
-                                  {subs.map((s) => {
-                                    const isChecked = !!(newProduct.subcategorias_adicionales && newProduct.subcategorias_adicionales.includes(s.id));
-                                    return (
-                                      <button
-                                        type="button"
-                                        key={s.id}
-                                        onClick={() => {
-                                          const list = newProduct.subcategorias_adicionales || [];
-                                          const updated = list.includes(s.id)
-                                            ? list.filter(id => id !== s.id)
-                                            : [...list, s.id];
-                                          setNewProduct({
-                                            ...newProduct,
-                                            subcategorias_adicionales: updated
-                                          });
-                                        }}
-                                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 border transition-all cursor-pointer select-none active:scale-95 ${
-                                          isChecked
-                                            ? "bg-[#5346ff]/10 text-[#5346ff] border-[#5346ff]/35 dark:bg-[#5346ff]/20 dark:text-[#9086ff] dark:border-[#5346ff]/50"
-                                            : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-850 hover:bg-slate-100 dark:hover:bg-zinc-850"
-                                        }`}
-                                      >
-                                        <span>{s.nombre}</span>
-                                        {isChecked && <span className="text-[#5346ff] dark:text-[#9086ff]">✓</span>}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </details>
-                            );
-                          })}
-                        {!(store.dbSubcategories && store.dbSubcategories.length > 0) && (
-                          <span className="text-[10px] text-zinc-400 italic">No hay subcategorías registradas en la tienda para seleccionar.</span>
-                        )}
+                                </details>
+                              );
+                            })}
+                          {!(store.dbSubcategories && store.dbSubcategories.length > 0) && (
+                            <span className="text-[10px] text-zinc-400 italic">No hay subcategorías registradas en la tienda para seleccionar.</span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -4836,6 +5023,328 @@ export default function App() {
                                 );
                               })}
                             </div>
+                          </div>
+                        ) : (newProduct.categoria_id === "ropa" || (newProduct.category || "").toLowerCase().includes("ropa") || (newProduct.category || "").toLowerCase().includes("indumentaria")) ? (
+                          <div className="space-y-3 p-3 bg-white/50 dark:bg-zinc-950/40 rounded-xl border border-slate-200/60 dark:border-zinc-800">
+                            <div className="flex items-center justify-between">
+                              <label className="block text-[10px] font-extrabold text-[#5346ff] dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                                <Ruler className="w-3.5 h-3.5" />
+                                <span>Guía de Tallas (Ropa)</span>
+                              </label>
+                              <div className="flex items-center gap-2">
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                                  (newProduct.sizeChartEnabled !== false)
+                                    ? "text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                    : "text-rose-600 bg-rose-100 dark:bg-rose-900/30 dark:text-rose-400"
+                                }`}>
+                                  {(newProduct.sizeChartEnabled !== false) ? "Activado" : "Desactivado"}
+                                </span>
+                                <input 
+                                  type="checkbox"
+                                  checked={newProduct.sizeChartEnabled !== false}
+                                  onChange={(e) => {
+                                    setNewProduct({ ...newProduct, sizeChartEnabled: e.target.checked });
+                                  }}
+                                  className="h-4 w-4 text-[#5346ff] focus:ring-[#5346ff] border-slate-300 dark:border-zinc-700 rounded cursor-pointer"
+                                />
+                              </div>
+                            </div>
+                            
+                            {(newProduct.sizeChartEnabled !== false) ? (
+                              <div className="space-y-4">
+                                {/* Dynamic Tabs Visibility Control */}
+                                <div className="p-3 bg-indigo-50/40 dark:bg-zinc-900/40 rounded-xl border border-indigo-500/10 space-y-2 mb-2">
+                                  <p className="text-[10px] font-bold text-[#5346ff] dark:text-indigo-400 uppercase tracking-wider">
+                                    Pestañas visibles en la guía de tallas:
+                                  </p>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <label className="flex items-center gap-2 cursor-pointer bg-white dark:bg-zinc-950 p-2 rounded-lg border border-slate-200/60 dark:border-zinc-800/80 hover:border-indigo-500/30 transition-all">
+                                      <input 
+                                        type="checkbox"
+                                        checked={newProduct.sizeChartShowSuperior !== false}
+                                        onChange={(e) => setNewProduct({ ...newProduct, sizeChartShowSuperior: e.target.checked })}
+                                        className="h-3.5 w-3.5 text-[#5346ff] focus:ring-[#5346ff] border-slate-300 dark:border-zinc-700 rounded cursor-pointer"
+                                      />
+                                      <span className="text-xs text-slate-700 dark:text-zinc-300">👕 Superiores</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer bg-white dark:bg-zinc-950 p-2 rounded-lg border border-slate-200/60 dark:border-zinc-800/80 hover:border-indigo-500/30 transition-all">
+                                      <input 
+                                        type="checkbox"
+                                        checked={newProduct.sizeChartShowInferior !== false}
+                                        onChange={(e) => setNewProduct({ ...newProduct, sizeChartShowInferior: e.target.checked })}
+                                        className="h-3.5 w-3.5 text-[#5346ff] focus:ring-[#5346ff] border-slate-300 dark:border-zinc-700 rounded cursor-pointer"
+                                      />
+                                      <span className="text-xs text-slate-700 dark:text-zinc-300">👖 Inferiores</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer bg-white dark:bg-zinc-950 p-2 rounded-lg border border-slate-200/60 dark:border-zinc-800/80 hover:border-indigo-500/30 transition-all">
+                                      <input 
+                                        type="checkbox"
+                                        checked={newProduct.sizeChartShowCalzado !== false}
+                                        onChange={(e) => setNewProduct({ ...newProduct, sizeChartShowCalzado: e.target.checked })}
+                                        className="h-3.5 w-3.5 text-[#5346ff] focus:ring-[#5346ff] border-slate-300 dark:border-zinc-700 rounded cursor-pointer"
+                                      />
+                                      <span className="text-xs text-slate-700 dark:text-zinc-300">👟 Calzado</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer bg-white dark:bg-zinc-950 p-2 rounded-lg border border-slate-200/60 dark:border-zinc-800/80 hover:border-indigo-500/30 transition-all">
+                                      <input 
+                                        type="checkbox"
+                                        checked={newProduct.sizeChartShowRecommender !== false}
+                                        onChange={(e) => setNewProduct({ ...newProduct, sizeChartShowRecommender: e.target.checked })}
+                                        className="h-3.5 w-3.5 text-[#5346ff] focus:ring-[#5346ff] border-slate-300 dark:border-zinc-700 rounded cursor-pointer"
+                                      />
+                                      <span className="text-xs text-slate-700 dark:text-zinc-300">📏 Calculador</span>
+                                    </label>
+                                  </div>
+                                </div>
+
+                                <p className="text-[10px] text-slate-800 dark:text-zinc-300 leading-normal mb-1">
+                                  <strong>1. Selecciona los talles activos:</strong> Selecciona de los preajustes o añade talles personalizados.
+                                </p>
+                                
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                                  {(() => {
+                                    const currentSizes = newProduct.sizes || [];
+                                    const fallbackStandard = ["S", "M", "L", "XL", "XXL", "Único"];
+                                    const allSizes = Array.from(new Set([...fallbackStandard, ...currentSizes]));
+                                    
+                                    return allSizes.map((sz) => {
+                                      const isActive = currentSizes.includes(sz);
+                                      return (
+                                        <div 
+                                          key={sz}
+                                          className={`p-1.5 rounded-lg border transition-all flex items-center justify-between gap-1 ${
+                                            isActive 
+                                              ? "bg-white dark:bg-zinc-900 border-[#5346ff]/35 shadow-xs text-[#5346ff] dark:text-indigo-400 font-bold animate-fade-in" 
+                                              : "bg-slate-100/50 dark:bg-zinc-950/20 border-transparent text-zinc-400 opacity-60"
+                                          }`}
+                                        >
+                                          <div className="flex items-center gap-1.5 flex-grow min-w-0">
+                                            <input 
+                                              type="checkbox"
+                                              checked={isActive}
+                                              onChange={() => {
+                                                const next = isActive 
+                                                  ? currentSizes.filter(x => x !== sz)
+                                                  : [...currentSizes, sz];
+                                                setNewProduct({ ...newProduct, sizes: next });
+                                              }}
+                                              className="h-3 w-3 rounded border-slate-300 dark:border-zinc-750 text-[#5346ff] focus:ring-[#5346ff] cursor-pointer"
+                                            />
+                                            <span className="text-xs truncate">{sz}</span>
+                                          </div>
+                                          {!fallbackStandard.includes(sz) && (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const next = currentSizes.filter(x => x !== sz);
+                                                setNewProduct({ ...newProduct, sizes: next });
+                                              }}
+                                              className="text-red-500 hover:text-red-700 text-xs font-bold px-1 cursor-pointer"
+                                              title="Eliminar talle"
+                                            >
+                                              ×
+                                            </button>
+                                          )}
+                                        </div>
+                                      );
+                                    });
+                                  })()}
+                                </div>
+
+                                <div className="flex gap-1 items-center">
+                                  <input 
+                                    type="text"
+                                    id="add-new-custom-size-input-new"
+                                    placeholder="Ej: 38, XS, Especial"
+                                    className="w-full px-2 py-1 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-md text-xs outline-none text-slate-900 dark:text-white"
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        const val = e.currentTarget.value.trim();
+                                        if (val) {
+                                          const current = newProduct.sizes || [];
+                                          if (!current.includes(val)) {
+                                            setNewProduct({ ...newProduct, sizes: [...current, val] });
+                                          }
+                                          e.currentTarget.value = "";
+                                        }
+                                      }
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const input = document.getElementById("add-new-custom-size-input-new") as HTMLInputElement;
+                                      const val = input?.value?.trim();
+                                      if (val) {
+                                        const current = newProduct.sizes || [];
+                                        if (!current.includes(val)) {
+                                          setNewProduct({ ...newProduct, sizes: [...current, val] });
+                                        }
+                                        if (input) input.value = "";
+                                      }
+                                    }}
+                                    className="px-2.5 py-1 bg-[#5346ff] text-white hover:bg-[#4336ee] rounded-md text-[10.5px] font-bold transition-all cursor-pointer whitespace-nowrap"
+                                  >
+                                    + Agregar talle
+                                  </button>
+                                </div>
+
+                                <hr className="border-slate-150 dark:border-zinc-800" />
+
+                                <p className="text-[10px] text-slate-800 dark:text-zinc-300 leading-normal">
+                                  <strong>2. Completa las medidas de la tabla:</strong> Agrega columnas editables (Ej: Ancho, Largo, Cadera, Manga) y pon la medida de cada talle.
+                                </p>
+
+                                {(() => {
+                                  const sizesList = newProduct.sizes || [];
+                                  if (sizesList.length === 0) {
+                                    return (
+                                      <p className="text-[10px] text-amber-600 bg-amber-50 dark:bg-amber-950/20 dark:text-amber-400 p-2.5 rounded-lg font-medium text-center">
+                                        Selecciona al menos un talle arriba para rellenar las medidas de la tabla.
+                                      </p>
+                                    );
+                                  }
+
+                                  const chartObj = getProductSizeChartData(newProduct);
+                                  const cols = chartObj.columns;
+                                  const mRows = chartObj.rows;
+
+                                  return (
+                                    <div className="space-y-2">
+                                      <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-zinc-800 max-w-full">
+                                        <table className="w-full text-left border-collapse text-[11px]">
+                                          <thead>
+                                            <tr className="bg-slate-100/90 dark:bg-zinc-900/60 text-slate-800 dark:text-zinc-200">
+                                              {cols.map((colName, colIdx) => (
+                                                <th key={colName} className="p-1.5 border-r border-slate-200 dark:border-zinc-800 font-bold whitespace-nowrap">
+                                                  <div className="flex items-center justify-between gap-1 min-w-[70px]">
+                                                    <span>{colName}</span>
+                                                    {colIdx > 0 && (
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                          const nextCols = cols.filter(c => c !== colName);
+                                                          const nextRows = mRows.map(r => {
+                                                            const copy = { ...r };
+                                                            delete copy[colName];
+                                                            return copy;
+                                                          });
+                                                          setNewProduct({
+                                                            ...newProduct,
+                                                            sizeChartData: { columns: nextCols, rows: nextRows }
+                                                          });
+                                                        }}
+                                                        className="text-red-500 hover:text-red-700 text-xs font-bold px-0.5"
+                                                        title="Eliminar columna"
+                                                      >
+                                                        ×
+                                                      </button>
+                                                    )}
+                                                  </div>
+                                                </th>
+                                              ))}
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-slate-100 dark:divide-zinc-850">
+                                            {mRows.map((rowObj) => {
+                                              const sizeVal = rowObj["Talle"];
+                                              return (
+                                                <tr key={sizeVal} className="hover:bg-slate-50 dark:hover:bg-zinc-900/50">
+                                                  {cols.map((colName) => {
+                                                    if (colName === "Talle") {
+                                                      return (
+                                                        <td key={colName} className="p-1.5 font-bold text-[#5346ff] border-r border-slate-200 dark:border-zinc-800 bg-slate-50/55 dark:bg-zinc-900/20">
+                                                          {sizeVal}
+                                                        </td>
+                                                      );
+                                                    }
+
+                                                    const cellVal = rowObj[colName] || "";
+                                                    return (
+                                                      <td key={colName} className="p-1 border-r border-slate-200 dark:border-zinc-800/80 bg-white dark:bg-zinc-950/20">
+                                                        <input
+                                                          type="text"
+                                                          value={cellVal}
+                                                          onChange={(e) => {
+                                                            const updatedRows = mRows.map(r => {
+                                                              if (r["Talle"] === sizeVal) {
+                                                                return { ...r, [colName]: e.target.value };
+                                                              }
+                                                              return r;
+                                                            });
+                                                            setNewProduct({
+                                                              ...newProduct,
+                                                              sizeChartData: { columns: cols, rows: updatedRows }
+                                                            });
+                                                          }}
+                                                          placeholder="ej: 50 cm"
+                                                          className="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/80 rounded px-1.5 py-0.5 text-[11px] outline-none text-slate-950 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-650 focus:ring-1 focus:ring-indigo-500"
+                                                        />
+                                                      </td>
+                                                    );
+                                                  })}
+                                                </tr>
+                                              );
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+
+                                      <div className="flex gap-1.5 items-center justify-end pt-1">
+                                        <input 
+                                          type="text"
+                                          id="add-new-column-input-new"
+                                          placeholder="Ej: Ancho (cm), Manga"
+                                          className="px-2 py-0.5 max-w-[170px] bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-md text-[10px] outline-none"
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                              e.preventDefault();
+                                              const val = e.currentTarget.value.trim();
+                                              if (val && !cols.includes(val)) {
+                                                setNewProduct({
+                                                  ...newProduct,
+                                                  sizeChartData: {
+                                                    columns: [...cols, val],
+                                                    rows: mRows.map(r => ({ ...r, [val]: "" }))
+                                                  }
+                                                });
+                                                e.currentTarget.value = "";
+                                              }
+                                            }
+                                          }}
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const input = document.getElementById("add-new-column-input-new") as HTMLInputElement;
+                                            const val = input?.value?.trim();
+                                            if (val && !cols.includes(val)) {
+                                              setNewProduct({
+                                                ...newProduct,
+                                                sizeChartData: {
+                                                  columns: [...cols, val],
+                                                  rows: mRows.map(r => ({ ...r, [val]: "" }))
+                                                }
+                                              });
+                                              if (input) input.value = "";
+                                            }
+                                          }}
+                                          className="px-2 py-0.5 bg-slate-200 dark:bg-zinc-800 hover:bg-slate-300 hover:dark:bg-zinc-700 text-zinc-755 dark:text-zinc-200 rounded-md text-[10px] font-bold cursor-pointer whitespace-nowrap"
+                                        >
+                                          + Agregar medida
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            ) : (
+                              <div className="p-3 text-center bg-slate-100 dark:bg-zinc-950/20 text-zinc-500 rounded-xl border border-slate-200 dark:border-zinc-800">
+                                <p className="text-[11px] font-medium">Guía de tallas desactivada para este producto.</p>
+                                <p className="text-[9.5px] text-zinc-400 mt-1">El botón de "Guía de talles" no estará visible en la página de detalles para este producto.</p>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div>
@@ -5399,116 +5908,119 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Categorías secundarias adicionales para Editar Producto */}
-                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60">
-                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">
-                        Categorías Adicionales / Secundarias <span className="text-zinc-400 dark:text-zinc-500 font-normal lowercase">(los artículos aparecerán en todas las categorías marcadas)</span>
-                      </label>
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        {(store.dbCategories || [])
-                          .sort((a,b) => (a.orden || 0) - (b.orden || 0))
-                          .filter(c => c.id !== editingProduct.categoria_id)
-                          .map((c) => {
-                            const isChecked = !!(editingProduct.categorias_adicionales && editingProduct.categorias_adicionales.includes(c.id));
-                            return (
-                              <button
-                                type="button"
-                                key={c.id}
-                                onClick={() => {
-                                  const list = editingProduct.categorias_adicionales || [];
-                                  const updated = list.includes(c.id)
-                                    ? list.filter(id => id !== c.id)
-                                    : [...list, c.id];
-                                  setEditingProduct({
-                                    ...editingProduct,
-                                    categorias_adicionales: updated
-                                  });
-                                }}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all cursor-pointer select-none active:scale-95 ${
-                                  isChecked
-                                    ? "bg-[#5346ff]/10 text-[#5346ff] border-[#5346ff]/40 dark:bg-[#5346ff]/20 dark:text-[#9086ff] dark:border-[#5346ff]/60"
-                                    : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-850 hover:bg-slate-100 dark:hover:bg-zinc-850"
-                                }`}
-                              >
-                                <span>{c.nombre}</span>
-                                {isChecked && <span className="text-[#5346ff] dark:text-[#9086ff]">✓</span>}
-                              </button>
-                            );
-                          })}
-                        {(store.dbCategories || []).filter(c => c.id !== editingProduct.categoria_id).length === 0 && (
-                          <span className="text-[10px] text-zinc-400 italic">No hay otras categorías creadas para seleccionar.</span>
-                        )}
+                    {/* Categorías y Subcategorías Adicionales / Secundarias para Editar Producto */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Categorías secundarias adicionales para Editar Producto */}
+                      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60 flex flex-col">
+                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">
+                          Categorías Adicionales / Secundarias <span className="text-zinc-400 dark:text-zinc-500 font-normal lowercase">(los artículos aparecerán en todas las categorías marcadas)</span>
+                        </label>
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          {(store.dbCategories || [])
+                            .sort((a,b) => (a.orden || 0) - (b.orden || 0))
+                            .filter(c => c.id !== editingProduct.categoria_id)
+                            .map((c) => {
+                              const isChecked = !!(editingProduct.categorias_adicionales && editingProduct.categorias_adicionales.includes(c.id));
+                              return (
+                                <button
+                                  type="button"
+                                  key={c.id}
+                                  onClick={() => {
+                                    const list = editingProduct.categorias_adicionales || [];
+                                    const updated = list.includes(c.id)
+                                      ? list.filter(id => id !== c.id)
+                                      : [...list, c.id];
+                                    setEditingProduct({
+                                      ...editingProduct,
+                                      categorias_adicionales: updated
+                                    });
+                                  }}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all cursor-pointer select-none active:scale-95 ${
+                                    isChecked
+                                      ? "bg-[#5346ff]/10 text-[#5346ff] border-[#5346ff]/40 dark:bg-[#5346ff]/20 dark:text-[#9086ff] dark:border-[#5346ff]/60"
+                                      : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-850 hover:bg-slate-100 dark:hover:bg-zinc-850"
+                                  }`}
+                                >
+                                  <span>{c.nombre}</span>
+                                  {isChecked && <span className="text-[#5346ff] dark:text-[#9086ff]">✓</span>}
+                                </button>
+                              );
+                            })}
+                          {(store.dbCategories || []).filter(c => c.id !== editingProduct.categoria_id).length === 0 && (
+                            <span className="text-[10px] text-zinc-400 italic">No hay otras categorías creadas para seleccionar.</span>
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Subcategorías secundarias adicionales para Editar Producto */}
-                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60">
-                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
-                        <span>Subcategorías Adicionales / Secundarias</span>
-                        <span className="text-zinc-400 dark:text-zinc-500 font-normal lowercase">(haz clic para desplegar cada menú y marcar)</span>
-                      </label>
-                      <div className="space-y-2 mt-2">
-                        {(store.dbCategories || [])
-                          .sort((a,b) => (a.orden || 0) - (b.orden || 0))
-                          .map((cat) => {
-                            // Find subcategories belonging to this category
-                            const subs = (store.dbSubcategories || []).filter(
-                              s => s.categoria_id === cat.id && s.id !== editingProduct.subcategoria_id
-                            );
-                            if (subs.length === 0) return null;
+                      {/* Subcategorías secundarias adicionales para Editar Producto */}
+                      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60 flex flex-col">
+                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex flex-wrap items-center justify-between gap-1">
+                          <span>Subcategorías Adicionales / Secundarias</span>
+                          <span className="text-zinc-400 dark:text-zinc-500 font-normal lowercase">(haz clic para desplegar cada menú y marcar)</span>
+                        </label>
+                        <div className="space-y-2 mt-2">
+                          {(store.dbCategories || [])
+                            .sort((a,b) => (a.orden || 0) - (b.orden || 0))
+                            .map((cat) => {
+                              // Find subcategories belonging to this category
+                              const subs = (store.dbSubcategories || []).filter(
+                                s => s.categoria_id === cat.id && s.id !== editingProduct.subcategoria_id
+                              );
+                              if (subs.length === 0) return null;
 
-                            const activeSubCount = subs.filter(
-                              s => !!(editingProduct.subcategorias_adicionales && editingProduct.subcategorias_adicionales.includes(s.id))
-                            ).length;
-                            
-                            return (
-                              <details key={cat.id} className="group border border-slate-200/50 dark:border-zinc-800/50 rounded-lg bg-white dark:bg-zinc-950/40 overflow-hidden" open={activeSubCount > 0}>
-                                <summary className="flex items-center justify-between px-3 py-2 text-[11px] text-slate-700 dark:text-zinc-300 font-extrabold cursor-pointer select-none hover:bg-slate-100/50 dark:hover:bg-zinc-900/50 duration-150 list-none [&::-webkit-details-marker]:hidden">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-[9px] text-slate-400 dark:text-zinc-500 transition-transform duration-200 group-open:rotate-90">▶</span>
-                                    <span className="uppercase text-[10px] tracking-wider font-mono">{cat.nombre}</span>
+                              const activeSubCount = subs.filter(
+                                s => !!(editingProduct.subcategorias_adicionales && editingProduct.subcategorias_adicionales.includes(s.id))
+                              ).length;
+                              
+                              return (
+                                <details key={cat.id} className="group border border-slate-200/50 dark:border-zinc-800/50 rounded-lg bg-white dark:bg-zinc-950/40 overflow-hidden" open={activeSubCount > 0}>
+                                  <summary className="flex items-center justify-between px-3 py-2 text-[11px] text-slate-700 dark:text-zinc-300 font-extrabold cursor-pointer select-none hover:bg-slate-100/50 dark:hover:bg-zinc-900/50 duration-150 list-none [&::-webkit-details-marker]:hidden">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[9px] text-slate-400 dark:text-zinc-500 transition-transform duration-200 group-open:rotate-90">▶</span>
+                                      <span className="uppercase text-[10px] tracking-wider font-mono">{cat.nombre}</span>
+                                    </div>
+                                    {activeSubCount > 0 && (
+                                      <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-[#5346ff]/10 text-[#5346ff] dark:bg-[#5346ff]/20 dark:text-[#9086ff]">
+                                        {activeSubCount} {activeSubCount === 1 ? "seleccionada" : "seleccionadas"}
+                                      </span>
+                                    )}
+                                  </summary>
+                                  <div className="p-2.5 border-t border-slate-100 dark:border-zinc-800/30 bg-slate-50/40 dark:bg-zinc-950/20 flex flex-wrap gap-1.5">
+                                    {subs.map((s) => {
+                                      const isChecked = !!(editingProduct.subcategorias_adicionales && editingProduct.subcategorias_adicionales.includes(s.id));
+                                      return (
+                                        <button
+                                          type="button"
+                                          key={s.id}
+                                          onClick={() => {
+                                            const list = editingProduct.subcategorias_adicionales || [];
+                                            const updated = list.includes(s.id)
+                                              ? list.filter(id => id !== s.id)
+                                              : [...list, s.id];
+                                            setEditingProduct({
+                                              ...editingProduct,
+                                              subcategorias_adicionales: updated
+                                            });
+                                          }}
+                                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 border transition-all cursor-pointer select-none active:scale-95 ${
+                                            isChecked
+                                              ? "bg-[#5346ff]/10 text-[#5346ff] border-[#5346ff]/35 dark:bg-[#5346ff]/20 dark:text-[#9086ff] dark:border-[#5346ff]/50"
+                                              : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-850 hover:bg-slate-100 dark:hover:bg-zinc-850"
+                                          }`}
+                                        >
+                                          <span>{s.nombre}</span>
+                                          {isChecked && <span className="text-[#5346ff] dark:text-[#9086ff]">✓</span>}
+                                        </button>
+                                      );
+                                    })}
                                   </div>
-                                  {activeSubCount > 0 && (
-                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-[#5346ff]/10 text-[#5346ff] dark:bg-[#5346ff]/20 dark:text-[#9086ff]">
-                                      {activeSubCount} {activeSubCount === 1 ? "seleccionada" : "seleccionadas"}
-                                    </span>
-                                  )}
-                                </summary>
-                                <div className="p-2.5 border-t border-slate-100 dark:border-zinc-800/30 bg-slate-50/40 dark:bg-zinc-950/20 flex flex-wrap gap-1.5">
-                                  {subs.map((s) => {
-                                    const isChecked = !!(editingProduct.subcategorias_adicionales && editingProduct.subcategorias_adicionales.includes(s.id));
-                                    return (
-                                      <button
-                                        type="button"
-                                        key={s.id}
-                                        onClick={() => {
-                                          const list = editingProduct.subcategorias_adicionales || [];
-                                          const updated = list.includes(s.id)
-                                            ? list.filter(id => id !== s.id)
-                                            : [...list, s.id];
-                                          setEditingProduct({
-                                            ...editingProduct,
-                                            subcategorias_adicionales: updated
-                                          });
-                                        }}
-                                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 border transition-all cursor-pointer select-none active:scale-95 ${
-                                          isChecked
-                                            ? "bg-[#5346ff]/10 text-[#5346ff] border-[#5346ff]/35 dark:bg-[#5346ff]/20 dark:text-[#9086ff] dark:border-[#5346ff]/50"
-                                            : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-850 hover:bg-slate-100 dark:hover:bg-zinc-850"
-                                        }`}
-                                      >
-                                        <span>{s.nombre}</span>
-                                        {isChecked && <span className="text-[#5346ff] dark:text-[#9086ff]">✓</span>}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </details>
-                            );
-                          })}
-                        {!(store.dbSubcategories && store.dbSubcategories.length > 0) && (
-                          <span className="text-[10px] text-zinc-400 italic">No hay subcategorías registradas en la tienda para seleccionar.</span>
-                        )}
+                                </details>
+                              );
+                            })}
+                          {!(store.dbSubcategories && store.dbSubcategories.length > 0) && (
+                            <span className="text-[10px] text-zinc-400 italic">No hay subcategorías registradas en la tienda para seleccionar.</span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -5643,6 +6155,328 @@ export default function App() {
                                 );
                               })}
                             </div>
+                          </div>
+                        ) : (editingProduct.categoria_id === "ropa" || (editingProduct.category || "").toLowerCase().includes("ropa") || (editingProduct.category || "").toLowerCase().includes("indumentaria")) ? (
+                          <div className="space-y-3 p-3 bg-white/50 dark:bg-zinc-950/40 rounded-xl border border-slate-200/60 dark:border-zinc-800">
+                            <div className="flex items-center justify-between">
+                              <label className="block text-[10px] font-extrabold text-[#5346ff] dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                                <Ruler className="w-3.5 h-3.5" />
+                                <span>Guía de Tallas (Ropa)</span>
+                              </label>
+                              <div className="flex items-center gap-2">
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                                  (editingProduct.sizeChartEnabled !== false)
+                                    ? "text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                    : "text-rose-600 bg-rose-100 dark:bg-rose-900/30 dark:text-rose-400"
+                                }`}>
+                                  {(editingProduct.sizeChartEnabled !== false) ? "Activado" : "Desactivado"}
+                                </span>
+                                <input 
+                                  type="checkbox"
+                                  checked={editingProduct.sizeChartEnabled !== false}
+                                  onChange={(e) => {
+                                    setEditingProduct({ ...editingProduct, sizeChartEnabled: e.target.checked });
+                                  }}
+                                  className="h-4 w-4 text-[#5346ff] focus:ring-[#5346ff] border-slate-300 dark:border-zinc-700 rounded cursor-pointer"
+                                />
+                              </div>
+                            </div>
+                            
+                            {(editingProduct.sizeChartEnabled !== false) ? (
+                              <div className="space-y-4">
+                                {/* Dynamic Tabs Visibility Control */}
+                                <div className="p-3 bg-indigo-50/40 dark:bg-zinc-900/40 rounded-xl border border-indigo-500/10 space-y-2 mb-2">
+                                  <p className="text-[10px] font-bold text-[#5346ff] dark:text-indigo-400 uppercase tracking-wider">
+                                    Pestañas visibles en la guía de tallas:
+                                  </p>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <label className="flex items-center gap-2 cursor-pointer bg-white dark:bg-zinc-950 p-2 rounded-lg border border-slate-200/60 dark:border-zinc-800/80 hover:border-indigo-500/30 transition-all">
+                                      <input 
+                                        type="checkbox"
+                                        checked={editingProduct.sizeChartShowSuperior !== false}
+                                        onChange={(e) => setEditingProduct({ ...editingProduct, sizeChartShowSuperior: e.target.checked })}
+                                        className="h-3.5 w-3.5 text-[#5346ff] focus:ring-[#5346ff] border-slate-300 dark:border-zinc-700 rounded cursor-pointer"
+                                      />
+                                      <span className="text-xs text-slate-700 dark:text-zinc-300">👕 Superiores</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer bg-white dark:bg-zinc-950 p-2 rounded-lg border border-slate-200/60 dark:border-zinc-800/80 hover:border-indigo-500/30 transition-all">
+                                      <input 
+                                        type="checkbox"
+                                        checked={editingProduct.sizeChartShowInferior !== false}
+                                        onChange={(e) => setEditingProduct({ ...editingProduct, sizeChartShowInferior: e.target.checked })}
+                                        className="h-3.5 w-3.5 text-[#5346ff] focus:ring-[#5346ff] border-slate-300 dark:border-zinc-700 rounded cursor-pointer"
+                                      />
+                                      <span className="text-xs text-slate-700 dark:text-zinc-300">👖 Inferiores</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer bg-white dark:bg-zinc-950 p-2 rounded-lg border border-slate-200/60 dark:border-zinc-800/80 hover:border-indigo-500/30 transition-all">
+                                      <input 
+                                        type="checkbox"
+                                        checked={editingProduct.sizeChartShowCalzado !== false}
+                                        onChange={(e) => setEditingProduct({ ...editingProduct, sizeChartShowCalzado: e.target.checked })}
+                                        className="h-3.5 w-3.5 text-[#5346ff] focus:ring-[#5346ff] border-slate-300 dark:border-zinc-700 rounded cursor-pointer"
+                                      />
+                                      <span className="text-xs text-slate-700 dark:text-zinc-300">👟 Calzado</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer bg-white dark:bg-zinc-950 p-2 rounded-lg border border-slate-200/60 dark:border-zinc-800/80 hover:border-indigo-500/30 transition-all">
+                                      <input 
+                                        type="checkbox"
+                                        checked={editingProduct.sizeChartShowRecommender !== false}
+                                        onChange={(e) => setEditingProduct({ ...editingProduct, sizeChartShowRecommender: e.target.checked })}
+                                        className="h-3.5 w-3.5 text-[#5346ff] focus:ring-[#5346ff] border-slate-300 dark:border-zinc-700 rounded cursor-pointer"
+                                      />
+                                      <span className="text-xs text-slate-700 dark:text-zinc-300">📏 Calculador</span>
+                                    </label>
+                                  </div>
+                                </div>
+
+                                <p className="text-[10px] text-slate-800 dark:text-zinc-300 leading-normal mb-1">
+                                  <strong>1. Selecciona los talles activos:</strong> Selecciona de los preajustes o añade talles personalizados.
+                                </p>
+                                
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                                  {(() => {
+                                    const currentSizes = editingProduct.sizes || [];
+                                    const fallbackStandard = ["S", "M", "L", "XL", "XXL", "Único"];
+                                    const allSizes = Array.from(new Set([...fallbackStandard, ...currentSizes]));
+                                    
+                                    return allSizes.map((sz) => {
+                                      const isActive = currentSizes.includes(sz);
+                                      return (
+                                        <div 
+                                          key={sz}
+                                          className={`p-1.5 rounded-lg border transition-all flex items-center justify-between gap-1 ${
+                                            isActive 
+                                              ? "bg-white dark:bg-zinc-900 border-[#5346ff]/35 shadow-xs text-[#5346ff] dark:text-indigo-400 font-bold animate-fade-in" 
+                                              : "bg-slate-100/50 dark:bg-zinc-950/20 border-transparent text-zinc-400 opacity-60"
+                                          }`}
+                                        >
+                                          <div className="flex items-center gap-1.5 flex-grow min-w-0">
+                                            <input 
+                                              type="checkbox"
+                                              checked={isActive}
+                                              onChange={() => {
+                                                const next = isActive 
+                                                  ? currentSizes.filter(x => x !== sz)
+                                                  : [...currentSizes, sz];
+                                                setEditingProduct({ ...editingProduct, sizes: next });
+                                              }}
+                                              className="h-3 w-3 rounded border-slate-300 dark:border-zinc-750 text-[#5346ff] focus:ring-[#5346ff] cursor-pointer"
+                                            />
+                                            <span className="text-xs truncate">{sz}</span>
+                                          </div>
+                                          {!fallbackStandard.includes(sz) && (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const next = currentSizes.filter(x => x !== sz);
+                                                setEditingProduct({ ...editingProduct, sizes: next });
+                                              }}
+                                              className="text-red-500 hover:text-red-700 text-xs font-bold px-1 cursor-pointer"
+                                              title="Eliminar talle"
+                                            >
+                                              ×
+                                            </button>
+                                          )}
+                                        </div>
+                                      );
+                                    });
+                                  })()}
+                                </div>
+
+                                <div className="flex gap-1 items-center">
+                                  <input 
+                                    type="text"
+                                    id="add-new-custom-size-input-edit"
+                                    placeholder="Ej: 38, XS, Especial"
+                                    className="w-full px-2 py-1 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-md text-xs outline-none text-slate-900 dark:text-white"
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        const val = e.currentTarget.value.trim();
+                                        if (val) {
+                                          const current = editingProduct.sizes || [];
+                                          if (!current.includes(val)) {
+                                            setEditingProduct({ ...editingProduct, sizes: [...current, val] });
+                                          }
+                                          e.currentTarget.value = "";
+                                        }
+                                      }
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const input = document.getElementById("add-new-custom-size-input-edit") as HTMLInputElement;
+                                      const val = input?.value?.trim();
+                                      if (val) {
+                                        const current = editingProduct.sizes || [];
+                                        if (!current.includes(val)) {
+                                          setEditingProduct({ ...editingProduct, sizes: [...current, val] });
+                                        }
+                                        if (input) input.value = "";
+                                      }
+                                    }}
+                                    className="px-2.5 py-1 bg-[#5346ff] text-white hover:bg-[#4336ee] rounded-md text-[10.5px] font-bold transition-all cursor-pointer whitespace-nowrap"
+                                  >
+                                    + Agregar talle
+                                  </button>
+                                </div>
+
+                                <hr className="border-slate-150 dark:border-zinc-800" />
+
+                                <p className="text-[10px] text-slate-800 dark:text-zinc-300 leading-normal">
+                                  <strong>2. Completa las medidas de la tabla:</strong> Agrega columnas editables (Ej: Ancho, Largo, Cadera, Manga) y pon la medida de cada talle.
+                                </p>
+
+                                {(() => {
+                                  const sizesList = editingProduct.sizes || [];
+                                  if (sizesList.length === 0) {
+                                    return (
+                                      <p className="text-[10px] text-amber-600 bg-amber-50 dark:bg-amber-950/20 dark:text-amber-400 p-2.5 rounded-lg font-medium text-center">
+                                        Selecciona al menos un talle arriba para rellenar las medidas de la tabla.
+                                      </p>
+                                    );
+                                  }
+
+                                  const chartObj = getProductSizeChartData(editingProduct);
+                                  const cols = chartObj.columns;
+                                  const mRows = chartObj.rows;
+
+                                  return (
+                                    <div className="space-y-2">
+                                      <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-zinc-800 max-w-full">
+                                        <table className="w-full text-left border-collapse text-[11px]">
+                                          <thead>
+                                            <tr className="bg-slate-100/90 dark:bg-zinc-900/60 text-slate-800 dark:text-zinc-200">
+                                              {cols.map((colName, colIdx) => (
+                                                <th key={colName} className="p-1.5 border-r border-slate-200 dark:border-zinc-800 font-bold whitespace-nowrap">
+                                                  <div className="flex items-center justify-between gap-1 min-w-[70px]">
+                                                    <span>{colName}</span>
+                                                    {colIdx > 0 && (
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                          const nextCols = cols.filter(c => c !== colName);
+                                                          const nextRows = mRows.map(r => {
+                                                            const copy = { ...r };
+                                                            delete copy[colName];
+                                                            return copy;
+                                                          });
+                                                          setEditingProduct({
+                                                            ...editingProduct,
+                                                            sizeChartData: { columns: nextCols, rows: nextRows }
+                                                          });
+                                                        }}
+                                                        className="text-red-500 hover:text-red-700 text-xs font-bold px-0.5"
+                                                        title="Eliminar columna"
+                                                      >
+                                                        ×
+                                                      </button>
+                                                    )}
+                                                  </div>
+                                                </th>
+                                              ))}
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-slate-100 dark:divide-zinc-850">
+                                            {mRows.map((rowObj) => {
+                                              const sizeVal = rowObj["Talle"];
+                                              return (
+                                                <tr key={sizeVal} className="hover:bg-slate-50 dark:hover:bg-zinc-900/50">
+                                                  {cols.map((colName) => {
+                                                    if (colName === "Talle") {
+                                                      return (
+                                                        <td key={colName} className="p-1.5 font-bold text-[#5346ff] border-r border-slate-200 dark:border-zinc-800 bg-slate-50/55 dark:bg-zinc-900/20">
+                                                          {sizeVal}
+                                                        </td>
+                                                      );
+                                                    }
+
+                                                    const cellVal = rowObj[colName] || "";
+                                                    return (
+                                                      <td key={colName} className="p-1 border-r border-slate-200 dark:border-zinc-800/80 bg-white dark:bg-zinc-950/20">
+                                                        <input
+                                                          type="text"
+                                                          value={cellVal}
+                                                          onChange={(e) => {
+                                                            const updatedRows = mRows.map(r => {
+                                                              if (r["Talle"] === sizeVal) {
+                                                                return { ...r, [colName]: e.target.value };
+                                                              }
+                                                              return r;
+                                                            });
+                                                            setEditingProduct({
+                                                              ...editingProduct,
+                                                              sizeChartData: { columns: cols, rows: updatedRows }
+                                                            });
+                                                          }}
+                                                          placeholder="ej: 50 cm"
+                                                          className="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/80 rounded px-1.5 py-0.5 text-[11px] outline-none text-slate-950 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-650 focus:ring-1 focus:ring-indigo-500"
+                                                        />
+                                                      </td>
+                                                    );
+                                                  })}
+                                                </tr>
+                                              );
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+
+                                      <div className="flex gap-1.5 items-center justify-end pt-1">
+                                        <input 
+                                          type="text"
+                                          id="add-new-column-input-edit"
+                                          placeholder="Ej: Ancho (cm), Manga"
+                                          className="px-2 py-0.5 max-w-[170px] bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-md text-[10px] outline-none"
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                              e.preventDefault();
+                                              const val = e.currentTarget.value.trim();
+                                              if (val && !cols.includes(val)) {
+                                                setEditingProduct({
+                                                  ...editingProduct,
+                                                  sizeChartData: {
+                                                    columns: [...cols, val],
+                                                    rows: mRows.map(r => ({ ...r, [val]: "" }))
+                                                  }
+                                                });
+                                                e.currentTarget.value = "";
+                                              }
+                                            }
+                                          }}
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const input = document.getElementById("add-new-column-input-edit") as HTMLInputElement;
+                                            const val = input?.value?.trim();
+                                            if (val && !cols.includes(val)) {
+                                              setEditingProduct({
+                                                ...editingProduct,
+                                                sizeChartData: {
+                                                  columns: [...cols, val],
+                                                  rows: mRows.map(r => ({ ...r, [val]: "" }))
+                                                }
+                                              });
+                                              if (input) input.value = "";
+                                            }
+                                          }}
+                                          className="px-2 py-0.5 bg-slate-200 dark:bg-zinc-800 hover:bg-[#c9c3ff] dark:hover:bg-zinc-700 text-zinc-755 dark:text-zinc-200 rounded-md text-[10px] font-bold cursor-pointer whitespace-nowrap"
+                                        >
+                                          + Agregar medida
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            ) : (
+                              <div className="p-3 text-center bg-slate-100 dark:bg-zinc-950/20 text-zinc-500 rounded-xl border border-slate-200 dark:border-zinc-800">
+                                <p className="text-[11px] font-medium">Guía de tallas desactivada para este producto.</p>
+                                <p className="text-[9.5px] text-zinc-400 mt-1">El botón de "Guía de talles" no estará visible en la página de detalles para este producto.</p>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div>
@@ -8343,10 +9177,310 @@ export default function App() {
                     setAuthToken={setAuthToken}
                   />
                 )}
+
+                {/* 11. AUTOMATIC EMAILS PANEL */}
+                {adminSection === "emails" && (
+                  <div className="space-y-6 animate-fade-in">
+                    <div className="p-5 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-805 space-y-4 shadow-sm">
+                      <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+                        <div>
+                          <h3 className="text-sm font-extrabold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                            <Mail className="h-4 w-4 text-indigo-500" />
+                            <span>Ajustes Generales del Servidor de Correo</span>
+                          </h3>
+                          <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-1">
+                            Configura el servidor SMTP para que tus clientes reciban facturas y actualizaciones de estado en tiempo real.
+                          </p>
+                        </div>
+                        {/* Toggle switch for emails */}
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-bold text-slate-500 dark:text-zinc-400 uppercase">
+                            {editingSettings.emailSenderEnabled ? "🟢 Activo" : "🔴 Inactivo (Módulo Simulado)"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setEditingSettings({
+                              ...editingSettings,
+                              emailSenderEnabled: !editingSettings.emailSenderEnabled
+                            })}
+                            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none focus:ring-1 focus:ring-indigo-500 ${
+                              editingSettings.emailSenderEnabled ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-zinc-800'
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                                editingSettings.emailSenderEnabled ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* SMTP Host */}
+                        <div className="space-y-1">
+                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Servidor SMTP (Host)</label>
+                          <input
+                            type="text"
+                            placeholder="mail.tuservidor.com o smtp.gmail.com"
+                            value={editingSettings.emailSenderSmtpHost || ""}
+                            onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpHost: e.target.value })}
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                          />
+                        </div>
+
+                        {/* SMTP Port */}
+                        <div className="space-y-1">
+                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Puerto SMTP (SSL/TLS)</label>
+                          <input
+                            type="number"
+                            placeholder="465 (Recomendado) o 587"
+                            value={editingSettings.emailSenderSmtpPort !== undefined ? editingSettings.emailSenderSmtpPort : 465}
+                            onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpPort: parseInt(e.target.value) || 465 })}
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                          />
+                        </div>
+
+                        {/* SMTP Username */}
+                        <div className="space-y-1">
+                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Usuario SMTP (Email completo)</label>
+                          <input
+                            type="text"
+                            placeholder="contacto@tuservidor.com"
+                            value={editingSettings.emailSenderSmtpUser || ""}
+                            onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpUser: e.target.value })}
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                          />
+                        </div>
+
+                        {/* SMTP Password */}
+                        <div className="space-y-1">
+                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Contraseña SMTP (O contraseña de aplicación)</label>
+                          <input
+                            type="password"
+                            placeholder="La contraseña de tu cuenta de correo"
+                            value={editingSettings.emailSenderSmtpPass || ""}
+                            onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpPass: e.target.value })}
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                          />
+                        </div>
+
+                        {/* From Address */}
+                        <div className="space-y-1 md:col-span-2">
+                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Remitente Personalizado (Ejemplo: Tienda &lt;info@tienda.com&gt;)</label>
+                          <input
+                            type="text"
+                            placeholder="Ventas Juem <no-reply@tuservidor.com>"
+                            value={editingSettings.emailSenderFromAddress || ""}
+                            onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderFromAddress: e.target.value })}
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Info note about simulated email logs */}
+                      {!editingSettings.emailSenderEnabled ? (
+                        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-3 text-[11px] text-amber-600 dark:text-amber-400">
+                          <Info className="h-4 w-4 shrink-0" />
+                          <span>
+                            <strong>Modo Simulación Activado:</strong> Si dejas el módulo inactivo o sin datos SMTP, todo correo generado por compras o cambio de estados se registrará abajo como <strong>"Simulado"</strong> para que puedas probar y ver el diseño exacto del mensaje sin enviar correos reales.
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-3 text-[11px] text-emerald-600 dark:text-emerald-400">
+                          <CheckCircle2 className="h-4 w-4 shrink-0" />
+                          <span>
+                            El servidor de correos está activo. Todo correo será despachado utilizando los parámetros configurados arriba.
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Tester tool */}
+                      <div className="pt-4 border-t border-slate-100 dark:border-zinc-800">
+                        <div className="flex flex-col sm:flex-row gap-3 items-end">
+                          <div className="space-y-1 flex-1">
+                            <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Probar Conexión (Email Destinatario)</label>
+                            <input
+                              type="email"
+                              placeholder="ejemplo@correo.com"
+                              value={testEmailAddress}
+                              onChange={(e) => setTestEmailAddress(e.target.value)}
+                              className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleSendTestEmail}
+                            disabled={sendingTest}
+                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer h-10"
+                          >
+                            {sendingTest ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                            <span>Enviar Correo de Prueba</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="pt-4 flex justify-end border-t border-slate-150 dark:border-zinc-850">
+                        <button
+                          type="button"
+                          onClick={handleSaveSettings}
+                          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold uppercase tracking-wide flex items-center gap-2 cursor-pointer transition shadow-lg shadow-indigo-600/10 active:scale-95 animate-pulse"
+                        >
+                          <Save className="h-4 w-4" />
+                          <span>Guardar Ajustes de Correo 💾</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Email templates styling */}
+                    <div className="p-5 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 space-y-4 shadow-sm">
+                      <h3 className="text-sm font-extrabold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                        <Palette className="h-4 w-4 text-indigo-500" />
+                        <span>Personalizar Plantillas de Asunto</span>
+                      </h3>
+                      <p className="text-[10px] text-slate-400 dark:text-zinc-500">
+                        Configura el asunto dinámico de tus notificaciones automáticas utilizando variables con doble corchete como o <code className="bg-slate-100 dark:bg-zinc-950 px-1 py-0.5 rounded text-indigo-500">{"{{orderId}}"}</code>, <code className="bg-slate-100 dark:bg-zinc-950 px-1 py-0.5 rounded text-indigo-500">{"{{customerName}}"}</code>, <code className="bg-slate-100 dark:bg-zinc-950 px-1 py-0.5 rounded text-indigo-500">{"{{total}}"}</code> o <code className="bg-slate-100 dark:bg-zinc-950 px-1 py-0.5 rounded text-indigo-500">{"{{statusText}}"}</code>.
+                      </p>
+
+                      <div className="grid grid-cols-1 gap-4">
+                        {/* Order created template */}
+                        <div className="space-y-1">
+                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Asunto para Compra Confirmada (Pedido Creado)</label>
+                          <input
+                            type="text"
+                            value={editingSettings.emailTemplateOrderCreatedSubject || ""}
+                            onChange={(e) => setEditingSettings({ ...editingSettings, emailTemplateOrderCreatedSubject: e.target.value })}
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                          />
+                        </div>
+
+                        {/* Order status updated template */}
+                        <div className="space-y-1">
+                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Asunto para Cambio de Estado del Pedido</label>
+                          <input
+                            type="text"
+                            value={editingSettings.emailTemplateOrderStatusChangedSubject || ""}
+                            onChange={(e) => setEditingSettings({ ...editingSettings, emailTemplateOrderStatusChangedSubject: e.target.value })}
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="pt-4 flex justify-end border-t border-slate-150 dark:border-zinc-850">
+                        <button
+                          type="button"
+                          onClick={handleSaveSettings}
+                          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold uppercase tracking-wide flex items-center gap-2 cursor-pointer transition shadow-lg shadow-indigo-600/10 active:scale-95"
+                        >
+                          <Save className="h-4 w-4" />
+                          <span>Guardar Plantillas</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Email simulator / sent logs console */}
+                    <div className="p-5 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 space-y-4 shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-sm font-extrabold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                            <Database className="h-4 w-4 text-indigo-500" />
+                            <span>Consola de Entrega & Historial ({emailLogs.length})</span>
+                          </h3>
+                          <p className="text-[10px] text-slate-400 dark:text-zinc-500">
+                            Registro de correos salientes salidos de la pasarela ecommerce en esta sesión.
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={fetchEmailLogs}
+                            disabled={emailLogsLoading}
+                            className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-850 dark:hover:bg-zinc-750 text-slate-600 dark:text-zinc-400 rounded-lg text-xs font-medium transition flex items-center gap-1 cursor-pointer h-8"
+                          >
+                            <RefreshCw className={`h-3 w-3 ${emailLogsLoading ? "animate-spin" : ""}`} />
+                            <span>Actualizar</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleClearEmailLogs}
+                            disabled={emailLogs.length === 0}
+                            className="p-1.5 bg-red-100 dark:bg-red-950/30 hover:bg-red-200 dark:hover:bg-red-950/50 text-red-600 dark:text-red-400 rounded-lg text-xs font-medium transition flex items-center gap-1 cursor-pointer h-8"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            <span>Vaciar Historial</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {emailLogsLoading && emailLogs.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+                          <RefreshCw className="h-8 w-8 animate-spin text-indigo-500 mb-2" />
+                          <span className="text-xs">Cargando bitácora de entrega...</span>
+                        </div>
+                      ) : emailLogs.length === 0 ? (
+                        <div className="text-center py-8 border border-dashed border-slate-200 dark:border-zinc-800 rounded-xl text-slate-400">
+                          <Mail className="h-8 w-8 mx-auto opacity-30 mb-2 text-indigo-500" />
+                          <p className="text-xs font-medium">No se han originado entregas de correos automáticos todavía.</p>
+                          <p className="text-[9px] text-slate-400 max-w-sm mx-auto mt-1">Realiza una compra de prueba en la tienda o actualiza un pedido en 'Ventas y Pedidos' para ver la simulación en tiempo real.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                          {emailLogs.map((log: any) => (
+                            <div key={log.id} className="p-3.5 bg-slate-50 dark:bg-zinc-950 border border-slate-150 dark:border-zinc-850 rounded-xl space-y-2 text-left">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <div className="flex items-center gap-2">
+                                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                    log.status === "success" ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-400" :
+                                    log.status === "simulated" ? "bg-sky-100 text-sky-800 dark:bg-sky-950/20 dark:text-sky-400" :
+                                    log.status === "disabled" ? "bg-slate-200 text-slate-800 dark:bg-zinc-800 dark:text-zinc-400" :
+                                    "bg-red-100 text-red-800 dark:bg-red-950/20 dark:text-red-400"
+                                  }`}>
+                                    {log.status === "success" ? "✓ SMTP ENVIADO" :
+                                     log.status === "simulated" ? "★ SIMULADO" :
+                                     log.status === "disabled" ? "✕ MUTED (DESACTIVADO)" :
+                                     "✕ FALLIDO (ERROR)"}
+                                  </span>
+                                  <span className="text-slate-400 dark:text-zinc-500 font-mono text-[9px]">ID: {log.id}</span>
+                                </div>
+                                <span className="text-slate-400 dark:text-zinc-500 font-mono text-[9px]">
+                                  {new Date(log.timestamp).toLocaleTimeString()} ({new Date(log.timestamp).toLocaleDateString()})
+                                </span>
+                              </div>
+
+                              <div className="border-t border-slate-100 dark:border-zinc-900 pt-2 grid grid-cols-1 sm:grid-cols-2 gap-y-1 gap-x-3 text-xs text-slate-700 dark:text-zinc-300">
+                                <div>
+                                  <strong className="text-slate-400 dark:text-zinc-500">Para:</strong> {log.to}
+                                </div>
+                                <div className="truncate">
+                                  <strong className="text-slate-400 dark:text-zinc-500">Asunto:</strong> {log.subject}
+                                </div>
+                              </div>
+
+                              {log.error && (
+                                <div className="p-2 bg-red-100/10 border border-red-100/20 rounded-lg text-[10px] text-red-500 font-mono">
+                                  <strong>Error Interno SMTP:</strong> {log.error}
+                                </div>
+                              )}
+
+                              {/* Preview expandable email content */}
+                              <details className="text-[11px] text-indigo-500 cursor-pointer outline-none">
+                                <summary className="font-semibold underline select-none text-[10px]">Ver contenido HTML del Correo</summary>
+                                <div className="mt-2 bg-white text-zinc-950 p-4 rounded-lg border border-slate-200 shadow-inner max-h-[300px] overflow-y-auto">
+                                  <div dangerouslySetInnerHTML={{ __html: log.body }} />
+                                </div>
+                              </details>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* SECTION B: LIVE PREVIEW COLUMN - EXTREMELY SOPHISTICATED LOOK */}
-              <div className="hidden lg:flex lg:col-span-5 flex-col gap-3 sticky top-4">
+              {showAdminDevicePreview && (
+                <div className="hidden lg:flex lg:col-span-5 flex-col gap-3 sticky top-4">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1">
                     <Smartphone className="h-4 w-4" />
@@ -8435,6 +9569,7 @@ export default function App() {
                   </div>
                 </div>
               </div>
+              )}
               </div>
             )}
           </main>

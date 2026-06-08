@@ -59,7 +59,7 @@ const DEFAULT_SHOP_STATE: ShopState = {
     primaryColor: "#3b82f6", // Indigo/Blue
     accentColor: "#10b981", // Emerald
     themeMode: "dark",
-    promotionBannerText: "🚚 ¡ENVÍO GRATUITO en compras superiores a $50! Código: JUEM50",
+    promotionBannerText: "🚚 ¡15% de DESCUENTO en toda la tienda! Código: BUELO15",
     showPromotionBanner: true,
     heroSlides: [
       {
@@ -184,6 +184,10 @@ const DEFAULT_SHOP_STATE: ShopState = {
       featured: true,
       createdAt: new Date().toISOString()
     }
+  ],
+  coupons: [
+    { code: "BUELO15", discount_percent: 15, expiration_date: null, active: true },
+    { code: "APEX50", discount_percent: 50, expiration_date: null, active: true }
   ]
 };
 
@@ -473,6 +477,41 @@ async function approveOrderAndDeductStock(orderId: string, paymentId: string, ve
     }
     return "not_found";
   }
+}
+
+function checkAndClearExpiredBannerText(state: ShopState): { state: ShopState, updated: boolean } {
+  if (!state || !state.settings) {
+    return { state, updated: false };
+  }
+
+  const text = state.settings.promotionBannerText;
+  if (!text) {
+    return { state, updated: false };
+  }
+
+  const coupons = state.coupons || [];
+  let updated = false;
+
+  for (const c of coupons) {
+    const isExpired = c.expiration_date ? new Date(c.expiration_date).getTime() < Date.now() : false;
+    const isActive = c.active !== false;
+
+    if (!isActive || isExpired) {
+      const code = String(c.code).trim().toUpperCase();
+      if (code) {
+        const escapedCode = code.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const regex = new RegExp(`\\b${escapedCode}\\b`, 'i');
+        if (regex.test(text)) {
+          console.log(`[Coupon Expiration Checker] Coupon ${code} has expired or is inactive, clearing promotionBannerText.`);
+          state.settings.promotionBannerText = "";
+          updated = true;
+          break;
+        }
+      }
+    }
+  }
+
+  return { state, updated };
 }
 
 async function getDbState(): Promise<ShopState> {
@@ -1121,6 +1160,17 @@ async function initPostgresStore(): Promise<ShopState | null> {
       );
     }
 
+    // Seed coupons table if empty
+    const couponCheck = await pool.query("SELECT COUNT(*) FROM coupons;");
+    if (parseInt(couponCheck.rows[0].count) === 0) {
+      console.log("Seeding default coupons...");
+      await pool.query(`
+        INSERT INTO coupons (code, discount_percent, expiration_date, active) VALUES 
+        ('BUELO15', 15, NULL, true),
+        ('APEX50', 50, NULL, true);
+      `);
+    }
+
     // Seed products table ONLY if table is completely empty (no previous products at all)
     const prodCheck = await pool.query("SELECT COUNT(*) FROM public.products;");
     if (parseInt(prodCheck.rows[0].count) === 0) {
@@ -1526,6 +1576,31 @@ async function startServer() {
         console.error("No se pudo cargar de Postgres en GET, usando cache local:", err);
       }
     }
+
+    // Check and clear expired promotionBannerText
+    const checkerResult = checkAndClearExpiredBannerText(currentStoreState);
+    if (checkerResult.updated) {
+      currentStoreState = checkerResult.state;
+      try {
+        fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+      } catch (fsErr) {
+        console.error("Error writing store.json on auto-check expiration:", fsErr);
+      }
+      if (process.env.DATABASE_URL && !dbUnavailable) {
+        try {
+          const pool = getDbPool();
+          if (pool) {
+            await pool.query(
+              "INSERT INTO shop_state (id, state) VALUES ('settings', $1) ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state;",
+              [JSON.stringify(currentStoreState.settings)]
+            );
+          }
+        } catch (dbErr) {
+          console.error("Error updating settings database on auto-check expiration:", dbErr);
+        }
+      }
+    }
+
     res.json(currentStoreState);
   });
 
@@ -1552,6 +1627,12 @@ async function startServer() {
         coupons: Array.isArray(coupons) ? coupons : currentStoreState.coupons
       };
       
+      // Check and clear expired promotionBannerText before saving
+      const checkerResult = checkAndClearExpiredBannerText(currentStoreState);
+      if (checkerResult.updated) {
+        currentStoreState = checkerResult.state;
+      }
+
       // Guardar SIEMPRE en archivo local como respaldo y sincronizar con base de datos si existe
       try {
         fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
@@ -1680,6 +1761,7 @@ async function startServer() {
 
       // Check coupon validation server-side
       let serverDiscountAmount = 0;
+      let validCouponCodeToSave: string | null = null;
       if (couponCode) {
         const cleanCode = String(couponCode).trim().toUpperCase();
         const dbCoupon = officialCoupons.find(c => c.code.toUpperCase() === cleanCode && c.active !== false);
@@ -1688,6 +1770,7 @@ async function startServer() {
           const exp = dbCoupon.expiration_date ? new Date(dbCoupon.expiration_date) : null;
           if (!exp || exp > now) {
             serverDiscountAmount = Math.round((serverSubtotal * Number(dbCoupon.discount_percent)) / 100);
+            validCouponCodeToSave = dbCoupon.code; // Use matching case-sensitive code from the coupons table
           }
         }
       }
@@ -1743,7 +1826,7 @@ async function startServer() {
             serverDiscountAmount, 
             verifiedShippingCost, 
             serverTotal, 
-            couponCode || null, 
+            validCouponCodeToSave, 
             status, 
             sanitizedNotes || null
           ]);

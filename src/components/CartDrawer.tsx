@@ -89,14 +89,8 @@ export default function CartDrawer({
       }
     }
 
-    // Match common keywords or configuration values as fallback
-    if (cleanPromo === "APEX50" || cleanPromo === "DESCUENTO10" || cleanPromo === "PROMO" || cleanPromo === "OFFER") {
-      setAppliedDiscount(10); // 10%
-      setPromoStatus("success");
-    } else {
-      setAppliedDiscount(0);
-      setPromoStatus("invalid");
-    }
+    setAppliedDiscount(0);
+    setPromoStatus("invalid");
   };
 
   // Rendering logic below

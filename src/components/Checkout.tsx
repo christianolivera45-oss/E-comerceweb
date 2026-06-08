@@ -19,7 +19,8 @@ import {
   Check, 
   X, 
   FileText,
-  Home
+  Home,
+  Mail
 } from "lucide-react";
 import { CartItem, SiteSettings, Coupon, is3DProduct } from "../types";
 import { motion } from "motion/react";
@@ -157,6 +158,7 @@ export default function Checkout({
   // Client details states (Clean/empty on start as requested)
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [wantsInvoice, setWantsInvoice] = useState(false);
   const [rutNumber, setRutNumber] = useState("");
@@ -220,6 +222,15 @@ export default function Checkout({
         const lettersOnly = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s\-\'\.]+(\s[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s\-\'\.]+)*$/;
         if (!lettersOnly.test(clean)) {
           return "El apellido sólo debe contener letras, espacios y caracteres acentuados.";
+        }
+        return "";
+      }
+      case "email": {
+        const clean = sanitize(value);
+        if (!clean) return "El correo electrónico es obligatorio.";
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(clean)) {
+          return "Por favor ingresa una dirección de correo electrónico válida.";
         }
         return "";
       }
@@ -292,6 +303,7 @@ export default function Checkout({
     
     if (name === "firstName") setFirstName(sanitizedVal);
     else if (name === "lastName") setLastName(sanitizedVal);
+    else if (name === "email") setEmail(sanitizedVal);
     else if (name === "phone") setPhone(sanitizedVal);
     else if (name === "rutNumber") setRutNumber(sanitizedVal);
     else if (name === "companyName") setCompanyName(sanitizedVal);
@@ -422,7 +434,7 @@ export default function Checkout({
 
   // Payment methods states & effects
   const [paymentMethod, setPaymentMethod] = useState<string>("");
-  const [checkoutStep, setCheckoutStep] = useState<"details" | "payment">("details");
+  const [checkoutStep, setCheckoutStep] = useState<1 | 2 | 3>(1);
 
   useEffect(() => {
     if (settings.mercadopagoActive !== false) {
@@ -516,20 +528,14 @@ export default function Checkout({
       }
     }
 
-    if (cleanPromo === "APEX50" || cleanPromo === "DESCUENTO10" || cleanPromo === "PROMO" || cleanPromo === "OFFER") {
-      setAppliedDiscount(10);
-      setPromoStatus("success");
-      setErrorMessage("");
-    } else {
-      setAppliedDiscount(0);
-      setPromoStatus("invalid");
-    }
+    setAppliedDiscount(0);
+    setPromoStatus("invalid");
   };
 
-  const validateDetails = (): boolean => {
+  const validateStep1 = (): boolean => {
     setErrorMessage("");
 
-    const activeFields = ["firstName", "lastName", "phone"];
+    const activeFields = ["firstName", "lastName", "phone", "email"];
     if (wantsInvoice) {
       activeFields.push("rutNumber", "companyName", "fiscalAddress");
     }
@@ -544,6 +550,7 @@ export default function Checkout({
       if (field === "firstName") val = firstName;
       else if (field === "lastName") val = lastName;
       else if (field === "phone") val = phone;
+      else if (field === "email") val = email;
       else if (field === "rutNumber") val = rutNumber;
       else if (field === "companyName") val = companyName;
       else if (field === "fiscalAddress") val = fiscalAddress;
@@ -564,6 +571,11 @@ export default function Checkout({
       setErrorMessage("Por favor corrige los campos inválidos marcados en rojo en el formulario.");
       return false;
     }
+    return true;
+  };
+
+  const validateStep2 = (): boolean => {
+    setErrorMessage("");
 
     if (shippingType === "delivery") {
       const activeAddress = addresses.find((a) => a.id === selectedAddressId);
@@ -616,10 +628,21 @@ export default function Checkout({
     return true;
   };
 
+  const validateDetails = (): boolean => {
+    return validateStep1() && validateStep2();
+  };
+
   const handleContinueToPayment = () => {
-    if (validateDetails()) {
-      setCheckoutStep("payment");
-      window.scrollTo({ top: 0, behavior: "smooth" });
+    if (checkoutStep === 1) {
+      if (validateStep1()) {
+        setCheckoutStep(2);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    } else if (checkoutStep === 2) {
+      if (validateStep2()) {
+        setCheckoutStep(3);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     }
   };
 
@@ -772,7 +795,7 @@ export default function Checkout({
           },
           body: JSON.stringify({
             customerName: compiledUserInformation.name,
-            customerEmail: "cliente@tienda.com",
+            customerEmail: email.trim().toLowerCase(),
             customerPhone: compiledUserInformation.phone,
             subtotal: subtotalUYU,
             discountAmount: discountAmountUYU,
@@ -836,6 +859,7 @@ export default function Checkout({
 
       let message = `🛒 *NUEVO PEDIDO - ${settings.siteTitle}*\n\n`;
       message += `👤 *Cliente:* ${compiledUserInformation.name}\n`;
+      message += `📧 *Email:* ${email.trim().toLowerCase()}\n`;
       message += `📞 *Teléfono:* ${compiledUserInformation.phone}\n`;
       message += `📄 *Facturación:* ${compiledUserInformation.rut}\n`;
       message += `🚚 *Método de Envío:* ${compiledUserInformation.shippingType}\n`;
@@ -939,13 +963,66 @@ export default function Checkout({
           </div>
         </div>
 
+        {/* Stepper Wizard Indicator */}
+        <div className="mb-8 grid grid-cols-3 gap-2 sm:gap-4">
+          {[
+            { step: 1, label: "Mis Datos", desc: "Comprador" },
+            { step: 2, label: "Forma de Envío", desc: "Entrega" },
+            { step: 3, label: "Método de Pago", desc: "Finalizar" }
+          ].map((s) => {
+            const isActive = checkoutStep === s.step;
+            const isCompleted = checkoutStep > s.step;
+            return (
+              <button
+                key={s.step}
+                type="button"
+                disabled={!isCompleted && checkoutStep !== s.step}
+                onClick={() => {
+                  if (s.step === 1 && checkoutStep > 1) {
+                    setCheckoutStep(1);
+                  } else if (s.step === 2 && checkoutStep > 2) {
+                    if (validateStep1()) {
+                      setCheckoutStep(2);
+                    }
+                  }
+                }}
+                className={`py-2.5 px-3 rounded-2xl border transition-all flex flex-col sm:flex-row items-center justify-center gap-2 text-center sm:text-left ${
+                  isActive
+                    ? "border-sky-500 bg-sky-500/5 text-sky-400 font-extrabold shadow-md shadow-sky-500/5"
+                    : isCompleted
+                      ? "border-emerald-500 bg-emerald-500/5 text-emerald-400 font-bold cursor-pointer hover:bg-emerald-500/10"
+                      : isDark
+                        ? "border-zinc-800 bg-zinc-900/30 text-zinc-505 cursor-not-allowed"
+                        : "border-gray-200 bg-white text-zinc-400 cursor-not-allowed"
+                }`}
+              >
+                <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-black shrink-0 transition ${
+                  isActive
+                    ? "bg-sky-500 text-white"
+                    : isCompleted
+                      ? "bg-emerald-500 text-white"
+                      : isDark
+                        ? "bg-zinc-800 text-zinc-500"
+                        : "bg-gray-100 text-zinc-400"
+                }`}>
+                  {isCompleted ? "✓" : s.step}
+                </div>
+                <div className="block">
+                  <p className="text-[10px] font-extrabold uppercase tracking-widest leading-none mb-0.5">{s.label}</p>
+                  <p className="text-[9px] text-zinc-500 font-medium leading-none font-mono">{s.desc}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
         {/* Column Grid Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
           {/* LEFT COLUMN: Data to fill */}
           <div className="lg:col-span-7 space-y-6">
-            {checkoutStep === "details" && (
-              <div className="space-y-6">
+            {checkoutStep === 1 && (
+              <div className="space-y-6 animate-fade-in">
 
                 {/* Box 1: DATOS DEL COMPRADOR */}
             <div className={`p-6 rounded-2xl border transition-all ${
@@ -1025,7 +1102,7 @@ export default function Checkout({
                   )}
                 </div>
 
-                <div className="md:col-span-2">
+                <div className="md:col-span-1">
                   <label className={`block text-xs font-bold uppercase tracking-wider mb-1 px-1 ${isDark ? "text-zinc-400" : "text-zinc-600"}`}>
                     Teléfono de Contacto <span className="text-red-500">*</span>
                   </label>
@@ -1054,11 +1131,48 @@ export default function Checkout({
                     />
                   </div>
                   <p className={`text-[10px] mt-1 px-1 leading-normal ${isDark ? "text-zinc-500" : "text-zinc-500"}`}>
-                    Formatos uruguayos: celular de 9 dígitos (ej: 099123456) o fijo de 8 dígitos (ej: 24001234). Admite +598 si lo deseas.
+                    Ej: celular 099123456 o fijo 24001234.
                   </p>
                   {touchedFields["phone"] && validationErrors["phone"] && (
                     <p className="text-[11px] text-red-500 font-bold mt-1 px-1 flex items-center gap-1 font-mono">
                       <span>⚠️</span> {validationErrors["phone"]}
+                    </p>
+                  )}
+                </div>
+
+                <div className="md:col-span-1">
+                  <label className={`block text-xs font-bold uppercase tracking-wider mb-1 px-1 ${isDark ? "text-zinc-400" : "text-zinc-600"}`}>
+                    Correo Electrónico <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-3.5 h-4 w-4 text-zinc-450" />
+                    <input
+                      required
+                      type="email"
+                      placeholder="Ej: nombre@correo.com"
+                      value={email}
+                      onChange={(e) => handleFieldChange("email", e.target.value)}
+                      className={`w-full text-xs pl-10 pr-4 py-3 rounded-xl border outline-none transition font-sans tracking-wide ${
+                        touchedFields["email"]
+                          ? validationErrors["email"]
+                            ? isDark
+                              ? "border-red-500 bg-red-955/20 text-white focus:border-red-400 focus:bg-zinc-900"
+                              : "border-red-500 bg-red-50/50 text-zinc-900 focus:border-red-600 focus:bg-white"
+                            : isDark
+                              ? "border-green-500 bg-green-955/20 text-white focus:border-green-400 focus:bg-zinc-900"
+                              : "border-green-500 bg-green-50/50 text-zinc-900 focus:border-green-600 focus:bg-white"
+                          : isDark
+                            ? "bg-zinc-950 border-zinc-800 text-white placeholder-zinc-655 focus:border-zinc-700"
+                            : "bg-stone-50 border-gray-300 text-zinc-900 placeholder-zinc-450 focus:border-sky-500 focus:bg-white"
+                      }`}
+                    />
+                  </div>
+                  <p className={`text-[10px] mt-1 px-1 leading-normal ${isDark ? "text-zinc-500" : "text-zinc-500"}`}>
+                    Te enviaremos los detalles del pedido a este correo.
+                  </p>
+                  {touchedFields["email"] && validationErrors["email"] && (
+                    <p className="text-[11px] text-red-500 font-bold mt-1 px-1 flex items-center gap-1 font-mono">
+                      <span>⚠️</span> {validationErrors["email"]}
                     </p>
                   )}
                 </div>
@@ -1221,6 +1335,23 @@ export default function Checkout({
 
               </div>
             </div>
+
+            {/* Step 1 Inline Action Button */}
+            <div className="pt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={handleContinueToPayment}
+                className="flex items-center gap-2 py-3.5 px-6 rounded-xl text-xs font-extrabold uppercase tracking-widest theme-btn-primary shadow-md active:scale-95 transition cursor-pointer text-white"
+              >
+                <span>Continuar al Envío</span>
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {checkoutStep === 2 && (
+          <div className="space-y-6 animate-fade-in">
 
             {/* Box 2: FORMA DE ENVÍO */}
             {(settings.pickupActive !== false || settings.deliveryActive !== false) && (
@@ -1595,23 +1726,48 @@ export default function Checkout({
 
               </div>
             )}
+
+            {/* Step 2 Inline Actions */}
+            <div className="pt-4 flex items-center justify-between gap-4">
+              <button
+                type="button"
+                onClick={() => setCheckoutStep(1)}
+                className={`flex items-center gap-2 py-3 px-5 rounded-xl text-xs font-extrabold uppercase tracking-widest border transition active:scale-95 cursor-pointer ${
+                  isDark 
+                    ? "text-zinc-300 bg-zinc-900 border-zinc-850 hover:bg-zinc-800"
+                    : "text-zinc-650 bg-white border-gray-200 hover:bg-gray-100 shadow-sm"
+                }`}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span>Volver</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleContinueToPayment}
+                className="flex items-center gap-2 py-3.5 px-6 rounded-xl text-xs font-extrabold uppercase tracking-widest theme-btn-primary shadow-md active:scale-95 transition cursor-pointer text-white"
+              >
+                <span>Continuar al Pago</span>
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         )}
-            {checkoutStep === "payment" && (
-              <div className="space-y-6 animate-fade-in">
-                {/* Back Link to edit details */}
-                <button
-                  type="button"
-                  onClick={() => setCheckoutStep("details")}
-                  className={`flex items-center gap-2 text-xs font-bold uppercase tracking-wider py-2.5 px-4 rounded-xl border transition cursor-pointer ${
-                    isDark 
-                      ? "text-zinc-400 hover:text-white bg-zinc-900 border-zinc-800 hover:bg-zinc-800" 
-                      : "text-zinc-650 hover:text-zinc-900 bg-white border-gray-200 hover:bg-gray-100 shadow-sm"
-                  }`}
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  <span>Modificar Datos de Envío</span>
-                </button>
+
+        {checkoutStep === 3 && (
+          <div className="space-y-6 animate-fade-in">
+            {/* Back Link to edit details */}
+            <button
+              type="button"
+              onClick={() => setCheckoutStep(2)}
+              className={`flex items-center gap-2 text-xs font-bold uppercase tracking-wider py-2.5 px-4 rounded-xl border transition cursor-pointer ${
+                isDark 
+                  ? "text-zinc-400 hover:text-white bg-zinc-900 border-zinc-800 hover:bg-zinc-800" 
+                  : "text-zinc-650 hover:text-zinc-900 bg-white border-gray-200 hover:bg-gray-100 shadow-sm"
+              }`}
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Modificar Forma de Envío</span>
+            </button>
 
                 {/* Box 4: OPCIÓN DE PAGO */}
                 <div className={`p-6 rounded-2xl border transition-all ${
@@ -1766,6 +1922,23 @@ export default function Checkout({
                     )}
                   </div>
                 </div>
+
+                {/* Step 3 Inline Actions */}
+                <div className="pt-4 flex items-center justify-start gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutStep(2)}
+                    className={`flex items-center gap-2 py-3 px-5 rounded-xl text-xs font-extrabold uppercase tracking-widest border transition active:scale-95 cursor-pointer ${
+                      isDark 
+                        ? "text-zinc-300 bg-zinc-900 border-zinc-850 hover:bg-zinc-800"
+                        : "text-zinc-650 bg-white border-gray-200 hover:bg-gray-100 shadow-sm"
+                    }`}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    <span>Volver</span>
+                  </button>
+                </div>
+
               </div>
             )}
 
@@ -1860,7 +2033,7 @@ export default function Checkout({
               <div className="flex gap-2 mb-4 pt-1">
                 <input
                   type="text"
-                  placeholder="Código de cupón (APEX50)"
+                  placeholder="Código de cupón (BUELO15)"
                   value={promoCode}
                   onChange={(e) => setPromoCode(e.target.value)}
                   className={`flex-1 text-xs px-3 py-2.5 rounded-lg border outline-none font-mono tracking-wide ${
@@ -1931,16 +2104,7 @@ export default function Checkout({
               )}
 
               {/* Submission button */}
-              {checkoutStep === "details" ? (
-                <button
-                  type="button"
-                  onClick={handleContinueToPayment}
-                  className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl text-xs font-extrabold uppercase tracking-widest theme-btn-primary shadow-lg shadow-black/15 transition-all transform active:scale-95 cursor-pointer text-white"
-                >
-                  <span>Continuar al Pago</span>
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-              ) : (
+              {checkoutStep === 3 && (
                 <button
                   disabled={isProcessing}
                   onClick={handleSubmitOrder}

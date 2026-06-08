@@ -220,7 +220,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   primaryColor: "#2563eb",
   accentColor: "#10b981",
   themeMode: "dark",
-  promotionBannerText: "🚚 ¡ENVÍO GRATUITO en compras superiores a $50! Código: APEX50",
+  promotionBannerText: "🚚 ¡15% de DESCUENTO en toda la tienda! Código: BUELO15",
   promotionBannerText2: "🎁 ¡Envío GRATIS en compras mayores de $2000 para Pinamar, Salinas, Marindia, Neptunia! Elige tu de agencia favorita y nosotros lo cubrimos.",
   promotionBannerBgColor: "#4f46e5",
   promotionBannerTextColor: "#ffffff",
@@ -1232,7 +1232,23 @@ export default function App() {
 
     if (store.settings.showPromotionBanner) {
       if (store.settings.promotionBannerText) {
-        const text1 = store.settings.promotionBannerText.trim();
+        let text1 = store.settings.promotionBannerText.trim();
+        const coupons = store.coupons || [];
+        const isExpired = coupons.some((c) => {
+          const code = String(c.code).trim().toUpperCase();
+          if (!code) return false;
+          const ended = c.expiration_date ? new Date(c.expiration_date).getTime() < Date.now() : false;
+          const inactive = c.active === false;
+          if (inactive || ended) {
+            const escapedCode = code.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            const regex = new RegExp(`\\b${escapedCode}\\b`, 'i');
+            return regex.test(text1);
+          }
+          return false;
+        });
+        if (isExpired) {
+          text1 = "";
+        }
         if (text1) {
           slides.push({
             id: "promo",
@@ -1243,7 +1259,23 @@ export default function App() {
         }
       }
       if (store.settings.promotionBannerText2) {
-        const text2 = store.settings.promotionBannerText2.trim();
+        let text2 = store.settings.promotionBannerText2.trim();
+        const coupons = store.coupons || [];
+        const isExpired = coupons.some((c) => {
+          const code = String(c.code).trim().toUpperCase();
+          if (!code) return false;
+          const ended = c.expiration_date ? new Date(c.expiration_date).getTime() < Date.now() : false;
+          const inactive = c.active === false;
+          if (inactive || ended) {
+            const escapedCode = code.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            const regex = new RegExp(`\\b${escapedCode}\\b`, 'i');
+            return regex.test(text2);
+          }
+          return false;
+        });
+        if (isExpired) {
+          text2 = "";
+        }
         if (text2 && !seenTexts.has(text2)) {
           slides.push({
             id: "promo2",
@@ -1275,7 +1307,8 @@ export default function App() {
     store.settings.promotionBannerText2,
     store.settings.freeShippingActive,
     store.settings.freeShippingMinAmount,
-    store.settings.freeShippingRegions
+    store.settings.freeShippingRegions,
+    store.coupons
   ]);
 
   // Auto cycle top header slides every 5 seconds
@@ -7388,7 +7421,7 @@ export default function App() {
                                 value={editingSettings.promotionBannerText || ""}
                                 onChange={(e) => setEditingSettings({ ...editingSettings, promotionBannerText: e.target.value })}
                                 className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
-                                placeholder="p.ej. 🚚 ¡ENVÍO GRATUITO en compras superiores a $50! Código: APEX50"
+                                placeholder="p.ej. 🚚 ¡15% de DESCUENTO en toda la tienda! Código: BUELO15"
                               />
                             </div>
 

@@ -74,28 +74,24 @@ export default function ProductCard({
 
   return (
     <div
-      className={`group relative flex flex-col rounded-2xl border overflow-hidden transition-all duration-300 hover:shadow-xl hover:shadow-black/20 ${
-        settings.themeMode === "dark"
-          ? "bg-zinc-900/60 border-zinc-800/80 hover:border-zinc-700/80"
-          : "bg-white border-gray-150 hover:border-gray-250 hover:shadow-gray-200/50"
-      }`}
+      className="group relative flex flex-col rounded-2xl overflow-hidden bg-[#0B1730] border border-[#D4A55A]/15 hover:border-[#D4A55A]/40 hover:shadow-2xl hover:shadow-[#D4A55A]/5 transition-all duration-300 h-full"
     >
-      {/* Aspect Ratio container for Product Image */}
+      {/* Aspect Ratio container for Portrait Product Image - Larger visual presence */}
       <div 
         onClick={() => onViewProduct(product)}
-        className="relative aspect-square overflow-hidden bg-zinc-950/25 cursor-pointer"
+        className="relative aspect-[3/4] overflow-hidden bg-[#050B1A]/40 cursor-pointer"
       >
         <img
           src={optimizeImageUrl(cheapestOption.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80")}
           alt={product.name}
-          className="h-full w-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-105"
+          className="h-full w-full object-cover object-center transition-transform duration-700 ease-out group-hover:scale-106"
           referrerPolicy="no-referrer"
           loading="lazy"
         />
 
         {/* Promo Badge */}
         {isDiscounted && (
-          <div className="absolute top-2 left-2 sm:top-3 sm:left-3 bg-red-500 text-white font-mono text-[9px] sm:text-[11px] font-bold px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded-full shadow-md z-10 flex items-center gap-1">
+          <div className="absolute top-3 left-3 bg-red-500 text-white font-sans text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full shadow-md z-10 flex items-center gap-1">
             <Tag className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
             <span>-{discountPercent}% OFF</span>
           </div>
@@ -103,78 +99,75 @@ export default function ProductCard({
 
         {/* Stock warning */}
         {product.stock <= lowStockThreshold && product.stock > 0 && (
-          <div className="absolute top-2 right-2 sm:top-3 sm:right-3 bg-amber-500/90 text-zinc-950 font-sans text-[8.5px] sm:text-[10px] font-extrabold px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded-full tracking-wide shadow-md z-10 font-bold">
-            ÚLTIMAS {product.stock}U
+          <div className="absolute top-3 right-3 bg-[#E6BF76] text-[#050B1A] font-sans text-[8px] sm:text-[9.5px] font-bold px-2 py-0.5 rounded-full tracking-wider shadow-md z-10 uppercase">
+            Últimas {product.stock} u
           </div>
         )}
 
         {product.stock === 0 && (
-          <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10">
-            <span className="bg-zinc-800 text-zinc-400 font-bold text-[10px] sm:text-xs uppercase tracking-wider px-2 py-1 rounded-lg">
+          <div className="absolute inset-0 bg-[#050B1A]/80 flex items-center justify-center z-10">
+            <span className="bg-[#0B1730] text-[#E6BF76] font-sans font-bold text-[10px] sm:text-xs uppercase tracking-widest px-3 py-1.5 rounded-full border border-[#D4A55A]/30">
               Agotado
             </span>
           </div>
         )}
 
         {/* Quick action buttons on hover over image */}
-        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-2 sm:grid-cols-2 z-20">
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-2 z-20">
           <button
             onClick={() => onViewProduct(product)}
-            className="flex items-center justify-center bg-white text-zinc-900 rounded-full h-8 w-8 sm:h-10 sm:w-10 hover:bg-zinc-200 hover:scale-110 active:scale-95 transition"
+            className="flex items-center justify-center bg-[#F4EAD7] text-[#050B1A] hover:bg-white rounded-full h-9 w-9 hover:scale-110 active:scale-95 transition duration-200"
             title="Ver Detalles"
           >
-            <Eye className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
+            <Eye className="h-4.5 w-4.5" />
           </button>
-          
-          {product.stock > 0 && (
-            <button
-              onClick={() => onAddToCart(product)}
-              className="flex items-center justify-center theme-btn-primary rounded-full h-8 w-8 sm:h-10 sm:w-10 hover:scale-110 active:scale-95 transition"
-              title="Añadir al Carrito"
-            >
-              <ShoppingCart className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
-            </button>
-          )}
         </div>
       </div>
 
       {/* Product Content Details */}
-      <div className="flex flex-col flex-1 p-3 sm:p-4">
+      <div className="flex flex-col flex-1 p-4 bg-[#0B1730]">
         {/* Category */}
-        <span className="text-[9.5px] sm:text-[11px] font-semibold tracking-widest uppercase text-zinc-500 mb-1">
+        <span className="text-[9px] sm:text-[10px] font-bold tracking-widest uppercase text-[#D4A55A]/85 mb-1 bg-[#D4A55A]/5 border border-[#D4A55A]/10 px-2 py-0.5 rounded-md self-start">
           {product.category}
         </span>
 
         {/* Product Title */}
-        <h3 className="text-xs sm:text-sm font-semibold tracking-tight leading-snug truncate">
+        <h3 className="text-xs sm:text-sm font-semibold text-[#F4EAD7] tracking-wide leading-snug truncate group-hover:text-[#E6BF76] transition-colors mt-1.5">
           {product.name}
         </h3>
 
-        {/* Subtle separator */}
-        <p className="text-[11px] sm:text-xs text-zinc-400 mt-1 line-clamp-2 leading-relaxed flex-1 break-words overflow-hidden" style={{ overflowWrap: "anywhere" }}>
-          {product.description}
-        </p>
-
-        {/* Pricing & Stock */}
-        <div className="flex items-center justify-between mt-3 sm:mt-4 gap-1.5">
-          <div className="flex flex-col">
-            <span className="text-sm sm:text-base font-bold theme-text-primary">
-              {getPriceDisplay()}
+        {/* Pricing info directly below - no description block to assure uniform card columns */}
+        <div className="flex items-baseline gap-2 mt-2">
+          <span className="text-sm sm:text-base font-bold text-[#E6BF76]">
+            {getPriceDisplay()}
+          </span>
+          {isDiscounted && (
+            <span className="text-[10px] sm:text-xs text-slate-400 line-through">
+              ${Math.round(product.originalPrice!)}
             </span>
-          </div>
+          )}
+        </div>
 
-          <div className="text-right shrink-0">
-            <button
-              onClick={() => onViewProduct(product)}
-              className={`text-[10px] sm:text-xs font-semibold py-1 px-2 sm:py-1.5 sm:px-3 rounded-xl border ${
-                settings.themeMode === "dark" 
-                  ? "border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800" 
-                  : "border-gray-200 text-zinc-600 hover:text-black hover:bg-gray-100"
-              } transition-colors`}
-            >
-              Detalles
-            </button>
-          </div>
+        {/* Highlighted Buy Button at base of catalog grid element */}
+        <div className="mt-4 pt-1.5">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (product.stock > 0) {
+                onAddToCart(product);
+              } else {
+                onViewProduct(product);
+              }
+            }}
+            className={`w-full py-2.5 px-3 rounded-full text-[10px] font-sans font-bold uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer border ${
+              product.stock > 0
+                ? "bg-[#D4A55A] hover:bg-[#E6BF76] border-transparent text-[#050B1A] hover:scale-[1.02] active:scale-98 shadow-md shadow-[#D4A55A]/10"
+                : "bg-transparent border-slate-700 text-slate-400 cursor-not-allowed"
+            }`}
+          >
+            <ShoppingCart className="h-3 w-3" />
+            <span>{product.stock > 0 ? "Añadir / Comprar" : "Sin Stock"}</span>
+          </button>
         </div>
       </div>
     </div>

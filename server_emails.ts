@@ -248,7 +248,8 @@ function getHumanReadablePaymentMethod(method: string): string {
  * 1. Generate COMPRA CONFIRMADA Email HTML
  */
 export function generateOrderCreatedEmailHtml(order: any, settings: any): { subject: string; html: string } {
-  const orderId = order.id;
+  const rawOrderId = order.id || "";
+  const orderId = rawOrderId.length > 8 ? rawOrderId.substring(0, 6).toUpperCase() : rawOrderId;
   const customerName = order.customerName || "Cliente";
   const items = order.items || [];
   const subtotal = order.subtotal || 0;
@@ -275,6 +276,12 @@ export function generateOrderCreatedEmailHtml(order: any, settings: any): { subj
   const subject = customSubjectTemplate 
     ? replacePlaceholders(customSubjectTemplate, { orderId, customerName, total: `$${total}`, siteTitle })
     : defaultSubject;
+
+  const defaultBody = "Muchas gracias por realizar tu compra con nosotros. Tu pago ha sido aprobado correctamente y tu pedido ya está siendo preparado para entrega. Aquí tienes los detalles completos de tu compra:";
+  const customBodyTemplate = settings.emailTemplateOrderCreatedBody;
+  const bodyText = customBodyTemplate
+    ? replacePlaceholders(customBodyTemplate, { orderId, customerName, total: `$${total}`, siteTitle })
+    : defaultBody;
 
   const itemsRows = items.map((item: any) => {
     const sizeStr = item.sizeSelected ? ` - Talle: ${item.sizeSelected}` : "";
@@ -303,16 +310,33 @@ export function generateOrderCreatedEmailHtml(order: any, settings: any): { subj
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);">
         
         <!-- Header -->
-        <div style="background-color: #4f46e5; padding: 35px 30px; text-align: center; color: #ffffff;">
-          <h1 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.025em;">${siteTitle}</h1>
-          <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9; font-weight: 500;">¡Tu compra ha sido aprobada con éxito! 🎉</p>
-        </div>
+        ${settings.emailHeaderImageUrl ? `
+          <div style="background-color: #0c1221; text-align: center; border-bottom: 4px solid #f59e0b; overflow: hidden; line-height: 0;">
+            <img src="${settings.emailHeaderImageUrl}" alt="${siteTitle}" style="width: 100%; max-width: 600px; height: auto; display: block; margin: 0 auto; object-fit: cover;" />
+          </div>
+        ` : `
+          <div style="background-color: #4f46e5; padding: 35px 30px; text-align: center; color: #ffffff;">
+            ${settings.logoType === "image" && settings.logoImageUrl ? `
+              <div style="margin-bottom: 12px; text-align: center;">
+                <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 60px; max-width: 220px; object-fit: contain; display: inline-block; vertical-align: middle; border-radius: 8px; background-color: rgba(255, 255, 255, 0.15); padding: 4px;" />
+              </div>
+            ` : `
+              <h1 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.025em;">${siteTitle}</h1>
+            `}
+            <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9; font-weight: 500;">¡Tu compra ha sido aprobada con éxito! 🎉</p>
+          </div>
+        `}
 
         <!-- Body -->
         <div style="padding: 30px;">
-          <h2 style="margin: 0 0 15px 0; font-size: 18px; font-weight: 700; color: #1e1b4b;">¡Hola, ${customerName}!</h2>
-          <p style="margin: 0 0 25px 0; font-size: 14px; color: #475569;">
-            Muchas gracias por realizar tu compra con nosotros. Tu pago ha sido aprobado correctamente y tu pedido ya está siendo preparado para entrega. Aquí tienes los detalles completos de tu compra:
+          ${settings.emailHeaderImageUrl && settings.logoType === "image" && settings.logoImageUrl ? `
+            <div style="text-align: center; margin-bottom: 25px;">
+              <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 55px; max-width: 180px; object-fit: contain;" />
+            </div>
+          ` : ""}
+          <h2 style="margin: 0 0 15px 0; font-size: 18px; font-weight: 700; color: #1e1b4b; ${settings.emailHeaderImageUrl ? 'text-align: center;' : ''}">¡Hola, ${customerName}!</h2>
+          <p style="margin: 0 0 25px 0; font-size: 14px; color: #475569; white-space: pre-wrap;">
+            ${bodyText}
           </p>
 
           <!-- Order Summary Dashboard Card -->
@@ -379,6 +403,32 @@ export function generateOrderCreatedEmailHtml(order: any, settings: any): { subj
           </div>
           ` : ""}
 
+          <!-- Instrucciones de Pago por Transferencia / Abitab / Redpagos -->
+          ${(function() {
+            const rawPaymentMethod = String(order.paymentMethod || order.payment_method || "").toLowerCase();
+            const isTransfer = rawPaymentMethod.includes("transfer") || rawPaymentMethod.includes("banco");
+            if (!isTransfer) return "";
+            
+            const details = settings.transferDetails && settings.transferDetails.trim() 
+              ? settings.transferDetails 
+              : "Realiza tu transferencia bancaria directa de forma rápida y segura desde BROU, Itaú, Santander, BBVA o cualquier banco de Uruguay. También aceptamos giros por Abitab y Redpagos. Al enviar tu pedido, indícanos por WhatsApp para facilitarte los datos de cuenta específicos o de giros.";
+
+            return `
+            <div style="margin-bottom: 25px; font-size: 13px; color: #1e1b4b; background-color: #f5f3ff; border: 1px solid #ddd6fe; padding: 18px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); text-align: left;">
+              <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                <span style="font-size: 20px; margin-right: 8px;">🏦</span>
+                <strong style="color: #4f46e5; font-size: 14px;">Datos de Transferencia Bancaria y Redes de Cobranza (Abitab / Redpagos):</strong>
+              </div>
+              <p style="margin: 0; font-size: 12.5px; color: #4c1d95; line-height: 1.6; white-space: pre-wrap;">
+                ${details}
+              </p>
+              <div style="margin-top: 12px; font-size: 11.5px; color: #6d28d9; font-weight: 500; font-style: italic; border-top: 1px dashed #ddd6fe; padding-top: 8px;">
+                💡 RECUERDA: Una vez hecho el pago o giro, envía el comprobante de pago respondiendo a este correo o vía WhatsApp para despachar de inmediato tu pedido.
+              </div>
+            </div>
+            `;
+          })()}
+
           <!-- CTA to Support WhatsApp -->
           <div style="text-align: center; margin-top: 35px; border-top: 1px solid #f1f5f9; padding-top: 25px;">
             <p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">¿Tienes alguna consulta rápida o deseas apurar tu paquete por WhatsApp?</p>
@@ -405,7 +455,8 @@ export function generateOrderCreatedEmailHtml(order: any, settings: any): { subj
  * 2. Generate PEDIDO ENVIADO/DESPACHADO Email HTML
  */
 export function generateOrderShippedEmailHtml(order: any, settings: any): { subject: string; html: string } {
-  const orderId = order.id;
+  const rawOrderId = order.id || "";
+  const orderId = rawOrderId.length > 8 ? rawOrderId.substring(0, 6).toUpperCase() : rawOrderId;
   const customerName = order.customerName || "Cliente";
   const items = order.items || [];
   const trackingNumber = order.trackingNumber || order.tracking_number || "";
@@ -474,14 +525,31 @@ export function generateOrderShippedEmailHtml(order: any, settings: any): { subj
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);">
         
         <!-- Header -->
-        <div style="background-color: #10b981; padding: 35px 30px; text-align: center; color: #ffffff;">
-          <h1 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.025em;">${siteTitle}</h1>
-          <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9; font-weight: 500;">¡Tu pedido va en camino! 🚚🚀</p>
-        </div>
+        ${settings.emailHeaderImageUrl ? `
+          <div style="background-color: #0c1221; text-align: center; border-bottom: 4px solid #f59e0b; overflow: hidden; line-height: 0;">
+            <img src="${settings.emailHeaderImageUrl}" alt="${siteTitle}" style="width: 100%; max-width: 600px; height: auto; display: block; margin: 0 auto; object-fit: cover;" />
+          </div>
+        ` : `
+          <div style="background-color: #10b981; padding: 35px 30px; text-align: center; color: #ffffff;">
+            ${settings.logoType === "image" && settings.logoImageUrl ? `
+              <div style="margin-bottom: 12px; text-align: center;">
+                <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 60px; max-width: 220px; object-fit: contain; display: inline-block; vertical-align: middle; border-radius: 8px; background-color: rgba(255, 255, 255, 0.15); padding: 4px;" />
+              </div>
+            ` : `
+              <h1 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.025em;">${siteTitle}</h1>
+            `}
+            <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9; font-weight: 500;">¡Tu pedido va en camino! 🚚🚀</p>
+          </div>
+        `}
 
         <!-- Body -->
         <div style="padding: 30px;">
-          <h2 style="margin: 0 0 15px 0; font-size: 18px; font-weight: 700; color: #064e3b;">¡Hola, ${customerName}!</h2>
+          ${settings.emailHeaderImageUrl && settings.logoType === "image" && settings.logoImageUrl ? `
+            <div style="text-align: center; margin-bottom: 25px;">
+              <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 55px; max-width: 180px; object-fit: contain;" />
+            </div>
+          ` : ""}
+          <h2 style="margin: 0 0 15px 0; font-size: 18px; font-weight: 700; color: #064e3b; ${settings.emailHeaderImageUrl ? 'text-align: center;' : ''}">¡Hola, ${customerName}!</h2>
           <p style="margin: 0 0 20px 0; font-size: 14px; color: #475569;">
             Te queremos informar que tu pedido <strong style="color: #0f172a;">#${orderId}</strong> ha sido enviado por nuestro equipo. Aquí dispones del detalle de tu despacho:
           </p>
@@ -562,7 +630,8 @@ export function generateOrderStatusChangedEmailHtml(params: {
   settings: any;
 }): { subject: string; html: string } {
   const { order, newStatus, settings } = params;
-  const orderId = order.id;
+  const rawOrderId = order.id || "";
+  const orderId = rawOrderId.length > 8 ? rawOrderId.substring(0, 6).toUpperCase() : rawOrderId;
   const customerName = order.customerName || "Cliente";
   const siteTitle = settings.siteTitle || "Ventas Juem";
   const statusText = statusLabels[newStatus] || newStatus;
@@ -573,21 +642,44 @@ export function generateOrderStatusChangedEmailHtml(params: {
     ? replacePlaceholders(customSubjectTemplate, { orderId, customerName, statusText, siteTitle })
     : defaultSubject;
 
+  const defaultBody = "Te notificamos que el estado de tu pedido #{{orderId}} ha sido actualizado por nuestro equipo de logística.";
+  const customBodyTemplate = settings.emailTemplateOrderStatusChangedBody;
+  const bodyText = customBodyTemplate
+    ? replacePlaceholders(customBodyTemplate, { orderId, customerName, statusText, siteTitle })
+    : replacePlaceholders(defaultBody, { orderId });
+
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; padding: 40px 10px; color: #0f172a; line-height: 1.5;">
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);">
         
         <!-- Header -->
-        <div style="background-color: #2563eb; padding: 30px; text-align: center; color: #ffffff;">
-          <h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.025em;">${siteTitle}</h1>
-          <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9;">¡El estado de tu pedido ha cambiado!</p>
-        </div>
+        ${settings.emailHeaderImageUrl ? `
+          <div style="background-color: #0c1221; text-align: center; border-bottom: 4px solid #f59e0b; overflow: hidden; line-height: 0;">
+            <img src="${settings.emailHeaderImageUrl}" alt="${siteTitle}" style="width: 100%; max-width: 600px; height: auto; display: block; margin: 0 auto; object-fit: cover;" />
+          </div>
+        ` : `
+          <div style="background-color: #2563eb; padding: 30px; text-align: center; color: #ffffff;">
+            ${settings.logoType === "image" && settings.logoImageUrl ? `
+              <div style="margin-bottom: 12px; text-align: center;">
+                <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 60px; max-width: 220px; object-fit: contain; display: inline-block; vertical-align: middle; border-radius: 8px; background-color: rgba(255, 255, 255, 0.15); padding: 4px;" />
+              </div>
+            ` : `
+              <h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.025em;">${siteTitle}</h1>
+            `}
+            <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9;">¡El estado de tu pedido ha cambiado!</p>
+          </div>
+        `}
 
         <!-- Body -->
         <div style="padding: 30px;">
-          <h2 style="margin: 0 0 15px 0; font-size: 18px; font-weight: 700;">Hola, ${customerName}</h2>
-          <p style="margin: 0 0 25px 0; font-size: 14px; color: #475569;">
-            Te notificamos que el estado de tu pedido <strong style="color: #0f172a;">#${orderId}</strong> ha sido actualizado por nuestro equipo de logística.
+          ${settings.emailHeaderImageUrl && settings.logoType === "image" && settings.logoImageUrl ? `
+            <div style="text-align: center; margin-bottom: 25px;">
+              <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 55px; max-width: 180px; object-fit: contain;" />
+            </div>
+          ` : ""}
+          <h2 style="margin: 0 0 15px 0; font-size: 18px; font-weight: 700; ${settings.emailHeaderImageUrl ? 'text-align: center;' : ''}">Hola, ${customerName}</h2>
+          <p style="margin: 0 0 25px 0; font-size: 14px; color: #475569; white-space: pre-wrap;">
+            ${bodyText}
           </p>
 
           <!-- Current Status Display -->

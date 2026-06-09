@@ -650,7 +650,7 @@ async function getDbState(): Promise<ShopState> {
     // 7. Fetch orders & their items
     let orders: any[] = [];
     try {
-      const ordersRes = await pool.query("SELECT id, customer_email, customer_name, customer_phone, subtotal, discount_amount, shipping_cost, total, applied_coupon_code, current_status, notes, created_at, updated_at FROM public.orders ORDER BY created_at DESC;");
+      const ordersRes = await pool.query("SELECT id, customer_email, customer_name, customer_phone, subtotal, discount_amount, shipping_cost, total, applied_coupon_code, current_status, notes, payment_method, created_at, updated_at FROM public.orders ORDER BY created_at DESC;");
       
       const itemsRes = await pool.query("SELECT id, order_id, product_id, variant_id, product_name, sku, size_selected, color_selected, unit_price, quantity, total_price FROM public.order_items;");
       const orderItemsMap: Record<string, any[]> = {};
@@ -672,7 +672,7 @@ async function getDbState(): Promise<ShopState> {
           totalPrice: Number(item.total_price)
         });
       }
-
+ 
       orders = ordersRes.rows.map(row => ({
         id: row.id,
         customerEmail: row.customer_email,
@@ -685,6 +685,7 @@ async function getDbState(): Promise<ShopState> {
         couponCode: row.applied_coupon_code || undefined,
         status: row.current_status,
         notes: row.notes || undefined,
+        paymentMethod: row.payment_method || undefined,
         createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
         updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
         items: orderItemsMap[row.id] || []
@@ -1089,6 +1090,10 @@ async function initPostgresStore(): Promise<ShopState | null> {
     `);
 
     await pool.query(`
+      ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50);
+    `);
+
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS public.order_items (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         order_id UUID NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
@@ -1388,29 +1393,33 @@ async function startServer() {
       return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación." });
     }
 
-    const { toEmail } = req.body;
+    const { toEmail, smtpConfig } = req.body;
     if (!toEmail) {
       return res.status(400).json({ success: false, message: "El correo electrónico de destino es obligatorio." });
     }
 
     try {
+      const liveSettings = smtpConfig ? { ...currentStoreState.settings, ...smtpConfig } : currentStoreState.settings;
+      // Force enabled true for the connection test purpose
+      liveSettings.emailSenderEnabled = true;
+
       const testEmailHtml = `
         <div style="font-family: Arial, sans-serif; padding: 30px; background-color: #f8fafc; color: #0f172a; max-width: 500px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px;">
-          <h2 style="color: #5346ff; margin-top: 0;">🧪 Correo electrónico de Prueba exitoso</h2>
+          <h2 style="color: #4f46e5; margin-top: 0;">🧪 Correo electrónico de Prueba exitoso</h2>
           <p>Este es un correo electrónico enviado para comprobar los ajustes de conexión de tu servidor de correos.</p>
           <hr style="border: none; border-top: 1px solid #cbd5e1; margin: 20px 0;" />
           <div style="font-size: 11px; color: #64748b;">
-            <strong>Servidor SMTP:</strong> ${currentStoreState.settings.emailSenderSmtpHost || "No Configurado (Simulación)"} <br />
-            <strong>Usuario SMTP:</strong> ${currentStoreState.settings.emailSenderSmtpUser || "No Configurado"} <br />
+            <strong>Servidor SMTP:</strong> ${liveSettings.emailSenderSmtpHost || "No Configurado (Simulación)"} <br />
+            <strong>Usuario SMTP:</strong> ${liveSettings.emailSenderSmtpUser || "No Configurado"} <br />
             <strong>Fecha/Hora de Prueba:</strong> ${new Date().toLocaleString()}
           </div>
         </div>
       `;
 
       const result = await sendEmail({
-        settings: currentStoreState.settings,
+        settings: liveSettings,
         to: toEmail,
-        subject: `🧪 Test de conexión - ${currentStoreState.settings.siteTitle || "Tienda"}`,
+        subject: `🧪 Test de conexión - ${liveSettings.siteTitle || "Tienda"}`,
         html: testEmailHtml
       });
 
@@ -1691,11 +1700,13 @@ async function startServer() {
         return res.status(429).json({ success: false, message: "Demasiados pedidos creados en poco tiempo. Por favor, intente nuevamente en unos minutos." });
       }
 
-      const { customerName, customerEmail, customerPhone, shippingCost, couponCode, notes, items } = req.body;
+      const { customerName, customerEmail, customerPhone, shippingCost, couponCode, notes, items, paymentMethod } = req.body;
       
       if (!customerName || !customerEmail || !items || items.length === 0) {
         return res.status(400).json({ success: false, message: "Nombre, Correo Electrónico y Artículos del carrito son obligatorios." });
       }
+
+      const sanitizedPaymentMethod = sanitizeHtmlString(paymentMethod || "transfer").trim().substring(0, 50);
 
       // 2. Input Sanitization to prevent XSS (Stored & Dom XSS injection blocks)
       const sanitizedName = sanitizeHtmlString(customerName).trim().substring(0, 100);
@@ -1815,8 +1826,8 @@ async function startServer() {
 
           // Insert secure calculated values into postgres
           const orderRes = await client.query(`
-            INSERT INTO public.orders (customer_name, customer_email, customer_phone, subtotal, discount_amount, shipping_cost, total, applied_coupon_code, current_status, notes)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            INSERT INTO public.orders (customer_name, customer_email, customer_phone, subtotal, discount_amount, shipping_cost, total, applied_coupon_code, current_status, notes, payment_method)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING id, created_at;
           `, [
             sanitizedName, 
@@ -1828,7 +1839,8 @@ async function startServer() {
             serverTotal, 
             validCouponCodeToSave, 
             status, 
-            sanitizedNotes || null
+            sanitizedNotes || null,
+            sanitizedPaymentMethod
           ]);
           
           orderId = orderRes.rows[0].id;
@@ -1903,6 +1915,7 @@ async function startServer() {
           couponCode,
           status: status as any,
           notes: sanitizedNotes,
+          paymentMethod: sanitizedPaymentMethod,
           createdAt: new Date().toISOString(),
           items: verifiedItems.map((i: any) => ({
             productId: String(i.productId),
@@ -1942,7 +1955,8 @@ async function startServer() {
           total: serverTotal,
           couponCode: couponCode || null,
           notes: sanitizedNotes,
-          items: verifiedItems
+          items: verifiedItems,
+          paymentMethod: sanitizedPaymentMethod
         };
         const { subject, html } = generateOrderCreatedEmailHtml(completeOrderForEmail, currentStoreState.settings);
         sendEmail({
@@ -2259,10 +2273,11 @@ async function startServer() {
     const userName = orderDetails ? orderDetails.customerName : "Cliente";
     const address = orderDetails ? (orderDetails.notes || "Coordinar entrega") : "Coordinar entrega";
     const orderTotal = orderDetails ? orderDetails.total : (verifiedPaymentAmount || 0);
+    const shortOrderId = orderId ? orderId.substring(0, 6).toUpperCase() : "Coordinar";
 
     // Generate WhatsApp text
     let waMessage = `🛒 *COMPRA EXCELENTE POR MERCADO PAGO - ${siteTitle}*\n\n`;
-    waMessage += `📦 *Orden N°:* ${orderId || "Coordinar"}\n`;
+    waMessage += `📦 *Orden N°:* ${shortOrderId}\n`;
     waMessage += `👤 *Cliente:* ${userName}\n`;
     waMessage += `📍 *Dirección de envío:* ${address}\n`;
     waMessage += `💰 *Total del pedido:* $${orderTotal.toLocaleString("es-AR")}\n`;
@@ -2288,7 +2303,7 @@ async function startServer() {
           <p class="subtitle">Tu pago de $${orderTotal.toLocaleString("es-AR")} ha sido procesado, verificado por pasarela y aprobado mediante Mercado Pago Uruguay de forma totalmente segura.</p>
           
           <div class="summary-box">
-            <p><strong>Pedido ID:</strong> ${orderId || "Sincronizado"}</p>
+            <p><strong>Pedido ID:</strong> ${shortOrderId}</p>
             <p><strong>Cliente:</strong> ${userName}</p>
             <p><strong>Dirección:</strong> ${address}</p>
             <p><strong>Referencia MP:</strong> ${paymentId}</p>
@@ -2312,7 +2327,7 @@ async function startServer() {
           <p class="subtitle">Tu pago se encuentra en proceso o pendiente de acreditación en Mercado Pago Uruguay.</p>
           
           <div class="summary-box">
-            <p><strong>Pedido ID:</strong> ${orderId || "Sincronizado"}</p>
+            <p><strong>Pedido ID:</strong> ${shortOrderId}</p>
             <p><strong>Cliente:</strong> ${userName}</p>
             <p><strong>Monto:</strong> $${orderTotal.toLocaleString("es-AR")}</p>
             <p><strong>Estado del Pago:</strong> <span style="color: #f59e0b; font-weight: bold;">PENDIENTE</span></p>
@@ -2335,7 +2350,7 @@ async function startServer() {
           <p class="subtitle">El proceso de pago de Mercado Pago no pudo aprobarse o fue declinado por la tarjeta emisora.</p>
           
           <div class="summary-box">
-            <p><strong>Pedido ID:</strong> ${orderId || "Sincronizado"}</p>
+            <p><strong>Pedido ID:</strong> ${shortOrderId}</p>
             <p><strong>Cliente:</strong> ${userName}</p>
             <p><strong>Estado del Pago:</strong> <span style="color: #ef4444; font-weight: bold;">CON RECHAZO / SIN SALDO</span></p>
           </div>

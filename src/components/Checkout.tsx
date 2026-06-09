@@ -753,68 +753,69 @@ export default function Checkout({
         : `Envío a Domicilio (${deliveryCarrierInfo})${hasFreeShipping ? " 🎁 [¡ENVÍO GRATIS!]" : ""}`
     };
 
-    if (paymentMethod === "mercadopago") {
-      setIsProcessing(true);
-      try {
-        // Map individual product options to order item interfaces
-        const mappedOrderItems = cartItems.map((item) => {
-          let basePrice = item.product.price;
-          const p = item.product;
-          let matchedVariantId: string | undefined = undefined;
-          if (p.variants && p.variants.length > 0 && item.selectedSize) {
-            const exactMatch = item.selectedColor 
-              ? p.variants.find((v: any) => v.size === item.selectedSize && v.color === item.selectedColor)
-              : null;
-            const sizeMatch = p.variants.find((v: any) => v.size === item.selectedSize);
-            const match = exactMatch || sizeMatch;
-            if (match) {
-              if (match.price !== undefined) {
-                basePrice = match.price;
-              }
-              matchedVariantId = match.id;
+    setIsProcessing(true);
+    try {
+      // Map individual product options to order item interfaces
+      const mappedOrderItems = cartItems.map((item) => {
+        let basePrice = item.product.price;
+        const p = item.product;
+        let matchedVariantId: string | undefined = undefined;
+        if (p.variants && p.variants.length > 0 && item.selectedSize) {
+          const exactMatch = item.selectedColor 
+            ? p.variants.find((v: any) => v.size === item.selectedSize && v.color === item.selectedColor)
+            : null;
+          const sizeMatch = p.variants.find((v: any) => v.size === item.selectedSize);
+          const match = exactMatch || sizeMatch;
+          if (match) {
+            if (match.price !== undefined) {
+              basePrice = match.price;
             }
+            matchedVariantId = match.id;
           }
-          return {
-            productId: item.product.id,
-            variantId: matchedVariantId,
-            productName: item.product.name,
-            sku: item.product.variants?.[0]?.sku || undefined,
-            sizeSelected: item.selectedSize || undefined,
-            colorSelected: item.selectedColor || undefined,
-            unitPrice: basePrice,
-            quantity: item.quantity,
-            totalPrice: basePrice * item.quantity
-          };
-        });
-
-        // 1. Pre-register order in database to ensure we do not lose sales leads
-        const orderRegResponse = await fetch("/api/orders", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            customerName: compiledUserInformation.name,
-            customerEmail: email.trim().toLowerCase(),
-            customerPhone: compiledUserInformation.phone,
-            subtotal: subtotalUYU,
-            discountAmount: discountAmountUYU,
-            shippingCost: 0,
-            total: totalUYU,
-            couponCode: appliedDiscount > 0 ? promoCode.toUpperCase() : undefined,
-            notes: `${shippingType === "pickup" ? "Retiro en Local de la Empresa" : "Envío a Domicilio: " + finalShippingAddress} | ${compiledUserInformation.rut}`,
-            items: mappedOrderItems
-          })
-        });
-
-        if (!orderRegResponse.ok) {
-          const errData = await orderRegResponse.json();
-          throw new Error(errData.message || "Error al pre-registrar tu orden en la base de datos.");
         }
+        return {
+          productId: item.product.id,
+          variantId: matchedVariantId,
+          productName: item.product.name,
+          sku: item.product.variants?.[0]?.sku || undefined,
+          sizeSelected: item.selectedSize || undefined,
+          colorSelected: item.selectedColor || undefined,
+          unitPrice: basePrice,
+          quantity: item.quantity,
+          totalPrice: basePrice * item.quantity
+        };
+      });
 
-        const registeredOrder = await orderRegResponse.json();
-        const serverOrderId = registeredOrder.orderId;
+      // 1. Pre-register order in database to ensure we do not lose sales leads and trigger confirmation emails
+      const orderRegResponse = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          customerName: compiledUserInformation.name,
+          customerEmail: email.trim().toLowerCase(),
+          customerPhone: compiledUserInformation.phone,
+          subtotal: subtotalUYU,
+          discountAmount: discountAmountUYU,
+          shippingCost: 0,
+          total: totalUYU,
+          couponCode: appliedDiscount > 0 ? promoCode.toUpperCase() : undefined,
+          notes: `${shippingType === "pickup" ? "Retiro en Local de la Empresa" : "Envío a Domicilio: " + finalShippingAddress} | ${compiledUserInformation.rut}`,
+          items: mappedOrderItems,
+          paymentMethod: paymentMethod
+        })
+      });
 
+      if (!orderRegResponse.ok) {
+        const errData = await orderRegResponse.json();
+        throw new Error(errData.message || "Error al registrar tu orden en el sistema.");
+      }
+
+      const registeredOrder = await orderRegResponse.json();
+      const serverOrderId = registeredOrder.orderId;
+
+      if (paymentMethod === "mercadopago") {
         // 2. Generate checkout preference linking it to our brand new Order ID
         const response = await fetch("/api/payments/mercadopago/preference", {
           method: "POST",
@@ -842,72 +843,74 @@ export default function Checkout({
           setErrorMessage(detailMsg);
           setIsProcessing(false);
         }
-      } catch (err: any) {
-        setErrorMessage(err.message || "Hubo un problema de conexión con el servidor de Mercado Pago.");
-        setIsProcessing(false);
-      }
-    } else {
-      // WhatsApp manual/coordinated checkout text build
-      let paymentLabel = "";
-      if (paymentMethod === "transfer") {
-        paymentLabel = "Transferencia Bancaria Uruguaya (BROU, Itaú, Santander)";
-      } else if (paymentMethod === "cash") {
-        paymentLabel = "Efectivo Contraentrega (al recibir)";
       } else {
-        paymentLabel = "Coordinar método especial";
-      }
-
-      let message = `🛒 *NUEVO PEDIDO - ${settings.siteTitle}*\n\n`;
-      message += `👤 *Cliente:* ${compiledUserInformation.name}\n`;
-      message += `📧 *Email:* ${email.trim().toLowerCase()}\n`;
-      message += `📞 *Teléfono:* ${compiledUserInformation.phone}\n`;
-      message += `📄 *Facturación:* ${compiledUserInformation.rut}\n`;
-      message += `🚚 *Método de Envío:* ${compiledUserInformation.shippingType}\n`;
-      if (shippingType === "delivery") {
-        message += `📍 *Dirección de envío:* ${compiledUserInformation.address}\n`;
-      }
-      message += `💳 *Método de Pago:* ${paymentLabel}\n`;
-      if (appliedDiscount > 0) {
-        message += `🎟️ *Cupón Aplicado:* ${promoCode.toUpperCase()} (${appliedDiscount}% desc.)\n`;
-      }
-      message += `┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n`;
-
-      cartItems.forEach((item, index) => {
-        const is3D = is3DProduct(item.product);
-        const options = [];
-        if (item.selectedSize) {
-          options.push(is3D ? `Material: ${item.selectedSize}` : `Talle: ${item.selectedSize}`);
+        // WhatsApp manual/coordinated checkout text build
+        let paymentLabel = "";
+        if (paymentMethod === "transfer") {
+          paymentLabel = "Transferencia Bancaria Uruguaya (BROU, Itaú, Santander) / Redes de cobranza";
+        } else if (paymentMethod === "cash") {
+          paymentLabel = "Efectivo Contraentrega (al recibir)";
+        } else {
+          paymentLabel = "Coordinar método especial";
         }
-        if (item.selectedColor) {
-          options.push(`Color: ${item.selectedColor}`);
+
+        const shortServerOrderId = serverOrderId ? serverOrderId.substring(0, 6).toUpperCase() : "";
+        let message = `🛒 *NUEVO PEDIDO #${shortServerOrderId} - ${settings.siteTitle}*\n\n`;
+        message += `👤 *Cliente:* ${compiledUserInformation.name}\n`;
+        message += `📧 *Email:* ${email.trim().toLowerCase()}\n`;
+        message += `📞 *Teléfono:* ${compiledUserInformation.phone}\n`;
+        message += `📄 *Facturación:* ${compiledUserInformation.rut}\n`;
+        message += `🚚 *Método de Envío:* ${compiledUserInformation.shippingType}\n`;
+        if (shippingType === "delivery") {
+          message += `📍 *Dirección de envío:* ${compiledUserInformation.address}\n`;
         }
-        const optionsStr = options.length > 0 ? ` (${options.join(", ")})` : "";
-        const itemPrice = getItemPrice(item);
+        message += `💳 *Método de Pago:* ${paymentLabel}\n`;
+        if (appliedDiscount > 0) {
+          message += `🎟️ *Cupón Aplicado:* ${promoCode.toUpperCase()} (${appliedDiscount}% desc.)\n`;
+        }
+        message += `┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n`;
+
+        cartItems.forEach((item, index) => {
+          const is3D = is3DProduct(item.product);
+          const options = [];
+          if (item.selectedSize) {
+            options.push(is3D ? `Material: ${item.selectedSize}` : `Talle: ${item.selectedSize}`);
+          }
+          if (item.selectedColor) {
+            options.push(`Color: ${item.selectedColor}`);
+          }
+          const optionsStr = options.length > 0 ? ` (${options.join(", ")})` : "";
+          const itemPrice = getItemPrice(item);
+          
+          message += `${index + 1}. *${item.product.name}*${optionsStr}\n`;
+          message += `   👉 ${item.quantity} x UYU $${Math.round(itemPrice)} = *UYU $${Math.round(itemPrice * item.quantity)}*\n\n`;
+        });
+
+        message += `┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n`;
+        message += `🔹 *Subtotal:* UYU $${subtotalUYU}\n`;
+        if (appliedDiscount > 0) {
+          message += `🔹 *Descuento (${appliedDiscount}%):* -UYU $${discountAmountUYU}\n`;
+        }
+        message += `🔥 *TOTAL NETO:* *UYU $${totalUYU}*\n\n`;
         
-        message += `${index + 1}. *${item.product.name}*${optionsStr}\n`;
-        message += `   👉 ${item.quantity} x UYU $${Math.round(itemPrice)} = *UYU $${Math.round(itemPrice * item.quantity)}*\n\n`;
-      });
+        if (paymentMethod === "transfer") {
+          message += `🏦 _¡Hola! Acabo de realizar la compra (Pedido #${shortServerOrderId}). Recibí el mail de confirmación con los datos bancarios. Les escribo para pasárselo de nuevo por aquí, hacerles la transferencia/giro por UYU $${totalUYU} y coordinar la entrega despachando cuanto antes._`;
+        } else {
+          message += `🙌 _¡Hola! Acabo de coordinar este pedido (Pedido #${shortServerOrderId}) por la web. Quedo a la espera por aquí para coordinar los detalles de entrega de mi compra por UYU $${totalUYU}._`;
+        }
 
-      message += `┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n`;
-      message += `🔹 *Subtotal:* UYU $${subtotalUYU}\n`;
-      if (appliedDiscount > 0) {
-        message += `🔹 *Descuento (${appliedDiscount}%):* -UYU $${discountAmountUYU}\n`;
+        const encodedText = encodeURIComponent(message);
+        const cleanPhone = settings.whatsappNumber.replace(/[^0-9]/g, "");
+        const waUrl = `https://wa.me/${cleanPhone}?text=${encodedText}`;
+        
+        window.open(waUrl, "_blank", "referrer");
+        setIsProcessing(false);
+        onClearCart();
+        onBackToCatalog();
       }
-      message += `🔥 *TOTAL NETO:* *UYU $${totalUYU}*\n\n`;
-      
-      if (paymentMethod === "transfer") {
-        message += `🏦 _Hola, acabo de realizar la compra. Por favor, facilítenme los datos de su cuenta bancaria para efectuar la transferencia de UYU $${totalUYU} y coordinar la entrega._`;
-      } else {
-        message += `🙌 _¡Hola! Acabo de coordinar este pedido por la web. Quedo a la espera para coordinar los detalles de entrega de mi compra por UYU $${totalUYU}._`;
-      }
-
-      const encodedText = encodeURIComponent(message);
-      const cleanPhone = settings.whatsappNumber.replace(/[^0-9]/g, "");
-      const waUrl = `https://wa.me/${cleanPhone}?text=${encodedText}`;
-      
-      window.open(waUrl, "_blank", "referrer");
-      onClearCart();
-      onBackToCatalog();
+    } catch (err: any) {
+      setErrorMessage(err.message || "Hubo un problema de conexión con el servidor de la tienda.");
+      setIsProcessing(false);
     }
   };
 

@@ -17,6 +17,7 @@ import {
   Sparkles,
   Smartphone,
   CheckCircle2,
+  CheckSquare,
   AlertCircle,
   Database,
   ArrowLeft,
@@ -216,6 +217,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   bannerTitle: "Colección Exclusiva de Primavera",
   bannerSubtitle: "Descubre las últimas tendencias con descuentos de hasta el 40%.",
   bannerImageUrl: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80",
+  bannerOpacity: 35,
   whatsappNumber: "5491123456789",
   primaryColor: "#2563eb",
   accentColor: "#10b981",
@@ -324,7 +326,9 @@ const DEFAULT_SETTINGS: SiteSettings = {
   emailSenderSmtpPass: "",
   emailSenderFromAddress: "Ventas Juem <no-reply@tu-tienda.com>",
   emailTemplateOrderCreatedSubject: "¡Gracias por tu compra! Tu pedido #{{orderId}} ha sido recibido",
-  emailTemplateOrderStatusChangedSubject: "Actualización de tu pedido #{{orderId}} - {{statusText}}"
+  emailTemplateOrderStatusChangedSubject: "Actualización de tu pedido #{{orderId}} - {{statusText}}",
+  emailTemplateOrderCreatedBody: "Muchas gracias por realizar tu compra con nosotros. Tu pago ha sido aprobado correctamente y tu pedido ya está siendo preparado para entrega. Aquí tienes los detalles completos de tu compra:",
+  emailTemplateOrderStatusChangedBody: "Te notificamos que el estado de tu pedido #{{orderId}} ha sido actualizado por nuestro equipo de logística."
 };
 
 const ICON_LABELS: Record<string, string> = {
@@ -723,6 +727,8 @@ export default function App() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [bannerProductSearch, setBannerProductSearch] = useState("");
   const [uploadingSlideIdx, setUploadingSlideIdx] = useState<number | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingEmailHeader, setUploadingEmailHeader] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("todos");
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>("all");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -735,6 +741,12 @@ export default function App() {
   const [onlyInStock, setOnlyInStock] = useState<boolean>(false);
   const [showFiltersPanel, setShowFiltersPanel] = useState<boolean>(false);
   const [stockFilterTab, setStockFilterTab] = useState<"all" | "outOfStock" | "lowStock" | "alerts">("alerts");
+
+  // Custom toast notification system to bypass iframe alert limits
+  const showToast = (message: string, type: "success" | "error" | "info" = "info") => {
+    const adminType = type === "info" ? "neutral" : type;
+    showAdminToast(message, adminType);
+  };
 
   // Helper to verify admin token with backend
   const verifyAdminToken = async (token: string) => {
@@ -1077,7 +1089,18 @@ export default function App() {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${activeToken}`
         },
-        body: JSON.stringify({ toEmail: testEmailAddress.trim() })
+        body: JSON.stringify({ 
+          toEmail: testEmailAddress.trim(),
+          smtpConfig: {
+            emailSenderEnabled: editingSettings.emailSenderEnabled,
+            emailSenderSmtpHost: editingSettings.emailSenderSmtpHost,
+            emailSenderSmtpPort: editingSettings.emailSenderSmtpPort,
+            emailSenderSmtpUser: editingSettings.emailSenderSmtpUser,
+            emailSenderSmtpPass: editingSettings.emailSenderSmtpPass,
+            emailSenderFromAddress: editingSettings.emailSenderFromAddress,
+            siteTitle: editingSettings.siteTitle
+          }
+        })
       });
       const data = await res.json();
       if (data.success) {
@@ -1116,6 +1139,7 @@ export default function App() {
   };
 
   const [editingSettings, setEditingSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
+  const [emailPreviewTab, setEmailPreviewTab] = useState<'created' | 'changed'>('created');
 
   const [googlePlaceSearchQuery, setGooglePlaceSearchQuery] = useState("");
   const [googlePlaceSearchResults, setGooglePlaceSearchResults] = useState<any[]>([]);
@@ -1421,7 +1445,7 @@ export default function App() {
     } else {
       // Create an elegant SVG-based Favicon automatically with the company's initials matching the primary theme color!
       const initials = (store.settings.logoText || "J").substring(0, 2).toUpperCase();
-      const primaryColor = store.settings.primaryColor || "#5346ff";
+      const primaryColor = store.settings.primaryColor || "#D4A55A";
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="${primaryColor}"/><text x="50%" y="58%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-family="system-ui, sans-serif" font-weight="900" font-size="16">${initials}</text></svg>`;
       const base64Svg = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
       link.href = base64Svg;
@@ -2308,22 +2332,16 @@ export default function App() {
   }
 
   return (
-    <div id="app" className={`min-h-screen flex flex-col font-sans transition-colors duration-200 ${
-      store.settings.themeMode === "dark" ? "bg-zinc-950 text-white" : "bg-slate-50 text-slate-800"
-    }`}>
+    <div id="app" className="min-h-screen flex flex-col font-sans transition-colors duration-200 bg-[#050B1A] text-[#F4EAD7]">
       
       {/* Dynamic theme style overrides */}
       <ThemeStyles settings={store.settings} />
 
       {/* Fixed Top Navigation Container */}
-      <div className={`fixed top-0 left-0 right-0 w-full z-50 transition-all duration-305 ${
-        store.settings.themeMode === "dark" 
-          ? scrolled 
-            ? "bg-zinc-950/80 border-b border-zinc-805 backdrop-blur-md shadow-lg shadow-black/20" 
-            : "bg-zinc-950 border-b border-zinc-900 shadow-sm" 
-          : scrolled 
-            ? "bg-white/80 border-b border-slate-200 backdrop-blur-md shadow-md shadow-slate-100/70" 
-            : "bg-white border-b border-slate-200 shadow-sm"
+      <div className={`fixed top-0 left-0 right-0 w-full z-50 transition-all duration-300 ${
+        scrolled 
+          ? "bg-[#050B1A]/95 border-b border-[#D4A55A]/20 backdrop-blur-md shadow-lg shadow-black/30" 
+          : "bg-[#050B1A] border-b border-[#D4A55A]/15 shadow-md shadow-black/10"
       }`}>
         {/* Top Banner Message for Promotions & Free Shipping Slider */}
         {bannerSlides.length > 0 && (
@@ -2360,11 +2378,7 @@ export default function App() {
           {activeTab === "storefront" && (
             <button
               onClick={() => setIsMobileMenuOpen(true)}
-              className={`p-2 rounded-xl lg:hidden transition cursor-pointer ${
-                store.settings.themeMode === "dark"
-                  ? "hover:bg-zinc-800 text-zinc-300 hover:text-white"
-                  : "hover:bg-slate-100 text-slate-600 hover:text-slate-900"
-              }`}
+              className="p-2 rounded-xl lg:hidden transition cursor-pointer hover:bg-[#0B1730] text-[#E6BF76] hover:text-white"
               title="Abrir menú"
               aria-label="Menú"
             >
@@ -2380,7 +2394,7 @@ export default function App() {
             className="flex items-center gap-2 md:gap-4 shrink-0 cursor-pointer"
           >
             {/* Elegant Circular Logo inspired by Juem logo from design HTML */}
-            {store.settings.logoType === "image" && store.settings.logoImageUrl ? (
+            {store.settings.logoType === "image" && !!store.settings.logoImageUrl ? (
               <img
                 src={store.settings.logoImageUrl}
                 alt={store.settings.siteTitle}
@@ -2388,12 +2402,12 @@ export default function App() {
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <div className="w-8 h-8 theme-btn-primary rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-sm">
+              <div className="w-8 h-8 bg-[#D4A55A] rounded-xl flex items-center justify-center text-[#050B1A] font-bold text-lg shadow-sm">
                 {store.settings.logoText || "J"}
               </div>
             )}
             <div>
-              <h1 className="font-bold text-sm md:text-lg tracking-tight flex items-center gap-1.5">
+              <h1 className="font-serif font-bold text-base md:text-xl tracking-widest text-[#F4EAD7] flex items-center gap-1.5">
                 <span>{store.settings.siteTitle}</span>
               </h1>
             </div>
@@ -2817,7 +2831,7 @@ export default function App() {
                                   >
                                     <div className="relative w-10 h-10 rounded-md overflow-hidden bg-slate-100 dark:bg-zinc-800 shrink-0 border border-slate-150 dark:border-zinc-900">
                                       <img
-                                        src={p.imageUrl}
+                                        src={p.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=100&q=80"}
                                         alt={p.name}
                                         referrerPolicy="no-referrer"
                                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
@@ -3129,9 +3143,7 @@ export default function App() {
           }`}>
             <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-8 text-center md:text-left">
               <div className="space-y-2 group">
-                <h4 className={`font-bold text-xs uppercase tracking-[0.14em] font-mono transition-all duration-300 ${
-                  store.settings.themeMode === "dark" ? "text-zinc-100 group-hover:text-[#5346ff]" : "text-slate-850 group-hover:text-indigo-600"
-                }`}>
+                <h4 className="font-bold text-xs uppercase tracking-[0.14em] font-sans transition-all duration-300 text-[#F4EAD7] group-hover:text-[#E6BF76]">
                   {store.settings.footerCol1Title || "🚀 Compra Personalizada"}
                 </h4>
                 <p className="text-xs leading-relaxed opacity-85 hover:opacity-100 transition-opacity">
@@ -3139,9 +3151,7 @@ export default function App() {
                 </p>
               </div>
               <div className="space-y-2 group">
-                <h4 className={`font-bold text-xs uppercase tracking-[0.14em] font-mono transition-all duration-300 ${
-                  store.settings.themeMode === "dark" ? "text-zinc-100 group-hover:text-[#5346ff]" : "text-slate-850 group-hover:text-indigo-600"
-                }`}>
+                <h4 className="font-bold text-xs uppercase tracking-[0.14em] font-sans transition-all duration-300 text-[#F4EAD7] group-hover:text-[#E6BF76]">
                   {store.settings.footerCol2Title || "🌟 Calidad Asegurada"}
                 </h4>
                 <p className="text-xs leading-relaxed opacity-85 hover:opacity-100 transition-opacity">
@@ -3149,9 +3159,7 @@ export default function App() {
                 </p>
               </div>
               <div className="space-y-2 group">
-                <h4 className={`font-bold text-xs uppercase tracking-[0.14em] font-mono transition-all duration-300 ${
-                  store.settings.themeMode === "dark" ? "text-zinc-100 group-hover:text-[#5346ff]" : "text-slate-850 group-hover:text-indigo-600"
-                }`}>
+                <h4 className="font-bold text-xs uppercase tracking-[0.14em] font-sans transition-all duration-300 text-[#F4EAD7] group-hover:text-[#E6BF76]">
                   {store.settings.footerCol3Title || "📞 Soporte Directo"}
                 </h4>
                 <p className="text-xs leading-relaxed opacity-85 hover:opacity-100 transition-opacity">
@@ -3730,8 +3738,8 @@ export default function App() {
                         </div>
 
                         {editingSettings.logoType === "image" ? (
-                          <div>
-                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">URL de la Imagen del Logo</label>
+                          <div className="space-y-1.5">
+                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1">URL de la Imagen del Logo</label>
                             <input
                               type="text"
                               value={editingSettings.logoImageUrl || ""}
@@ -3739,6 +3747,65 @@ export default function App() {
                               className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono"
                               placeholder="https://ejemplo.com/logo.png"
                             />
+                            
+                            <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-zinc-900/40 border border-slate-200/50 dark:border-zinc-800/40 mt-1">
+                              <span className="text-[9px] font-semibold text-slate-500 dark:text-zinc-450">Sincronizar Logo con Cloudinary:</span>
+                              <label 
+                                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded font-bold text-[9px] cursor-pointer transition-all shadow-xs select-none ${
+                                  uploadingLogo 
+                                    ? "bg-slate-105 dark:bg-zinc-800 text-zinc-500 pointer-events-none animate-pulse" 
+                                    : "bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-750 text-white"
+                                }`}
+                              >
+                                {uploadingLogo ? (
+                                  <>
+                                    <Loader2 className="w-3 h-3 animate-spin text-[#5346ff]" />
+                                    <span>Subiendo...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Upload className="w-2.5 h-2.5" />
+                                    <span>Subir Imagen</span>
+                                  </>
+                                )}
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  disabled={uploadingLogo}
+                                  onChange={async (e) => {
+                                    if (e.target.files && e.target.files[0]) {
+                                      const file = e.target.files[0];
+                                      const formData = new FormData();
+                                      formData.append("image", file);
+                                      try {
+                                        setUploadingLogo(true);
+                                        const uploadRes = await fetch("/api/cloudinary/upload", {
+                                          method: "POST",
+                                          headers: {
+                                            "Authorization": `Bearer ${localStorage.getItem("apex_admin_token") || ""}`
+                                          },
+                                          body: formData,
+                                        });
+                                        const resText = await uploadRes.text();
+                                        let parsedData: any = null;
+                                        try { parsedData = JSON.parse(resText); } catch (pErr) {}
+                                        if (uploadRes.ok && parsedData && parsedData.success && parsedData.url) {
+                                          setEditingSettings({ ...editingSettings, logoImageUrl: parsedData.url });
+                                          showToast("¡Logo subido e integrado con éxito! 🎨", "success");
+                                        } else {
+                                          showToast((parsedData && parsedData.message) || "Error al subir logotipo.", "error");
+                                        }
+                                      } catch (err) {
+                                        showToast("Fallo al conectar con Cloudinary.", "error");
+                                      } finally {
+                                        setUploadingLogo(false);
+                                      }
+                                    }
+                                  }}
+                                />
+                              </label>
+                            </div>
                           </div>
                         ) : (
                           <div>
@@ -3759,9 +3826,9 @@ export default function App() {
                       <div className="flex items-center gap-3 p-2 bg-white dark:bg-zinc-950/45 border border-dashed border-slate-200 dark:border-zinc-800 rounded-lg">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Vista Previa:</span>
                         <div className="flex items-center gap-2">
-                          {editingSettings.logoType === "image" && editingSettings.logoImageUrl ? (
+                          {editingSettings.logoType === "image" && !!editingSettings.logoImageUrl ? (
                             <img
-                              src={editingSettings.logoImageUrl}
+                              src={editingSettings.logoImageUrl || null}
                               alt="Vista Previa Logo"
                               className="w-8 h-8 rounded-xl object-cover shadow-sm bg-zinc-950/25"
                               onError={(e) => {
@@ -3973,10 +4040,10 @@ export default function App() {
                                       className="flex-1 px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono"
                                       placeholder="URL de la imagen (ej: https://images.unsplash.com/...)"
                                     />
-                                    {slide.imageUrl && (
+                                    {!!slide.imageUrl && (
                                       <div className="relative group/mini duration-150 shrink-0">
                                         <img 
-                                          src={slide.imageUrl} 
+                                          src={slide.imageUrl || null} 
                                           alt="mini previsualizacion de slide" 
                                           className="h-8 w-16 object-cover rounded bg-zinc-800 border border-zinc-700/50"
                                           referrerPolicy="no-referrer"
@@ -4004,62 +4071,75 @@ export default function App() {
                                     </div>
                                     
                                     <div className="shrink-0 w-full sm:w-auto flex items-center justify-end">
-                                      {uploadingSlideIdx === idx ? (
-                                        <div className="flex items-center gap-1.5 text-xs text-zinc-500 font-medium py-1 px-2">
-                                          <Loader2 className="w-3.5 h-3.5 animate-spin text-[#5346ff]" />
-                                          <span className="text-[10px] font-mono">Subiendo...</span>
-                                        </div>
-                                      ) : (
-                                        <label className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-750 text-white font-medium text-[10px] cursor-pointer transition-colors shadow-sm select-none">
-                                          <Upload className="w-3 h-3" />
-                                          <span>Seleccionar Archivo</span>
-                                          <input
-                                            type="file"
-                                            accept="image/*"
-                                            className="hidden"
-                                            onChange={async (e) => {
-                                              if (e.target.files && e.target.files[0]) {
-                                                const file = e.target.files[0];
-                                                const formData = new FormData();
-                                                formData.append("image", file);
+                                      <label 
+                                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded font-medium text-[10px] cursor-pointer transition-all shadow-sm select-none ${
+                                          uploadingSlideIdx === idx 
+                                            ? "bg-slate-100 dark:bg-zinc-800 text-zinc-500 pointer-events-none" 
+                                            : "bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-750 text-white"
+                                        }`}
+                                      >
+                                        {uploadingSlideIdx === idx ? (
+                                          <>
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#5346ff]" />
+                                            <span className="font-mono">Subiendo...</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Upload className="w-3 h-3" />
+                                            <span>Seleccionar Archivo</span>
+                                          </>
+                                        )}
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          className="hidden"
+                                          disabled={uploadingSlideIdx === idx}
+                                          onChange={async (e) => {
+                                            if (e.target.files && e.target.files[0]) {
+                                              const file = e.target.files[0];
+                                              const formData = new FormData();
+                                              formData.append("image", file);
+                                              
+                                              try {
+                                                setUploadingSlideIdx(idx);
+                                                const uploadRes = await fetch("/api/cloudinary/upload", {
+                                                  method: "POST",
+                                                  headers: {
+                                                    "Authorization": `Bearer ${localStorage.getItem("apex_admin_token") || ""}`
+                                                  },
+                                                  body: formData,
+                                                });
+                                                
+                                                const resText = await uploadRes.text();
+                                                let parsedData: any = null;
+                                                
+                                                if (resText.trim().startsWith("<!doctype") || resText.trim().startsWith("<html")) {
+                                                  showToast("El servidor de subidas no pudo procesar el archivo. Comprueba que tus ajustes de Cloudinary sean correctos.", "error");
+                                                  return;
+                                                }
                                                 
                                                 try {
-                                                  setUploadingSlideIdx(idx);
-                                                  const uploadRes = await fetch("/api/cloudinary/upload", {
-                                                    method: "POST",
-                                                    body: formData,
-                                                  });
-                                                  
-                                                  const resText = await uploadRes.text();
-                                                  let parsedData: any = null;
-                                                  
-                                                  if (resText.trim().startsWith("<!doctype") || resText.trim().startsWith("<html")) {
-                                                    alert("El servidor de subidas no pudo procesar el archivo. Comprueba que tus ajustes de Cloudinary sean correctos.");
-                                                    return;
-                                                  }
-                                                  
-                                                  try {
-                                                    parsedData = JSON.parse(resText);
-                                                  } catch (pErr) {
-                                                    console.error("Error al parsear respuesta JSON:", pErr);
-                                                  }
-
-                                                  if (uploadRes.ok && parsedData && parsedData.success && parsedData.url) {
-                                                    updateSlideField("imageUrl", parsedData.url);
-                                                  } else {
-                                                    alert((parsedData && parsedData.message) || "Ocurrió un error al subir a Cloudinary.");
-                                                  }
-                                                } catch (err) {
-                                                  console.error(err);
-                                                  alert("Fallo al conectar con la API de Cloudinary.");
-                                                } finally {
-                                                  setUploadingSlideIdx(null);
+                                                  parsedData = JSON.parse(resText);
+                                                } catch (pErr) {
+                                                  console.error("Error al parsear respuesta JSON:", pErr);
                                                 }
+
+                                                if (uploadRes.ok && parsedData && parsedData.success && parsedData.url) {
+                                                  updateSlideField("imageUrl", parsedData.url);
+                                                  showToast("¡Imagen del slider subida con éxito! ✨", "success");
+                                                } else {
+                                                  showToast((parsedData && parsedData.message) || "Ocurrió un error al subir a Cloudinary.", "error");
+                                                }
+                                              } catch (err) {
+                                                console.error(err);
+                                                showToast("Fallo al conectar con la API de Cloudinary.", "error");
+                                              } finally {
+                                                setUploadingSlideIdx(null);
                                               }
-                                            }}
-                                          />
-                                        </label>
-                                      )}
+                                            }
+                                          }}
+                                        />
+                                      </label>
                                     </div>
                                   </div>
                                 </div>
@@ -4244,6 +4324,52 @@ export default function App() {
                           <Plus className="h-3.5 w-3.5" />
                           <span>Añadir Nueva Diapositiva al Slider</span>
                         </button>
+                      </div>
+                    </div>
+
+                    {/* Ajuste de Opacidad del Banner General */}
+                    <div className="border border-slate-200 dark:border-zinc-800 rounded-xl p-4 bg-slate-50/50 dark:bg-zinc-900/30 space-y-3.5">
+                      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-zinc-850 pb-2">
+                        <Palette className="h-4 w-4 text-blue-500" />
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-705 dark:text-zinc-300">
+                          Diseño y Opacidad del Banner
+                        </h4>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-800 dark:text-zinc-200">
+                              Opacidad de las Imágenes del Carrusel
+                            </label>
+                            <p className="text-[10px] text-zinc-400 mt-0.5 max-w-xl">
+                              Ajusta la luminosidad de las imágenes de fondo en el carrusel de inicio. Un porcentaje menor oscurece la imagen para destacar el texto blanco; un porcentaje mayor hace el fondo más claro y visible.
+                            </p>
+                          </div>
+                          <span className="text-xs font-mono font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2.5 py-1 rounded-lg shrink-0 self-start sm:self-center">
+                            {editingSettings.bannerOpacity !== undefined ? editingSettings.bannerOpacity : 35}%
+                          </span>
+                        </div>
+                        
+                        <div className="flex items-center gap-4 py-1">
+                          <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">Más Oscuro (10%)</span>
+                          <input
+                            type="range"
+                            min="10"
+                            max="100"
+                            step="5"
+                            value={editingSettings.bannerOpacity !== undefined ? editingSettings.bannerOpacity : 35}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value);
+                              setEditingSettings({
+                                ...editingSettings,
+                                bannerOpacity: val
+                              });
+                            }}
+                            className="flex-1 cursor-pointer accent-blue-600 dark:accent-blue-500 h-1.5 bg-slate-200 dark:bg-zinc-800 rounded-lg appearance-none outline-none"
+                          />
+                          <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">Más Claro (100%)</span>
+                        </div>
                       </div>
                     </div>
 
@@ -5703,6 +5829,9 @@ export default function App() {
                                                       try {
                                                         const uploadRes = await fetch("/api/cloudinary/upload", {
                                                           method: "POST",
+                                                          headers: {
+                                                            "Authorization": `Bearer ${localStorage.getItem("apex_admin_token") || ""}`
+                                                          },
                                                           body: formData,
                                                         });
                                                         const resText = await uploadRes.text();
@@ -5726,12 +5855,13 @@ export default function App() {
                                                             ...newProduct,
                                                             variants: nextArr
                                                           });
+                                                          showToast("¡Imagen de variante cargada con éxito! 🛍️", "success");
                                                         } else {
-                                                          alert((parsedData && parsedData.message) || "Error al subir a Cloudinary.");
+                                                          showToast((parsedData && parsedData.message) || "Error al subir a Cloudinary.", "error");
                                                         }
                                                       } catch (err) {
                                                         console.error(err);
-                                                        alert("Error al conectar con la API de subida.");
+                                                        showToast("Error al conectar con la API de subida.", "error");
                                                       }
                                                     }
                                                   }}
@@ -5741,10 +5871,10 @@ export default function App() {
                                             </div>
                                           )}
 
-                                          {v.imageUrl && (
+                                          {!!v.imageUrl && (
                                             <div className="flex items-center gap-1 mt-0.5 bg-slate-100/40 dark:bg-zinc-900/40 p-1 rounded border border-slate-200/50 dark:border-zinc-800/30">
                                               <img 
-                                                src={v.imageUrl} 
+                                                src={v.imageUrl || null} 
                                                 alt="preview" 
                                                 className="w-6 h-6 object-cover rounded border border-zinc-700/20 shadow-xs shrink-0" 
                                                 onError={(e) => { e.target.style.display = 'none'; }} 
@@ -6835,6 +6965,9 @@ export default function App() {
                                                       try {
                                                         const uploadRes = await fetch("/api/cloudinary/upload", {
                                                           method: "POST",
+                                                          headers: {
+                                                            "Authorization": `Bearer ${localStorage.getItem("apex_admin_token") || ""}`
+                                                          },
                                                           body: formData,
                                                         });
                                                         const resText = await uploadRes.text();
@@ -6858,12 +6991,13 @@ export default function App() {
                                                             ...editingProduct,
                                                             variants: nextArr
                                                           });
+                                                          showToast("¡Imagen de variante cargada con éxito! 🛍️", "success");
                                                         } else {
-                                                          alert((parsedData && parsedData.message) || "Error al subir a Cloudinary.");
+                                                          showToast((parsedData && parsedData.message) || "Error al subir a Cloudinary.", "error");
                                                         }
                                                       } catch (err) {
                                                         console.error(err);
-                                                        alert("Error al conectar con la API de subida.");
+                                                        showToast("Error al conectar con la API de subida.", "error");
                                                       }
                                                     }
                                                   }}
@@ -6873,10 +7007,10 @@ export default function App() {
                                             </div>
                                           )}
 
-                                          {v.imageUrl && (
+                                          {!!v.imageUrl && (
                                             <div className="flex items-center gap-1 mt-0.5 bg-slate-100/40 dark:bg-zinc-900/40 p-1 rounded border border-slate-200/50 dark:border-zinc-800/30">
                                               <img 
-                                                src={v.imageUrl} 
+                                                src={v.imageUrl || null} 
                                                 alt="preview" 
                                                 className="w-6 h-6 object-cover rounded border border-zinc-700/20 shadow-xs shrink-0" 
                                                 onError={(e) => { e.target.style.display = 'none'; }} 
@@ -8876,9 +9010,9 @@ export default function App() {
                             {editingSettings.googleMyBusinessConnected ? (
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
                                 <div className="flex items-center gap-3">
-                                  {editingSettings.googleMerchantPicture ? (
+                                  {!!editingSettings.googleMerchantPicture ? (
                                     <img
-                                      src={editingSettings.googleMerchantPicture}
+                                      src={editingSettings.googleMerchantPicture || null}
                                       alt="Google Merchant profile"
                                       className="w-10 h-10 rounded-full border border-emerald-500/35 object-cover"
                                       referrerPolicy="no-referrer"
@@ -9369,13 +9503,112 @@ export default function App() {
                     <div className="p-5 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 space-y-4 shadow-sm">
                       <h3 className="text-sm font-extrabold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
                         <Palette className="h-4 w-4 text-indigo-500" />
-                        <span>Personalizar Plantillas de Asunto</span>
+                        <span>Personalizar Diseño y Plantillas de Correo</span>
                       </h3>
                       <p className="text-[10px] text-slate-400 dark:text-zinc-500">
-                        Configura el asunto dinámico de tus notificaciones automáticas utilizando variables con doble corchete como o <code className="bg-slate-100 dark:bg-zinc-950 px-1 py-0.5 rounded text-indigo-500">{"{{orderId}}"}</code>, <code className="bg-slate-100 dark:bg-zinc-950 px-1 py-0.5 rounded text-indigo-500">{"{{customerName}}"}</code>, <code className="bg-slate-100 dark:bg-zinc-950 px-1 py-0.5 rounded text-indigo-500">{"{{total}}"}</code> o <code className="bg-slate-100 dark:bg-zinc-950 px-1 py-0.5 rounded text-indigo-500">{"{{statusText}}"}</code>.
+                        Configura el diseño visual de tus notificaciones automáticas utilizando una imagen de cabecera sincronizada con Cloudinary y define los asuntos y cuerpos de mensajes dinámicos.
                       </p>
 
                       <div className="grid grid-cols-1 gap-4">
+                        {/* Email Header Banner Uploader Section */}
+                        <div className="space-y-3 p-4 bg-slate-50 dark:bg-zinc-950/40 rounded-xl border border-slate-200/60 dark:border-zinc-850/60 animate-fade-in">
+                          <div className="flex items-center justify-between">
+                            <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-zinc-400">
+                              Imagen de Cabecera del Correo (Banner Widescreen)
+                            </label>
+                            <span className="text-[9px] text-indigo-500 font-medium font-sans">Sugerido: 1200x500 (2.4:1 ratio)</span>
+                          </div>
+                          <input
+                            type="text"
+                            value={editingSettings.emailHeaderImageUrl || ""}
+                            onChange={(e) => setEditingSettings({ ...editingSettings, emailHeaderImageUrl: e.target.value })}
+                            className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                            placeholder="URL del banner o sube una imagen abajo..."
+                          />
+                          
+                          {!!editingSettings.emailHeaderImageUrl && (
+                            <div className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-800 max-h-[140px]">
+                              <img
+                                src={editingSettings.emailHeaderImageUrl || null}
+                                alt="Previsualización Banner Correo"
+                                className="w-full max-h-[140px] object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = "/src/assets/images/juem_email_banner_1781008874987.png";
+                                }}
+                                referrerPolicy="no-referrer"
+                              />
+                              <div className="absolute top-2 right-2 bg-black/60 text-white px-2 py-0.5 rounded text-[8px] font-bold">Vista Previa Cabecera</div>
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-zinc-900/40 border border-slate-200 dark:border-zinc-800/40">
+                            <div className="space-y-0.5">
+                              <p className="text-[9.5px] font-bold text-slate-700 dark:text-zinc-350">
+                                Sincronizar Banner con Cloudinary:
+                              </p>
+                              <p className="text-[8.5px] text-slate-400 dark:text-zinc-500">
+                                Sube imágenes panorámicas elegantes para que tus correos luzcan premium.
+                              </p>
+                            </div>
+                            
+                            <label 
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white font-bold text-[9.5px] cursor-pointer transition shadow-xs select-none ${
+                                uploadingEmailHeader 
+                                  ? "bg-slate-200 dark:bg-zinc-800 text-zinc-500 pointer-events-none animate-pulse" 
+                                  : "bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600"
+                              }`}
+                            >
+                              {uploadingEmailHeader ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[#5346ff]" />
+                                  <span className="font-mono">Subiendo...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Upload className="w-3 h-3" />
+                                  <span>Sube tu Banner</span>
+                                </>
+                              )}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                disabled={uploadingEmailHeader}
+                                onChange={async (e) => {
+                                  if (e.target.files && e.target.files[0]) {
+                                    const file = e.target.files[0];
+                                    const formData = new FormData();
+                                    formData.append("image", file);
+                                    try {
+                                      setUploadingEmailHeader(true);
+                                      const uploadRes = await fetch("/api/cloudinary/upload", {
+                                        method: "POST",
+                                        headers: {
+                                          "Authorization": `Bearer ${localStorage.getItem("apex_admin_token") || ""}`
+                                        },
+                                        body: formData,
+                                      });
+                                      const resText = await uploadRes.text();
+                                      let parsedData: any = null;
+                                      try { parsedData = JSON.parse(resText); } catch (pErr) {}
+                                      if (uploadRes.ok && parsedData && parsedData.success && parsedData.url) {
+                                        setEditingSettings({ ...editingSettings, emailHeaderImageUrl: parsedData.url });
+                                        showToast("¡Banner de correo subido e integrado con éxito! ✉️", "success");
+                                      } else {
+                                        showToast((parsedData && parsedData.message) || "Error al subir banner.", "error");
+                                      }
+                                    } catch (err) {
+                                      showToast("Fallo al conectar con Cloudinary.", "error");
+                                    } finally {
+                                      setUploadingEmailHeader(false);
+                                    }
+                                  }
+                                }}
+                              />
+                            </label>
+                          </div>
+                        </div>
+
                         {/* Order created template */}
                         <div className="space-y-1">
                           <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Asunto para Compra Confirmada (Pedido Creado)</label>
@@ -9384,6 +9617,17 @@ export default function App() {
                             value={editingSettings.emailTemplateOrderCreatedSubject || ""}
                             onChange={(e) => setEditingSettings({ ...editingSettings, emailTemplateOrderCreatedSubject: e.target.value })}
                             className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Mensaje Introductorio / Cuerpo (Pedido Creado)</label>
+                          <textarea
+                            rows={3}
+                            value={editingSettings.emailTemplateOrderCreatedBody || ""}
+                            onChange={(e) => setEditingSettings({ ...editingSettings, emailTemplateOrderCreatedBody: e.target.value })}
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                            placeholder="Escribe el mensaje que recibirá el cliente..."
                           />
                         </div>
 
@@ -9397,6 +9641,17 @@ export default function App() {
                             className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
                           />
                         </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Mensaje / Cuerpo de Notificación (Cambio de Estado)</label>
+                          <textarea
+                            rows={3}
+                            value={editingSettings.emailTemplateOrderStatusChangedBody || ""}
+                            onChange={(e) => setEditingSettings({ ...editingSettings, emailTemplateOrderStatusChangedBody: e.target.value })}
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                            placeholder="Escribe el mensaje que recibirá el cliente cuando su pedido cambie de estado..."
+                          />
+                        </div>
                       </div>
 
                       <div className="pt-4 flex justify-end border-t border-slate-150 dark:border-zinc-850">
@@ -9408,6 +9663,263 @@ export default function App() {
                           <Save className="h-4 w-4" />
                           <span>Guardar Plantillas</span>
                         </button>
+                      </div>
+                    </div>
+
+                    {/* Live Email Visual Previewer - Mobile fallback only */}
+                    <div className="lg:hidden p-5 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 space-y-4 shadow-sm">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="space-y-0.5">
+                          <h3 className="text-xs font-extrabold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                            <Eye className="h-4 w-4 text-indigo-500" />
+                            <span>Vista Previa Interactiva del Cliente</span>
+                          </h3>
+                          <p className="text-[10px] text-slate-400 dark:text-zinc-500">
+                            Previsualiza en tiempo real cómo lucen tus notificaciones antes de mandar correos de prueba.
+                          </p>
+                        </div>
+                        <div className="flex bg-slate-100 dark:bg-zinc-950 p-1 rounded-xl border border-slate-200/50 dark:border-zinc-850 self-start sm:self-auto">
+                          <button
+                            type="button"
+                            onClick={() => setEmailPreviewTab('created')}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition flex items-center gap-1.5 cursor-pointer ${
+                              emailPreviewTab === 'created'
+                                ? 'bg-white dark:bg-zinc-855 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                                : 'text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200'
+                            }`}
+                          >
+                            <CheckSquare className="h-3 w-3" />
+                            <span>Pedido Recibido</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEmailPreviewTab('changed')}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition flex items-center gap-1.5 cursor-pointer ${
+                              emailPreviewTab === 'changed'
+                                ? 'bg-white dark:bg-zinc-855 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                                : 'text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-zinc-200'
+                            }`}
+                          >
+                            <Truck className="h-3 w-3" />
+                            <span>Pedido Enviado</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Mockup Mailbox Frame */}
+                      <div className="border border-slate-150 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-xs">
+                        {/* Mock Email Header Controls */}
+                        <div className="bg-slate-50 dark:bg-zinc-950 px-4 py-3 border-b border-slate-150 dark:border-zinc-850 flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 block"></span>
+                              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 block"></span>
+                              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 block"></span>
+                            </div>
+                            <span className="text-[9px] font-mono font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest">Bandeja de Entrada</span>
+                          </div>
+                          
+                          <div className="space-y-1.5 text-xs text-slate-600 dark:text-zinc-400 pt-1">
+                            <div className="text-left">
+                              <strong className="text-slate-400 dark:text-zinc-500 font-medium">De:</strong>{" "}
+                              <span className="font-semibold text-slate-700 dark:text-zinc-200 bg-slate-250/50 dark:bg-zinc-850 px-2 py-0.5 rounded-md text-[10px]">
+                                {editingSettings.emailSenderFromAddress || `${editingSettings.siteTitle || "Ventas Juem"} <no-reply@tienda.com>`}
+                              </span>
+                            </div>
+                            <div className="text-left">
+                              <strong className="text-slate-400 dark:text-zinc-500 font-medium">Para:</strong>{" "}
+                              <span className="font-semibold text-slate-700 dark:text-zinc-200 text-[11px]">Christian.olivera45@gmail.com</span>
+                            </div>
+                            <div className="flex items-baseline gap-1 pt-1.5 border-t border-slate-200/40 dark:border-zinc-850/40 text-left">
+                              <strong className="text-slate-400 dark:text-zinc-500 font-medium pr-1">Asunto:</strong>{" "}
+                              <span className="font-extrabold text-indigo-600 dark:text-indigo-400 text-xs">
+                                {emailPreviewTab === 'created' ? (
+                                  editingSettings.emailTemplateOrderCreatedSubject ? (
+                                    editingSettings.emailTemplateOrderCreatedSubject
+                                      .replace(/\{\{orderId\}\}/g, "6C3AA2")
+                                      .replace(/\{\{customerName\}\}/g, "Christian Olivera")
+                                      .replace(/\{\{total\}\}/g, "UYU $2.490")
+                                      .replace(/\{\{siteTitle\}\}/g, editingSettings.siteTitle || "Ventas Juem")
+                                  ) : (
+                                    `¡Gracias por tu compra! Tu pedido #6C3AA2 ha sido recibido`
+                                  )
+                                ) : (
+                                  editingSettings.emailTemplateOrderStatusChangedSubject ? (
+                                    editingSettings.emailTemplateOrderStatusChangedSubject
+                                      .replace(/\{\{orderId\}\}/g, "6C3AA2")
+                                      .replace(/\{\{customerName\}\}/g, "Christian Olivera")
+                                      .replace(/\{\{total\}\}/g, "UYU $2.490")
+                                      .replace(/\{\{statusText\}\}/g, "Enviado 🚚")
+                                      .replace(/\{\{siteTitle\}\}/g, editingSettings.siteTitle || "Ventas Juem")
+                                  ) : (
+                                    `Actualización de tu pedido #6C3AA2 - Enviado 🚚`
+                                  )
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Mail Canvas HTML Body Container - Emulating Real HTML exactly */}
+                        <div className="bg-slate-50 dark:bg-zinc-950 p-3 sm:p-6 flex justify-center overflow-x-auto text-left">
+                          <div className="w-full max-w-[550px] bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-md text-slate-800 text-[13px] leading-relaxed">
+                            {/* Email Brand Header Banner */}
+                            {editingSettings.emailHeaderImageUrl ? (
+                              <div className="border-b-[4px] border-amber-500 overflow-hidden bg-[#0c1221] relative animate-fade-in">
+                                <img
+                                  src={editingSettings.emailHeaderImageUrl || "/src/assets/images/juem_email_banner_1781008874987.png"}
+                                  alt={editingSettings.siteTitle || "Header"}
+                                  className="w-full object-cover max-h-[220px]"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = "/src/assets/images/juem_email_banner_1781008874987.png";
+                                  }}
+                                  referrerPolicy="no-referrer"
+                                />
+                                <div className="absolute inset-x-0 bottom-0 bg-black/50 py-3 px-4 text-center backdrop-blur-xs">
+                                  <p className="m-0 text-white text-xs font-bold tracking-wide">
+                                    {emailPreviewTab === 'created' 
+                                      ? "¡Tu compra ha sido aprobada con éxito! 🎉" 
+                                      : "¡Novedades de preparación y envío de paquete! 🚚"
+                                    }
+                                  </p>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="bg-indigo-600 p-8 text-center text-white animate-fade-in">
+                                {editingSettings.logoType === 'image' && !!editingSettings.logoImageUrl ? (
+                                  <div className="mb-3 flex justify-center">
+                                    <img 
+                                      src={editingSettings.logoImageUrl || null} 
+                                      alt={editingSettings.siteTitle || "Logo"} 
+                                      className="max-h-16 max-w-[200px] object-contain rounded-lg bg-white/15 p-1"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  </div>
+                                ) : (
+                                  <h1 className="m-0 text-xl font-extrabold tracking-tight">
+                                    {editingSettings.siteTitle || "Ventas Juem"}
+                                  </h1>
+                                )}
+                                <p className="mt-2 text-xs opacity-90 font-medium max-w-[340px] mx-auto leading-normal">
+                                  {emailPreviewTab === 'created' 
+                                    ? "¡Tu compra ha sido aprobada con éxito! 🎉" 
+                                    : "¡Novedades de preparación y envío de paquete! 🚚"
+                                  }
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Email Inner Body Padding */}
+                            <div className="p-6 space-y-5">
+                              <h2 className="text-sm font-extrabold text-slate-900">¡Hola, Christian Olivera!</h2>
+                              
+                              <p className="text-slate-600 text-xs leading-relaxed whitespace-pre-wrap">
+                                {emailPreviewTab === 'created' ? (
+                                  editingSettings.emailTemplateOrderCreatedBody ? (
+                                    editingSettings.emailTemplateOrderCreatedBody
+                                      .replace(/\{\{orderId\}\}/g, "6C3AA2")
+                                      .replace(/\{\{customerName\}\}/g, "Christian Olivera")
+                                      .replace(/\{\{total\}\}/g, "UYU $2.490")
+                                      .replace(/\{\{siteTitle\}\}/g, editingSettings.siteTitle || "Ventas Juem")
+                                  ) : (
+                                    "Muchas gracias por realizar tu compra con nosotros. Tu pago ha sido aprobado correctamente y tu pedido ya está siendo preparado para entrega. Aquí tienes los detalles completos de tu compra:"
+                                  )
+                                ) : (
+                                  editingSettings.emailTemplateOrderStatusChangedBody ? (
+                                    editingSettings.emailTemplateOrderStatusChangedBody
+                                      .replace(/\{\{orderId\}\}/g, "6C3AA2")
+                                      .replace(/\{\{customerName\}\}/g, "Christian Olivera")
+                                      .replace(/\{\{total\}\}/g, "UYU $2.490")
+                                      .replace(/\{\{statusText\}\}/g, "Enviado 🚚")
+                                      .replace(/\{\{siteTitle\}\}/g, editingSettings.siteTitle || "Ventas Juem")
+                                  ) : (
+                                    "Te notificamos que el estado de tu pedido #6C3AA2 ha sido actualizado por nuestro equipo de logística."
+                                  )
+                                )}
+                              </p>
+
+                              {/* Order Metadata Box Card */}
+                              <div className="bg-slate-50 border border-slate-150 rounded-xl p-4 space-y-2.5 text-xs text-slate-600">
+                                <div className="flex justify-between border-b border-slate-200 pb-2">
+                                  <span className="text-slate-400 font-semibold">Número de Pedido:</span>
+                                  <span className="font-mono font-bold text-indigo-600">#6C3AA2</span>
+                                </div>
+                                <div className="flex justify-between border-b border-slate-200 pb-2">
+                                  <span className="text-slate-400 font-semibold">Fecha de Compra:</span>
+                                  <span className="text-slate-800 font-medium font-mono">08/06/2026 20:06</span>
+                                </div>
+                                <div className="flex justify-between pb-1">
+                                  <span className="text-slate-400 font-semibold pr-4">Método de Pago:</span>
+                                  <span className="text-slate-800 font-bold text-right">Mercado Pago Uruguay</span>
+                                </div>
+                              </div>
+
+                              {/* Delivery status indicator badge block (shown for status changed) */}
+                              {emailPreviewTab === 'changed' && (
+                                <div className="border border-indigo-100 rounded-xl bg-indigo-50/40 p-4 text-center space-y-2">
+                                  <span className="text-[9px] uppercase font-bold tracking-widest text-indigo-600 block">Nuevo Estado del Envío</span>
+                                  <div className="flex items-center justify-center gap-2">
+                                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                    <span className="text-xs font-extrabold text-slate-800">Despachado / Enviado 🚚</span>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Table Items Header */}
+                              <div className="border-b-2 border-slate-150 pb-2 pt-1">
+                                <span className="text-[9px] uppercase tracking-widest font-extrabold text-slate-400">Detalle de Productos</span>
+                              </div>
+
+                              {/* Table Items */}
+                              <table className="w-full text-xs text-left text-slate-600 border-collapse">
+                                <thead>
+                                  <tr className="bg-slate-50 border-b border-slate-150 text-[9px] font-bold text-slate-400 uppercase">
+                                    <th className="p-2">Artículo</th>
+                                    <th className="p-2 text-center w-12">Cant.</th>
+                                    <th className="p-2 text-right w-16">Precio</th>
+                                    <th className="p-2 text-right w-20">Subtotal</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr className="border-b border-slate-100">
+                                    <td className="p-2 font-bold text-slate-800">Poncho Buzo Pijama Corderito <span className="text-[10px] text-slate-500 font-normal block">Talle: M - Color: Azul Marino</span></td>
+                                    <td className="p-2 text-center text-slate-800">1</td>
+                                    <td className="p-2 text-right">$1.690</td>
+                                    <td className="p-2 text-right font-bold text-slate-900">$1.690</td>
+                                  </tr>
+                                  <tr className="border-b border-slate-100">
+                                    <td className="p-2 font-bold text-slate-800">Medias Pantalón Térmicas Plush <span className="text-[10px] text-slate-500 font-normal block">Talle: Único - Color: Piel</span></td>
+                                    <td className="p-2 text-center text-slate-800">1</td>
+                                    <td className="p-2 text-right">$800</td>
+                                    <td className="p-2 text-right font-bold text-slate-900">$800</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+
+                              {/* Pricing breakdown block */}
+                              <div className="w-56 ml-auto border-t border-slate-150 pt-3 space-y-1.5 text-xs text-slate-600 font-medium">
+                                <div className="flex justify-between">
+                                  <span>Subtotal:</span>
+                                  <span>UYU $2.490</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>Envío:</span>
+                                  <span className="text-emerald-500 font-bold font-mono">Gratis</span>
+                                </div>
+                                <div className="flex justify-between text-slate-900 font-extrabold border-t border-slate-200/70 pt-2 text-xs">
+                                  <span>Total de la compra:</span>
+                                  <span className="text-slate-900">UYU $2.490</span>
+                                </div>
+                              </div>
+
+                              {/* Email Friendly Footer */}
+                              <div className="border-t border-slate-100 pt-5 text-center text-[9px] text-slate-400 space-y-1">
+                                <p>© {new Date().getFullYear()} {editingSettings.siteTitle || "Ventas Juem"}. Todos los derechos reservados.</p>
+                                <p>Este mail fue enviado de forma automática por transacciones mercantiles habilitadas por el cliente.</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -9517,90 +10029,323 @@ export default function App() {
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1">
                     <Smartphone className="h-4 w-4" />
-                    <span>Vista Previa del Dispositivo</span>
+                    <span>{adminSection === "emails" ? "Vista Previa de Notificación" : "Vista Previa del Dispositivo"}</span>
                   </label>
-                  <span className="text-[10px] px-2 py-0.5 bg-indigo-600 text-white rounded-full font-mono font-bold uppercase">En vivo</span>
+                  <span className="text-[10px] px-2 py-0.5 bg-indigo-600 text-white rounded-full font-mono font-bold uppercase animate-pulse">En vivo</span>
                 </div>
 
-                {/* Simulated frame preview of store */}
-                <div className="w-full aspect-[4/5] bg-zinc-950 rounded-3xl border-8 border-zinc-800 shadow-2xl relative overflow-hidden flex flex-col scale-100 origin-top">
-                  
-                  {/* Mockup Store Header */}
-                  <div className="h-11 border-b border-zinc-900 flex items-center justify-between px-3 bg-zinc-900/60 select-none">
-                    <div className="text-white font-extrabold italic text-xs tracking-tight">{editingSettings.siteTitle}</div>
-                    <div className="flex gap-2 text-zinc-500 text-[9px] font-semibold">
-                      <span>Catálogo</span>
-                      <span className="theme-text-primary">Cart (1)</span>
+                {adminSection === "emails" ? (
+                  /* Simulated smartphone frame preview of emails */
+                  <div className="w-full aspect-[4/5.5] bg-slate-50 dark:bg-zinc-950 rounded-3xl border-8 border-zinc-800 shadow-2xl relative overflow-hidden flex flex-col scale-100 origin-top">
+                    {/* Mock Status Bar */}
+                    <div className="h-10 border-b border-slate-150 dark:border-zinc-850 bg-white dark:bg-zinc-900 flex items-center justify-between px-4 select-none">
+                      <div className="flex items-center gap-1.5">
+                        <Mail className="h-3.5 w-3.5 text-indigo-500" />
+                        <span className="text-[10px] font-extrabold text-slate-700 dark:text-zinc-200 uppercase tracking-wider">Email del Cliente</span>
+                      </div>
+                      <div className="flex bg-slate-100 dark:bg-zinc-805 p-0.5 rounded-lg border border-slate-200/40 dark:border-zinc-850 scale-90">
+                        <button
+                          type="button"
+                          onClick={() => setEmailPreviewTab('created')}
+                          className={`px-2 py-1 rounded-md text-[8px] font-extrabold uppercase tracking-wide transition cursor-pointer ${
+                            emailPreviewTab === 'created'
+                              ? 'bg-white dark:bg-zinc-700 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                              : 'text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'
+                          }`}
+                        >
+                          Pedido
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEmailPreviewTab('changed')}
+                          className={`px-2 py-1 rounded-md text-[8px] font-extrabold uppercase tracking-wide transition cursor-pointer ${
+                            emailPreviewTab === 'changed'
+                              ? 'bg-white dark:bg-zinc-700 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                              : 'text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300'
+                          }`}
+                        >
+                          Estado
+                        </button>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Mockup visual representation in mini card */}
-                  <div className="p-4 flex-1 overflow-y-auto space-y-3 bg-zinc-950 text-white flex flex-col justify-between">
-                    <div>
-                      {/* Banner teaser */}
-                      <div className="relative h-20 rounded-lg overflow-hidden bg-zinc-900 mb-2">
-                        <img
-                          src={editingSettings.bannerImageUrl}
-                          alt="preview mini layout"
-                          className="w-full h-full object-cover opacity-50"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 to-transparent"></div>
-                        <div className="absolute bottom-1.5 left-2">
-                          <h4 className="text-[10px] font-bold text-white line-clamp-1">{editingSettings.bannerTitle}</h4>
-                          <span className="text-[8px] text-zinc-400 font-light block line-clamp-1">{editingSettings.bannerSubtitle}</span>
+                    {/* Email content scrollable box */}
+                    <div className="flex-1 overflow-y-auto p-3 bg-slate-100 dark:bg-zinc-950 text-left">
+                      {/* Email Client Subject Header Card */}
+                      <div className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-slate-150 dark:border-zinc-850/80 shadow-xs space-y-1 text-slate-600 dark:text-zinc-400 mb-3">
+                        <div className="flex justify-between items-center text-[9px] pb-1 border-b border-slate-100 dark:border-zinc-800/50">
+                          <span className="text-slate-400 font-semibold uppercase">De:</span>
+                          <span className="font-bold text-slate-700 dark:text-zinc-200 truncate max-w-[160px]">
+                            {editingSettings.emailSenderFromAddress || `${editingSettings.siteTitle || "Ventas Juem"} <no-reply@tienda.com>`}
+                          </span>
+                        </div>
+                        <div className="flex items-baseline gap-1 text-[10px] pt-1">
+                          <span className="text-slate-400 font-semibold uppercase text-[8px]">Asunto:</span>
+                          <span className="font-extrabold text-indigo-600 dark:text-indigo-400 transition-all duration-300 truncate max-w-[190px]">
+                            {emailPreviewTab === 'created' ? (
+                              editingSettings.emailTemplateOrderCreatedSubject ? (
+                                editingSettings.emailTemplateOrderCreatedSubject
+                                  .replace(/\{\{orderId\}\}/g, "6C3AA2")
+                                  .replace(/\{\{customerName\}\}/g, "Christian Olivera")
+                                  .replace(/\{\{total\}\}/g, "UYU $2.490")
+                                  .replace(/\{\{siteTitle\}\}/g, editingSettings.siteTitle || "Ventas Juem")
+                              ) : (
+                                `¡Gracias por tu compra! Tu pedido #6C3AA2 ha sido recibido`
+                              )
+                            ) : (
+                              editingSettings.emailTemplateOrderStatusChangedSubject ? (
+                                editingSettings.emailTemplateOrderStatusChangedSubject
+                                  .replace(/\{\{orderId\}\}/g, "6C3AA2")
+                                  .replace(/\{\{customerName\}\}/g, "Christian Olivera")
+                                  .replace(/\{\{total\}\}/g, "UYU $2.490")
+                                  .replace(/\{\{statusText\}\}/g, "Enviado 🚚")
+                                  .replace(/\{\{siteTitle\}\}/g, editingSettings.siteTitle || "Ventas Juem")
+                              ) : (
+                                `Actualización de tu pedido #6C3AA2 - Enviado 🚚`
+                              )
+                            )}
+                          </span>
                         </div>
                       </div>
 
-                      {/* Item representation */}
-                      {adminSection === "products" && editingProduct ? (
-                        <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2">
-                          <img
-                            src={editingProduct.imageUrl || UNSPLASH_TEMPLATES[0].url}
-                            alt="editing preview"
-                            className="w-full h-24 object-cover rounded-md"
-                          />
-                          <div>
-                            <span className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold">{editingProduct.category || "Categoría"}</span>
-                            <h5 className="text-[11px] font-bold line-clamp-1 text-zinc-100">{editingProduct.name || "Sin título"}</h5>
-                            <div className="flex items-baseline gap-1.5 mt-1">
-                              <span className="text-[12px] font-mono font-black text-indigo-400">${Number(editingProduct.price || 0).toFixed(2)}</span>
-                              {editingProduct.originalPrice && (
-                                <span className="text-[8px] text-zinc-500 line-through">${Number(editingProduct.originalPrice).toFixed(2)}</span>
-                              )}
+                      {/* Actual Client HTML Canvas */}
+                      <div className="bg-white border border-slate-150 rounded-2xl overflow-hidden shadow-sm text-slate-800 text-[11px] leading-relaxed">
+                        {/* Email Brand Header */}
+                        {editingSettings.emailHeaderImageUrl ? (
+                          <div className="border-b-2 border-amber-500 overflow-hidden bg-[#0c1221] relative animate-fade-in">
+                            <img
+                              src={editingSettings.emailHeaderImageUrl || "/src/assets/images/juem_email_banner_1781008874987.png"}
+                              alt={editingSettings.siteTitle || "Header"}
+                              className="w-full object-cover max-h-[140px]"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = "/src/assets/images/juem_email_banner_1781008874987.png";
+                              }}
+                              referrerPolicy="no-referrer"
+                            />
+                            <div className="absolute inset-x-0 bottom-0 bg-black/55 py-2 px-3 text-center backdrop-blur-xs">
+                              <p className="m-0 text-white text-[9px] font-bold tracking-wide">
+                                {emailPreviewTab === 'created' 
+                                  ? "¡Tu compra ha sido aprobada con éxito! 🎉" 
+                                  : "¡Novedades del envío de paquete! 🚚"
+                                }
+                              </p>
                             </div>
                           </div>
-                        </div>
-                      ) : (
-                        <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-850 space-y-2">
-                          <img
-                            src="https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80"
-                            alt="editing preview item 1"
-                            className="w-full h-24 object-cover rounded-md"
-                          />
-                          <div>
-                            <span className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold">Moda / Calidad</span>
-                            <h5 className="text-[11px] font-bold line-clamp-1 text-zinc-100">Chaqueta Bomber Premium</h5>
-                            <span className="text-[12px] font-mono font-black text-indigo-400">$89.99</span>
+                        ) : (
+                          <div className="bg-indigo-600 p-4 text-center text-white animate-fade-in">
+                            {editingSettings.logoType === 'image' && !!editingSettings.logoImageUrl ? (
+                              <div className="mb-2 flex justify-center">
+                                <img 
+                                  src={editingSettings.logoImageUrl || null} 
+                                  alt={editingSettings.siteTitle || "Logo"} 
+                                  className="max-h-12 max-w-[150px] object-contain rounded-lg bg-white/15 p-1"
+                                  referrerPolicy="no-referrer"
+                                />
+                              </div>
+                            ) : (
+                              <h1 className="m-0 text-xs font-extrabold tracking-tight">
+                                {editingSettings.siteTitle || "Ventas Juem"}
+                              </h1>
+                            )}
+                            <p className="mt-1 text-[8px] opacity-90 leading-tight">
+                              {emailPreviewTab === 'created' 
+                                ? "¡Tu compra ha sido aprobada con éxito! 🎉" 
+                                : "¡Novedades del envío de paquete! 🚚"
+                              }
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Layout details padding */}
+                        <div className="p-3.5 space-y-3">
+                          <h2 className="text-[11px] font-extrabold text-slate-900">¡Hola, Christian Olivera!</h2>
+                          
+                          <p className="text-slate-600 text-[9.5px] leading-relaxed whitespace-pre-wrap">
+                            {emailPreviewTab === 'created' ? (
+                              editingSettings.emailTemplateOrderCreatedBody ? (
+                                editingSettings.emailTemplateOrderCreatedBody
+                                  .replace(/\{\{orderId\}\}/g, "6C3AA2")
+                                  .replace(/\{\{customerName\}\}/g, "Christian Olivera")
+                                  .replace(/\{\{total\}\}/g, "UYU $2.490")
+                                  .replace(/\{\{siteTitle\}\}/g, editingSettings.siteTitle || "Ventas Juem")
+                              ) : (
+                                "Muchas gracias por realizar tu compra con nosotros. Tu pago ha sido aprobado correctamente y tu pedido ya está siendo preparado para entrega. Aquí tienes los detalles completos de tu compra:"
+                              )
+                            ) : (
+                              editingSettings.emailTemplateOrderStatusChangedBody ? (
+                                editingSettings.emailTemplateOrderStatusChangedBody
+                                  .replace(/\{\{orderId\}\}/g, "6C3AA2")
+                                  .replace(/\{\{customerName\}\}/g, "Christian Olivera")
+                                  .replace(/\{\{total\}\}/g, "UYU $2.490")
+                                  .replace(/\{\{statusText\}\}/g, "Enviado 🚚")
+                                  .replace(/\{\{siteTitle\}\}/g, editingSettings.siteTitle || "Ventas Juem")
+                              ) : (
+                                "Te notificamos que el estado de tu pedido #6C3AA2 ha sido actualizado por nuestro equipo de logística."
+                              )
+                            )}
+                          </p>
+
+                          {/* Order metadata tag box */}
+                          <div className="bg-slate-50 border border-slate-150 rounded-xl p-2.5 space-y-1.5 text-[9px] text-slate-600">
+                            <div className="flex justify-between border-b border-slate-200/50 pb-1">
+                              <span className="text-slate-400 font-semibold">Número de Pedido:</span>
+                              <span className="font-mono font-bold text-indigo-600">#6C3AA2</span>
+                            </div>
+                            <div className="flex justify-between border-b border-slate-200/50 pb-1">
+                              <span className="text-slate-400 font-semibold">Fecha de Compra:</span>
+                              <span className="text-slate-800 font-medium font-mono">08/06/2026 20:06</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400 font-semibold">Método de Pago:</span>
+                              <span className="text-slate-800 font-bold">Mercado Pago Uruguay</span>
+                            </div>
+                          </div>
+
+                          {/* Shipment Alert Badge */}
+                          {emailPreviewTab === 'changed' && (
+                            <div className="border border-indigo-100 rounded-xl bg-indigo-50/40 p-2 text-center space-y-0.5">
+                              <span className="text-[7.5px] uppercase font-bold tracking-widest text-indigo-600 block">Nuevo Estado de Preparación</span>
+                              <div className="flex items-center justify-center gap-1.5">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span className="text-[9.5px] font-extrabold text-slate-800 font-mono">Despachado / Enviado 🚚</span>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Details headers */}
+                          <div className="border-b border-slate-150 pb-1">
+                            <span className="text-[8px] uppercase tracking-widest font-extrabold text-slate-400">Detalle de Productos</span>
+                          </div>
+
+                          {/* Table details */}
+                          <table className="w-full text-[9px] text-left text-slate-600 border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-150 text-[8px] font-bold text-slate-400 uppercase">
+                                <th className="p-1">Artículo</th>
+                                <th className="p-1 text-center w-8">Cant.</th>
+                                <th className="p-1 text-right w-14">Subtotal</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr className="border-b border-slate-100">
+                                <td className="p-1 font-bold text-slate-800 text-[9px]">Poncho Buzo Pijama <span className="text-[8px] text-slate-500 font-normal block">M - Azul Marino</span></td>
+                                <td className="p-1 text-center font-mono">1</td>
+                                <td className="p-1 text-right font-mono">$1.690</td>
+                              </tr>
+                              <tr className="border-b border-slate-100">
+                                <td className="p-1 font-bold text-slate-800 text-[9px]">Medias Pantalón Plush <span className="text-[8px] text-slate-500 font-normal block">Único - Piel</span></td>
+                                <td className="p-1 text-center font-mono">1</td>
+                                <td className="p-1 text-right font-mono">$800</td>
+                              </tr>
+                            </tbody>
+                          </table>
+
+                          {/* Price break */}
+                          <div className="w-28 ml-auto pt-1 space-y-1 text-[9px] text-slate-600 font-medium">
+                            <div className="flex justify-between">
+                              <span>Subtotal:</span>
+                              <span className="font-mono">UYU $2.490</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Envío:</span>
+                              <span className="text-emerald-500 font-bold font-mono">Gratis</span>
+                            </div>
+                            <div className="flex justify-between text-slate-950 font-extrabold border-t border-slate-200/50 pt-1 text-[10px]">
+                              <span>Total:</span>
+                              <span className="font-mono">UYU $2.490</span>
+                            </div>
+                          </div>
+
+                          {/* Bottom tag block */}
+                          <div className="border-t border-slate-100 pt-2 text-center text-[7.5px] text-slate-400 space-y-0.5">
+                            <p>© {new Date().getFullYear()} {editingSettings.siteTitle || "Ventas Juem"}.</p>
+                            <p>E-mail automático transaccional.</p>
                           </div>
                         </div>
-                      )}
-                    </div>
-
-                    {/* Footer query tool */}
-                    <div className="space-y-1.5 mt-auto">
-                      <div className="w-full py-1.5 bg-indigo-600 text-white font-extrabold text-center rounded text-[10px] uppercase">Añadir al Carrito</div>
-                      <div className="w-full py-1.5 bg-[#25D366] text-white font-bold text-center rounded text-[9px] uppercase flex items-center justify-center gap-1 select-none">
-                        <MessageCircle className="w-3.5 h-3.5 fill-current" />
-                        Averiguar por WhatsApp
                       </div>
                     </div>
                   </div>
+                ) : (
+                  /* Simulated frame preview of store */
+                  <div className="w-full aspect-[4/5] bg-zinc-950 rounded-3xl border-8 border-zinc-800 shadow-2xl relative overflow-hidden flex flex-col scale-100 origin-top">
+                    
+                    {/* Mockup Store Header */}
+                    <div className="h-11 border-b border-zinc-900 flex items-center justify-between px-3 bg-zinc-900/60 select-none">
+                      <div className="text-white font-extrabold italic text-xs tracking-tight">{editingSettings.siteTitle}</div>
+                      <div className="flex gap-2 text-zinc-500 text-[9px] font-semibold">
+                        <span>Catálogo</span>
+                        <span className="theme-text-primary">Cart (1)</span>
+                      </div>
+                    </div>
 
-                  {/* Watermark badge rotate 45 degrees */}
-                  <div className="absolute top-1/2 left-0 right-0 py-1 bg-indigo-600 text-white text-[8px] text-center uppercase tracking-widest font-black rotate-[-35deg] opacity-20 pointer-events-none">
-                    Preview de Diseñador
+                    {/* Mockup visual representation in mini card */}
+                    <div className="p-4 flex-1 overflow-y-auto space-y-3 bg-zinc-950 text-white flex flex-col justify-between">
+                      <div>
+                        {/* Banner teaser */}
+                        <div className="relative h-20 rounded-lg overflow-hidden bg-zinc-900 mb-2">
+                          <img
+                            src={editingSettings.bannerImageUrl || "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=600&q=80"}
+                            alt="preview mini layout"
+                            className="w-full h-full object-cover opacity-50"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 to-transparent"></div>
+                          <div className="absolute bottom-1.5 left-2">
+                            <h4 className="text-[10px] font-bold text-white line-clamp-1">{editingSettings.bannerTitle}</h4>
+                            <span className="text-[8px] text-zinc-400 font-light block line-clamp-1">{editingSettings.bannerSubtitle}</span>
+                          </div>
+                        </div>
+
+                        {/* Item representation */}
+                        {adminSection === "products" && editingProduct ? (
+                          <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2">
+                            <img
+                              src={editingProduct.imageUrl || UNSPLASH_TEMPLATES[0].url}
+                              alt="editing preview"
+                              className="w-full h-24 object-cover rounded-md"
+                            />
+                            <div>
+                              <span className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold">{editingProduct.category || "Categoría"}</span>
+                              <h5 className="text-[11px] font-bold line-clamp-1 text-zinc-100">{editingProduct.name || "Sin título"}</h5>
+                              <div className="flex items-baseline gap-1.5 mt-1">
+                                <span className="text-[12px] font-mono font-black text-indigo-400">${Number(editingProduct.price || 0).toFixed(2)}</span>
+                                {editingProduct.originalPrice && (
+                                  <span className="text-[8px] text-zinc-500 line-through">${Number(editingProduct.originalPrice).toFixed(2)}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-850 space-y-2">
+                            <img
+                              src="https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80"
+                              alt="editing preview item 1"
+                              className="w-full h-24 object-cover rounded-md"
+                            />
+                            <div>
+                              <span className="text-[8px] uppercase tracking-widest text-zinc-500 font-bold">Moda / Calidad</span>
+                              <h5 className="text-[11px] font-bold line-clamp-1 text-zinc-100">Chaqueta Bomber Premium</h5>
+                              <span className="text-[12px] font-mono font-black text-indigo-400">$89.99</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Footer query tool */}
+                      <div className="space-y-1.5 mt-auto">
+                        <div className="w-full py-1.5 bg-indigo-600 text-white font-extrabold text-center rounded text-[10px] uppercase">Añadir al Carrito</div>
+                        <div className="w-full py-1.5 bg-[#25D366] text-white font-bold text-center rounded text-[9px] uppercase flex items-center justify-center gap-1 select-none">
+                          <MessageCircle className="w-3.5 h-3.5 fill-current" />
+                          Averiguar por WhatsApp
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Watermark badge rotate 45 degrees */}
+                    <div className="absolute top-1/2 left-0 right-0 py-1 bg-indigo-600 text-white text-[8px] text-center uppercase tracking-widest font-black rotate-[-35deg] opacity-20 pointer-events-none">
+                      Preview de Diseñador
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
               )}
               </div>
@@ -9716,9 +10461,9 @@ export default function App() {
                   }}
                   className="flex items-center gap-2 cursor-pointer select-none"
                 >
-                  {store.settings.logoType === "image" && store.settings.logoImageUrl ? (
+                  {store.settings.logoType === "image" && !!store.settings.logoImageUrl ? (
                     <img
-                      src={store.settings.logoImageUrl}
+                      src={store.settings.logoImageUrl || null}
                       alt={store.settings.siteTitle}
                       className="w-8 h-8 rounded-xl object-cover shadow-sm"
                       referrerPolicy="no-referrer"
@@ -9962,9 +10707,23 @@ export default function App() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ duration: 0.2 }}
-            className="fixed bottom-24 right-6 z-[99999] p-4 rounded-xl shadow-2xl border flex items-center gap-3 bg-white/95 dark:bg-zinc-950/95 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+            className={`fixed bottom-24 right-6 z-[99999] p-4 rounded-xl shadow-2xl border flex items-center gap-3 bg-white/95 dark:bg-zinc-950/95 ${
+              adminToast.type === "success"
+                ? "border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+                : adminToast.type === "error"
+                ? "border-rose-500/30 text-rose-600 dark:text-rose-400"
+                : "border-amber-500/30 text-amber-600 dark:text-amber-400"
+            }`}
           >
-            <span className="p-1 px-1.5 bg-emerald-500/10 text-emerald-500 rounded font-bold text-xs">✓</span>
+            <span className={`p-1 px-1.5 rounded font-bold text-xs ${
+              adminToast.type === "success"
+                ? "bg-emerald-500/10 text-emerald-500"
+                : adminToast.type === "error"
+                ? "bg-rose-500/10 text-rose-500"
+                : "bg-amber-500/10 text-amber-500"
+            }`}>
+              {adminToast.type === "success" ? "✓" : adminToast.type === "error" ? "✗" : "⚠"}
+            </span>
             <span className="font-semibold text-xs">{adminToast.text}</span>
           </motion.div>
         )}

@@ -135,6 +135,10 @@ export interface SiteSettings {
   emailSenderFromAddress?: string;
   emailTemplateOrderCreatedSubject?: string;
   emailTemplateOrderStatusChangedSubject?: string;
+  emailTemplateOrderCreatedBody?: string;
+  emailTemplateOrderStatusChangedBody?: string;
+  emailHeaderImageUrl?: string;
+  bannerOpacity?: number;
 }
 
 export interface Category {

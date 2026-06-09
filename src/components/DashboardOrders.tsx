@@ -114,7 +114,7 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({ store, onUpdat
   const handleWhatsAppChat = (order: Order) => {
     const rawNum = order.customerPhone || "";
     const cleanNum = rawNum.replace(/[^0-9]/g, "");
-    const textMsg = `Hola ${order.customerName}, nos contactamos de la tienda por tu pedido N° ${order.id}.`;
+    const textMsg = `Hola ${order.customerName}, nos contactamos de la tienda por tu pedido N° ${(order.id || "").substring(0, 6).toUpperCase()}.`;
     window.open(`https://wa.me/${cleanNum}?text=${encodeURIComponent(textMsg)}`, "_blank");
   };
 
@@ -277,7 +277,7 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({ store, onUpdat
                       <tr className="hover:bg-slate-50/30 dark:hover:bg-zinc-900/10 cursor-pointer" onClick={() => toggleRow(order.id)}>
                         <td className="p-4">
                           <span className="font-mono text-xs font-bold text-slate-800 dark:text-zinc-200">
-                            #{order.id.substring(0, 15)}
+                            #{order.id.substring(0, 6).toUpperCase()}
                           </span>
                         </td>
                         <td className="p-4 text-xs whitespace-nowrap text-zinc-500 dark:text-zinc-400 font-mono">

@@ -505,7 +505,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
                   onClick={() => setActiveImgIndex(idx)}
                   className={`relative w-[72px] h-[72px] sm:w-[84px] sm:h-[84px] rounded-2xl overflow-hidden border-2 transition-all duration-300 shrink-0 cursor-pointer ${
                     activeImgIndex === idx 
-                      ? "border-[#5346ff] scale-[1.04] shadow-md shadow-[#5346ff]/15 bg-white dark:bg-zinc-900/60" 
+                      ? "border-[#D4A55A] scale-[1.04] shadow-md shadow-[#D4A55A]/15 bg-[#0B1730]" 
                       : isThemeDark
                       ? "border-zinc-800 bg-[#0c0c0e]/40 hover:border-zinc-700 opacity-80"
                       : "border-slate-205 bg-white hover:border-slate-350 opacity-85"
@@ -535,7 +535,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
               <div className="flex items-center gap-3 sm:gap-4 mb-6 pb-3 flex-wrap sm:flex-nowrap border-b border-zinc-900/10 dark:border-zinc-800/30">
                 <div className="flex flex-col">
                   <div className="flex items-baseline gap-1.5">
-                    <span className="text-2xl sm:text-3xl font-extrabold text-[#5346ff] tracking-tight">
+                    <span className="text-2xl sm:text-3xl font-extrabold text-[#E6BF76] tracking-tight">
                       ${Math.round(dynamicPrice)}
                     </span>
 
@@ -582,7 +582,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
                     <button
                       type="button"
                       onClick={handleAddToCart}
-                      className="flex items-center justify-center gap-1.5 py-2 px-3.5 sm:px-4 rounded-lg font-bold text-xs bg-[#5346ff] hover:bg-[#4336f5] hover:bg-opacity-90 active:scale-95 text-white tracking-wide shadow-md cursor-pointer transition select-none shrink-0"
+                      className="flex items-center justify-center gap-1.5 py-2 px-3.5 sm:px-4 rounded-lg font-bold text-xs bg-[#D4A55A] hover:bg-[#E6BF76] text-[#050B1A] hover:bg-opacity-90 active:scale-95 tracking-wide shadow-md cursor-pointer transition select-none shrink-0"
                     >
                       <ShoppingCart className="h-3.5 w-3.5" />
                       <span>Comprar (${Math.round(dynamicPrice * quantity)})</span>
@@ -599,9 +599,9 @@ Me gustaría coordinar stock, fabricación y envío.`;
               {/* 3D printed customization block */}
               {is3D && (
                 <div className={`p-4 rounded-2xl border text-xs space-y-2.5 mb-6 ${
-                  isThemeDark ? "bg-zinc-950/40 border-zinc-800/60 text-zinc-300" : "bg-slate-50 border-slate-100 text-zinc-700"
+                  isThemeDark ? "bg-[#0B1730]/60 border-[#D4A55A]/20 text-zinc-300" : "bg-slate-50 border-slate-100 text-zinc-700"
                 }`}>
-                  <div className="flex items-center gap-1.5 font-extrabold text-[#5346ff] dark:text-indigo-400 text-[10px] uppercase tracking-wider mb-2">
+                  <div className="flex items-center gap-1.5 font-extrabold text-[#E6BF76] text-[10px] uppercase tracking-wider mb-2">
                     <Cpu className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: "3s" }} />
                     <span>Sincronización de Producción 3D</span>
                   </div>
@@ -614,7 +614,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
                     </div>
                     <div className="flex flex-col p-2.5 rounded-xl bg-black/5 dark:bg-zinc-900/50">
                       <span className="text-[9px] text-zinc-500 font-semibold uppercase">A Fabricar</span>
-                      <span className="text-sm font-extrabold text-[#5346ff] dark:text-indigo-400">
+                      <span className="text-sm font-extrabold text-[#E6BF76]">
                         {Math.max(0, quantity - currentStock)} un.
                       </span>
                     </div>
@@ -681,7 +681,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
                   }`}>
                     {is3D ? "MATERIAL SELECCIONADO: " : "TALLE SELECCIONADO: "}
                     {selectedSize ? (
-                      <span className="text-[#5346ff] font-extrabold">{selectedSize}</span>
+                      <span className="text-[#E6BF76] font-extrabold">{selectedSize}</span>
                     ) : (
                       <span className="text-red-500 font-bold dark:text-red-400 animate-pulse text-[9px]">
                         {is3D ? "(Por favor selecciona un material)" : "(Por favor selecciona un talle)"}
@@ -692,7 +692,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
                     <button
                       type="button"
                       onClick={() => setShowSizeChart(true)}
-                      className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-550 hover:text-indigo-650 dark:text-indigo-400 dark:hover:text-indigo-300 transition-colors uppercase tracking-[0.05em] cursor-pointer"
+                      className="flex items-center gap-1.5 text-[11px] font-bold text-[#E6BF76] hover:text-[#D4A55A] transition-colors uppercase tracking-[0.05em] cursor-pointer"
                     >
                       <Ruler className="w-3.5 h-3.5" />
                       <span>Guía de talles</span>
@@ -709,7 +709,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
                       }}
                       className={`text-xs px-4 py-1.5 rounded-full border transition-all duration-200 font-bold tracking-wide cursor-pointer select-none ${
                         selectedSize === sz
-                          ? "bg-[#5346ff] border-transparent text-white shadow-sm shadow-[#5346ff]/20 scale-[1.02]"
+                          ? "bg-[#D4A55A] border-transparent text-[#050B1A] shadow-sm shadow-[#D4A55A]/20 scale-[1.02]"
                           : isThemeDark
                           ? "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-850"
                           : "border-gray-200 bg-white text-zinc-650 hover:border-gray-300 hover:bg-gray-50"
@@ -738,7 +738,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
                 }`}>
                   COLOR SELECCIONADO:{" "}
                   {selectedColor ? (
-                    <span className="text-[#5346ff] font-extrabold">{selectedColor}</span>
+                    <span className="text-[#E6BF76] font-extrabold">{selectedColor}</span>
                   ) : (
                     <span className="text-red-500 font-bold dark:text-red-400 animate-pulse text-[9px]">(Por favor selecciona un color)</span>
                   )}
@@ -756,7 +756,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
                         }}
                         className={`text-xs px-4 py-1.5 rounded-full border transition-all duration-200 font-bold tracking-wide cursor-pointer select-none ${
                           isAc
-                            ? "bg-[#5346ff] border-transparent text-white shadow-sm shadow-[#5346ff]/20 scale-[1.02]"
+                            ? "bg-[#D4A55A] border-transparent text-[#050B1A] shadow-sm shadow-[#D4A55A]/20 scale-[1.02]"
                             : isThemeDark
                             ? "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-850"
                             : "border-gray-200 bg-white text-zinc-650 hover:border-gray-300 hover:bg-gray-50"
@@ -842,7 +842,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
             }`}>
               Productos Relacionados
             </h3>
-            <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#5346ff]">
+            <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#E6BF76]">
               Te puede interesar
             </span>
           </div>
@@ -939,7 +939,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
                     onClick={() => setActiveImgIndex(idx)}
                     className={`relative w-12 h-12 sm:w-16 sm:h-16 rounded-xl overflow-hidden border-2 transition-all duration-300 shrink-0 cursor-pointer ${
                       activeImgIndex === idx 
-                        ? "border-[#5346ff] scale-[1.05] shadow-lg bg-zinc-900" 
+                        ? "border-[#D4A55A] scale-[1.05] shadow-lg bg-[#0B1730]" 
                         : "border-white/10 bg-black/40 hover:border-white/30 opacity-70 hover:opacity-100"
                     }`}
                   >
@@ -971,46 +971,34 @@ Me gustaría coordinar stock, fabricación y envío.`;
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
               transition={{ duration: 0.22, ease: "easeOut" }}
-              className={`w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl relative flex flex-col max-h-[85vh] border ${
-                isThemeDark 
-                  ? "bg-[#0b0a0e] border-zinc-800 text-zinc-100" 
-                  : "bg-white border-slate-200 text-zinc-800"
-              }`}
+              className="w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl relative flex flex-col max-h-[85vh] border bg-[#0B1730] border-[#D4A55A]/20 text-[#F4EAD7]"
             >
               {/* Header */}
-              <div className={`p-5 sm:p-6 border-b flex items-start justify-between ${
-                isThemeDark ? "border-zinc-800 bg-[#0f0e13]" : "border-slate-100 bg-slate-50"
-              }`}>
+              <div className="p-5 sm:p-6 border-b flex items-start justify-between border-[#D4A55A]/15 bg-[#050B1A]">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <div className="p-1.5 rounded-lg bg-[#5346ff]/10 text-[#5346ff]">
+                    <div className="p-1.5 rounded-lg bg-[#D4A55A]/10 text-[#E6BF76]">
                       <Ruler className="w-5 h-5" />
                     </div>
-                    <h3 className="text-base sm:text-lg font-bold tracking-tight">
+                    <h3 className="text-base sm:text-lg font-bold tracking-tight text-[#F4EAD7]">
                       Guia y Tabla de Talles
                     </h3>
                   </div>
-                  <p className={`text-xs ${isThemeDark ? "text-zinc-400" : "text-zinc-550"}`}>
+                  <p className="text-xs text-zinc-400">
                     Medidas corporales y referencias oficiales para tu compra en Ventas Juem.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowSizeChart(false)}
-                  className={`p-1.5 rounded-full transition-colors cursor-pointer ${
-                    isThemeDark 
-                      ? "hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200" 
-                      : "hover:bg-slate-200 text-zinc-500 hover:text-zinc-800"
-                  }`}
+                  className="p-1.5 rounded-full transition-colors cursor-pointer hover:bg-white/10 text-zinc-400 hover:text-white"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               {/* Tabs selector */}
-              <div className={`flex border-b overflow-x-auto no-scrollbar scroll-smooth shrink-0 px-4 sm:px-6 ${
-                isThemeDark ? "border-zinc-850 bg-[#0b0a0e]" : "border-slate-150 bg-white"
-              }`}>
+              <div className="flex border-b overflow-x-auto no-scrollbar scroll-smooth shrink-0 px-4 sm:px-6 border-[#D4A55A]/15 bg-[#050B1A]">
                 {(() => {
                   const hasCustom = !!(product.sizeChartData && product.sizeChartData.columns && product.sizeChartData.rows && product.sizeChartData.rows.length > 0);
                   const list = [];
@@ -1036,10 +1024,8 @@ Me gustaría coordinar stock, fabricación y envío.`;
                       onClick={() => setActiveChartTab(tb.id)}
                       className={`py-3.5 px-4 font-semibold text-xs sm:text-sm tracking-wide border-b-2 transition-all shrink-0 cursor-pointer ${
                         activeChartTab === tb.id
-                          ? "border-[#5346ff] text-[#5346ff]"
-                          : isThemeDark
-                          ? "border-transparent text-zinc-400 hover:text-zinc-200"
-                          : "border-transparent text-zinc-550 hover:text-zinc-850"
+                          ? "border-[#D4A55A] text-[#D4A55A]"
+                          : "border-transparent text-zinc-400 hover:text-zinc-200"
                       }`}
                     >
                       {tb.label}
@@ -1068,13 +1054,13 @@ Me gustaría coordinar stock, fabricación y envío.`;
                             ))}
                           </tr>
                         </thead>
-                        <tbody className={`divide-y ${isThemeDark ? "divide-zinc-800" : "divide-slate-100"}`}>
+                        <tbody className="divide-y divide-[#D4A55A]/10">
                           {(product.sizeChartData.rows || []).map((row, idx) => (
-                            <tr key={idx} className={`hover:bg-indigo-500/5 ${isThemeDark ? "even:bg-zinc-900/40" : "even:bg-slate-50/50"}`}>
+                            <tr key={idx} className="hover:bg-[#D4A55A]/5 even:bg-[#050B1A]/40">
                               {(product.sizeChartData.columns || []).map((col) => {
                                 const isFirstCol = col === "Talle" || (product.sizeChartData?.columns?.[0] === col);
                                 return (
-                                  <td key={col} className={`p-3 ${isFirstCol ? "font-bold text-[#5346ff] bg-slate-50/30 dark:bg-zinc-900/10" : ""}`}>
+                                  <td key={col} className={`p-3 ${isFirstCol ? "font-bold text-[#E6BF76] bg-[#050B1A]/20" : ""}`}>
                                     {row[col] || "-"}
                                   </td>
                                 );
@@ -1112,21 +1098,17 @@ Me gustaría coordinar stock, fabricación y envío.`;
                             { t: "XL", w: "59 - 61", h: "75 - 77", d: "Suelto" },
                             { t: "XXL", w: "62 - 64", h: "78 - 80", d: "Clásico" }
                           ].map((row, i) => (
-                            <tr key={i} className={`hover:bg-indigo-500/5 ${isThemeDark ? "even:bg-zinc-900/40" : "even:bg-slate-50/50"}`}>
-                              <td className="p-3 font-bold text-[#5346ff]">{row.t}</td>
+                            <tr key={i} className="hover:bg-[#D4A55A]/5 even:bg-[#050B1A]/40">
+                              <td className="p-3 font-bold text-[#E6BF76]">{row.t}</td>
                               <td className="p-3 font-semibold">{row.w} cm</td>
                               <td className="p-3">{row.h} cm</td>
-                              <td className={`p-3 text-[10px] font-mono font-medium ${isThemeDark ? "text-zinc-400" : "text-zinc-500"}`}>{row.d}</td>
+                              <td className="p-3 text-[10px] font-mono font-medium text-zinc-400">{row.d}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
-                    <div className={`p-3 rounded-xl border text-[11px] leading-relaxed ${
-                      isThemeDark 
-                        ? "bg-indigo-500/5 border-indigo-550/20 text-indigo-200" 
-                        : "bg-indigo-50/40 border-indigo-100 text-indigo-900"
-                    }`}>
+                    <div className="p-3 rounded-xl border text-[11px] leading-relaxed bg-[#D4A55A]/5 border-[#D4A55A]/20 text-[#E6BF76]">
                       <strong>📏 ¿Cómo medir tus superiores?</strong>
                       <ul className="list-disc list-inside mt-1 space-y-0.5">
                         <li><strong>Ancho (Sisa):</strong> Mide horizontalmente de costura a costura, justo debajo de cada axila.</li>
@@ -1160,8 +1142,8 @@ Me gustaría coordinar stock, fabricación y envío.`;
                             { t: "XL", w: "48 - 50", c: "94 - 102", h: "106 - 108" },
                             { t: "XXL", w: "52 - 54", c: "102 - 110", h: "109 - 111" }
                           ].map((row, i) => (
-                            <tr key={i} className={`hover:bg-indigo-500/5 ${isThemeDark ? "even:bg-zinc-900/40" : "even:bg-slate-50/50"}`}>
-                              <td className="p-3 font-bold text-[#5346ff]">{row.t}</td>
+                            <tr key={i} className="hover:bg-[#D4A55A]/5 even:bg-[#050B1A]/40">
+                              <td className="p-3 font-bold text-[#E6BF76]">{row.t}</td>
                               <td className="p-3 font-semibold">{row.w}</td>
                               <td className="p-3">{row.c} cm</td>
                               <td className="p-3">{row.h} cm</td>
@@ -1170,11 +1152,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
                         </tbody>
                       </table>
                     </div>
-                    <div className={`p-3 rounded-xl border text-[11px] leading-relaxed ${
-                      isThemeDark 
-                        ? "bg-indigo-500/5 border-indigo-550/20 text-indigo-200" 
-                        : "bg-indigo-50/40 border-indigo-100 text-indigo-900"
-                    }`}>
+                    <div className="p-3 rounded-xl border text-[11px] leading-relaxed bg-[#D4A55A]/5 border-[#D4A55A]/20 text-[#E6BF76]">
                       <strong>👖 ¿Cómo medir pantalones u inferiores?</strong>
                       <ul className="list-disc list-inside mt-1 space-y-0.5">
                         <li><strong>Cintura:</strong> Mide el contorno de tu cintura natural o de forma directa el extremo del elástico sin estirar excesivamente.</li>
@@ -1212,21 +1190,17 @@ Me gustaría coordinar stock, fabricación y envío.`;
                             { uy: "42", eu: "43", us: "10.0", cm: "27.5 cm" },
                             { uy: "43", eu: "44", us: "11.0", cm: "28.5 cm" }
                           ].map((row, i) => (
-                            <tr key={i} className={`hover:bg-indigo-500/5 ${isThemeDark ? "even:bg-zinc-900/40" : "even:bg-slate-50/50"}`}>
-                              <td className="p-3 font-bold text-[#5346ff]">{row.uy} UY</td>
+                            <tr key={i} className="hover:bg-[#D4A55A]/5 even:bg-[#050B1A]/40">
+                              <td className="p-3 font-bold text-[#E6BF76]">{row.uy} UY</td>
                               <td className="p-3 font-semibold">{row.eu} EU</td>
                               <td className="p-3 text-zinc-500">{row.us} US</td>
-                              <td className="p-3 font-semibold text-emerald-650 dark:text-emerald-400">{row.cm}</td>
+                              <td className="p-3 font-semibold text-emerald-400">{row.cm}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
-                    <div className={`p-3 rounded-xl border text-[11px] leading-relaxed ${
-                      isThemeDark 
-                        ? "bg-indigo-500/5 border-indigo-550/20 text-zinc-300" 
-                        : "bg-indigo-50/40 border-indigo-100 text-zinc-650"
-                    }`}>
+                    <div className="p-3 rounded-xl border text-[11px] leading-relaxed bg-[#D4A55A]/5 border-[#D4A55A]/20 text-[#E6BF76]">
                       <strong>👟 Guía infalible para medir tus pies:</strong>
                       <ol className="list-decimal list-inside mt-1 space-y-0.5">
                         <li>Coloca un papel blanco pegado a la pared en el piso.</li>
@@ -1263,7 +1237,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
                               placeholder="Ej: 175"
                               value={userHeight}
                               onChange={(e) => setUserHeight(e.target.value)}
-                              className={`w-full px-4 py-2 border rounded-xl text-sm font-bold text-center focus:outline-none focus:ring-1 focus:ring-[#5346ff] ${
+                              className={`w-full px-4 py-2 border rounded-xl text-sm font-bold text-center focus:outline-none focus:ring-1 focus:ring-[#D4A55A] ${
                                 isThemeDark 
                                   ? "bg-zinc-900 border-zinc-700 text-white" 
                                   : "bg-white border-slate-200 text-zinc-900"
@@ -1287,7 +1261,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
                               placeholder="Ej: 74"
                               value={userWeight}
                               onChange={(e) => setUserWeight(e.target.value)}
-                              className={`w-full px-4 py-2 border rounded-xl text-sm font-bold text-center focus:outline-none focus:ring-1 focus:ring-[#5346ff] ${
+                              className={`w-full px-4 py-2 border rounded-xl text-sm font-bold text-center focus:outline-none focus:ring-1 focus:ring-[#D4A55A] ${
                                 isThemeDark 
                                   ? "bg-zinc-900 border-zinc-700 text-white" 
                                   : "bg-white border-slate-200 text-zinc-900"
@@ -1301,13 +1275,13 @@ Me gustaría coordinar stock, fabricación y envío.`;
                       {/* Calibrator results block */}
                       <div className={`flex-grow md:max-w-[220px] rounded-xl p-4 flex flex-col items-center justify-center border text-center transition-all ${
                         recommendedSize 
-                          ? isThemeDark ? "bg-indigo-500/5 border-indigo-500/25 text-indigo-300" : "bg-indigo-50 border-indigo-100 text-indigo-900"
-                          : isThemeDark ? "bg-zinc-900/40 border-zinc-800 text-zinc-400" : "bg-slate-100 border-slate-200 text-zinc-500"
+                          ? "bg-[#D4A55A]/10 border-[#D4A55A]/35 text-[#E6BF76]"
+                          : "bg-[#050B1A]/40 border-white/5 text-zinc-400"
                       }`}>
                         {recommendedSize ? (
                           <div className="space-y-1">
                             <p className="text-[10px] font-bold tracking-wider uppercase opacity-75">Talle Recomendado:</p>
-                            <h4 className="text-4xl sm:text-5xl font-extrabold text-[#5346ff] tracking-tight">
+                            <h4 className="text-4xl sm:text-5xl font-extrabold text-[#D4A55A] font-serif tracking-tight">
                               {recommendedSize}
                             </h4>
                             <p className="text-[10px] italic pt-1 max-w-[180px] mx-auto leading-relaxed opacity-90">
@@ -1339,7 +1313,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
                           max="50"
                           value={userShoeSize}
                           onChange={(e) => setUserShoeSize(e.target.value)}
-                          className={`flex-1 px-4 py-2 border rounded-xl text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-[#5346ff] ${
+                          className={`flex-1 px-4 py-2 border rounded-xl text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-[#D4A55A] ${
                             isThemeDark 
                               ? "bg-zinc-900 border-zinc-700 text-white" 
                               : "bg-white border-slate-200 text-zinc-900"
@@ -1365,18 +1339,14 @@ Me gustaría coordinar stock, fabricación y envío.`;
               </div>
 
               {/* Bottom Actions footer inside size chart */}
-              <div className={`p-4 sm:p-5 border-t flex flex-col sm:flex-row gap-3 items-center justify-between shrink-0 ${
-                isThemeDark ? "border-zinc-850 bg-[#0f0e13]" : "border-slate-100 bg-slate-50"
-              }`}>
-                <p className={`text-[10px] leading-snug max-w-sm text-center sm:text-left ${
-                  isThemeDark ? "text-zinc-400" : "text-zinc-500"
-                }`}>
+              <div className="p-4 sm:p-5 border-t flex flex-col sm:flex-row gap-3 items-center justify-between shrink-0 border-[#D4A55A]/15 bg-[#050B1A]">
+                <p className="text-[10px] leading-snug max-w-sm text-center sm:text-left text-[#F4EAD7]/75">
                   📌 Envíos a Montevideo, Ciudad de la Costa, Salinas, Pinamar, Maldonado y todo el país. Retiros disponibles en la Costa.
                 </p>
                 <button
                   type="button"
                   onClick={() => setShowSizeChart(false)}
-                  className="w-full sm:w-auto px-6 py-2 rounded-xl text-xs sm:text-sm font-bold bg-[#5346ff] border-transparent text-white hover:bg-[#4336ee] cursor-pointer select-none"
+                  className="w-full sm:w-auto px-6 py-2 rounded-xl text-xs sm:text-sm font-bold bg-[#D4A55A] text-[#050B1A] hover:bg-[#E6BF76] hover:scale-[1.02] transition-all cursor-pointer select-none"
                 >
                   Entendido, Volver
                 </button>

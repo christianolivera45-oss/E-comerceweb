@@ -82,7 +82,7 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
 
   return (
     <div 
-      className="relative h-[420px] md:h-[520px] w-full overflow-hidden bg-zinc-950 text-white select-none group"
+      className="relative h-[440px] md:h-[560px] w-full overflow-hidden bg-[#050B1A] text-white select-none group"
       onMouseEnter={() => setIsPlaying(false)}
       onMouseLeave={() => setIsPlaying(true)}
     >
@@ -106,24 +106,34 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
             <img
               src={slides[currentIndex].imageUrl}
               alt={slides[currentIndex].title}
-              className="w-full h-full object-cover object-center opacity-35"
+              className="w-full h-full object-cover object-center"
+              style={{ opacity: (settings.bannerOpacity !== undefined ? settings.bannerOpacity : 35) / 100 }}
               referrerPolicy="no-referrer"
             />
             
-            {/* Ambient Gradient Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/60 to-zinc-950/20"></div>
+            {/* Ambient Gradient Overlay using Brand Deep Navy */}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#050B1A] via-[#050B1A]/75 to-[#050B1A]/20"></div>
 
             {/* Slide Content */}
-            <div className="absolute inset-0 flex items-center">
+            <div className="absolute inset-0 flex items-center uppercase-none">
               <div className="max-w-7xl mx-auto px-6 w-full text-center md:text-left relative z-10">
-                <div className="max-w-3xl">
-
+                <div className="max-w-2xl">
+                  {/* Category Accent in Gold */}
+                  <motion.div
+                    initial={{ opacity: 0, y: -15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.15, duration: 0.4 }}
+                    className="inline-flex items-center gap-2 mb-3 bg-[#D4A55A]/10 border border-[#D4A55A]/20 px-3 py-1 rounded-full text-[10px] font-sans font-semibold tracking-widest text-[#E6BF76] uppercase"
+                  >
+                    <Sparkles className="h-3 w-3 text-[#D4A55A]" />
+                    {settings.siteTitle || "Juem Colecciones"}
+                  </motion.div>
 
                   <motion.h1 
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.25, duration: 0.4 }}
-                    className="text-3xl sm:text-4xl md:text-6xl font-black tracking-tight leading-none text-white drop-shadow-md"
+                    className="text-3xl sm:text-5xl md:text-7.5xl font-serif font-light text-[#F4EAD7] tracking-wide leading-tight drop-shadow-md mb-4"
                   >
                     {slides[currentIndex].title}
                   </motion.h1>
@@ -132,7 +142,8 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.35, duration: 0.4 }}
-                    className="mt-4 text-base sm:text-lg text-zinc-300 font-light leading-relaxed drop-shadow-sm max-w-2xl"
+                    className="text-sm sm:text-base text-slate-350 font-sans tracking-wide leading-relaxed max-w-xl font-light"
+                    style={{ color: "#D3CCD8" }}
                   >
                     {slides[currentIndex].subtitle}
                   </motion.p>
@@ -145,9 +156,9 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
                   >
                     <button
                       onClick={() => onExploreCatalog(slides[currentIndex].buttonLink)}
-                      className="py-3 px-6 rounded-xl font-bold text-sm tracking-wide theme-btn-primary shadow-lg hover:shadow-indigo-500/20 cursor-pointer transform hover:-translate-y-0.5 transition"
+                      className="py-3 px-8 rounded-full font-sans font-bold text-xs uppercase tracking-widest bg-[#D4A55A] text-[#050B1A] hover:bg-[#E6BF76] shadow-xl hover:shadow-[#D4A55A]/10 cursor-pointer transform hover:-translate-y-0.5 transition duration-300"
                     >
-                      {slides[currentIndex].buttonText || "Explorar Catálogo"}
+                      {slides[currentIndex].buttonText || "Explorar Colección"}
                     </button>
                   </motion.div>
                 </div>
@@ -160,33 +171,33 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
       {/* Slide Navigation Left/Right Arrows */}
       <button
         onClick={handlePrev}
-        aria-label="Anterior diapositiva"
-        className="absolute left-4 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-zinc-900/60 hover:bg-zinc-805 border border-zinc-800 flex items-center justify-center text-zinc-300 hover:text-white transition opacity-0 group-hover:opacity-100 cursor-pointer active:scale-95"
+        aria-label="Anterior"
+        className="absolute left-6 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full bg-[#0B1730]/65 hover:bg-[#D4A55A] border border-[#D4A55A]/25 hover:border-[#D4A55A] flex items-center justify-center text-[#F4EAD7] hover:text-[#050B1A] transition duration-300 opacity-0 group-hover:opacity-100 cursor-pointer active:scale-95"
       >
         <ChevronLeft className="h-5 w-5" />
       </button>
 
       <button
         onClick={handleNext}
-        aria-label="Siguiente diapositiva"
-        className="absolute right-4 top-1/2 -translate-y-1/2 z-20 w-11 h-11 rounded-full bg-zinc-900/60 hover:bg-zinc-805 border border-zinc-800 flex items-center justify-center text-zinc-300 hover:text-white transition opacity-0 group-hover:opacity-100 cursor-pointer active:scale-95"
+        aria-label="Siguiente"
+        className="absolute right-6 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full bg-[#0B1730]/65 hover:bg-[#D4A55A] border border-[#D4A55A]/25 hover:border-[#D4A55A] flex items-center justify-center text-[#F4EAD7] hover:text-[#050B1A] transition duration-300 opacity-0 group-hover:opacity-100 cursor-pointer active:scale-95"
       >
         <ChevronRight className="h-5 w-5" />
       </button>
 
       {/* Interactive indicator dots and actions bar */}
-      <div className="absolute bottom-6 left-1/2 -translate-y-0 -translate-x-1/2 z-25 flex items-center gap-3 bg-zinc-900/40 backdrop-blur-md border border-zinc-800/55 px-3.5 py-2 rounded-full shadow-lg">
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-25 flex items-center gap-4 bg-[#0B1730]/80 backdrop-blur-md border border-[#D4A55A]/20 px-4 py-2.5 rounded-full shadow-2xl">
         {/* Play / Pause Autoplay state */}
         <button 
           onClick={() => setIsPlaying(!isPlaying)}
           title={isPlaying ? "Pausar carrusel" : "Iniciar reproducción automática"}
-          className="text-zinc-400 hover:text-white transition mr-1 cursor-pointer"
+          className="text-[#E6BF76] hover:text-white transition cursor-pointer"
         >
           {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
         </button>
 
         {/* Indicators */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           {slides.map((_, idx) => (
             <button
               key={idx}
@@ -195,10 +206,10 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
                 setCurrentIndex(idx);
               }}
               aria-label={`Ir a la diapositiva ${idx + 1}`}
-              className={`h-2.5 rounded-full transition-all cursor-pointer ${
+              className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
                 currentIndex === idx 
-                  ? "w-6 bg-indigo-500" 
-                  : "w-2.5 bg-zinc-600/60 hover:bg-zinc-500"
+                  ? "w-8 bg-[#D4A55A]" 
+                  : "w-2 bg-slate-500/50 hover:bg-[#E6BF76]"
               }`}
             />
           ))}

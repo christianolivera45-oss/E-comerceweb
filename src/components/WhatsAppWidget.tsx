@@ -236,13 +236,13 @@ export default function WhatsAppWidget({ whatsappNumber, siteTitle = "Ventas Jue
         id="wa-widget-trigger"
         onClick={handleOpenWidget}
         aria-label="Abrir chat de WhatsApp"
-        className={`w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center rounded-full bg-[#25D366] hover:bg-[#128C7E] text-white cursor-pointer transform hover:scale-110 active:scale-95 transition-all duration-300 relative border border-emerald-400/30 group z-50 shadow-[0_8px_24px_rgba(37,211,102,0.35)] hover:shadow-[0_12px_32px_rgba(37,211,102,0.55)] ${
-          isOpen ? "bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-800 border-zinc-700 rotate-[360deg] shadow-zinc-500/15" : "animate-bounce-hover"
+        className={`w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center rounded-full bg-[#25D366] hover:bg-[#128C7E] text-white cursor-pointer transform hover:scale-110 active:scale-95 transition-all duration-300 relative border border-emerald-400/30 group z-50 shadow-[0_8px_24px_rgba(37,211,102,0.25)] hover:shadow-[0_12px_32px_rgba(37,211,102,0.45)] ${
+          isOpen ? "bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-800 border-zinc-700 rotate-[360deg] shadow-zinc-500/15" : "animate-soft-glow"
         }`}
       >
         {/* Pulsing Concentric Aura Ring (only when closed) */}
         {!isOpen && (
-          <span className="absolute inset-0 rounded-full bg-[#25D366]/50 animate-ping pointer-events-none" />
+          <span className="absolute inset-0 rounded-full bg-[#25D366]/30 animate-soft-ping pointer-events-none" />
         )}
 
         {isOpen ? (

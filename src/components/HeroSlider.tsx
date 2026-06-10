@@ -102,17 +102,22 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
             }}
             className="absolute inset-0 w-full h-full"
           >
-            {/* Background Image */}
+            {/* Background Image - Boosted with visual filters to guarantee brightness even for dark images */}
             <img
               src={slides[currentIndex].imageUrl}
               alt={slides[currentIndex].title}
-              className="w-full h-full object-cover object-center"
-              style={{ opacity: (settings.bannerOpacity !== undefined ? settings.bannerOpacity : 35) / 100 }}
+              className="w-full h-full object-cover object-center transition-opacity duration-500 filter brightness-135 contrast-105 saturate-[1.05]"
+              style={{ opacity: (settings.bannerOpacity !== undefined ? Math.max(settings.bannerOpacity, 85) : 95) / 100 }}
               referrerPolicy="no-referrer"
             />
             
-            {/* Ambient Gradient Overlay using Brand Deep Navy */}
-            <div className="absolute inset-0 bg-gradient-to-t from-[#050B1A] via-[#050B1A]/75 to-[#050B1A]/20"></div>
+            {/* Premium Soft Ambient Gradient Overlays:
+                - Left-to-right gradient is softened from solid navy/black to transparent much earlier.
+                - Bottom-up is made very subtle to avoid darkening the bottom half of the image.
+            */}
+            <div className="absolute inset-0 bg-gradient-to-r from-[#050B1A]/80 via-[#050B1A]/40 to-transparent md:block hidden animate-fade-in"></div>
+            <div className="absolute inset-0 bg-gradient-to-t from-[#050B1A]/80 via-[#050B1A]/25 to-transparent md:hidden block"></div>
+            <div className="absolute inset-0 bg-gradient-to-t from-[#050B1A]/40 via-transparent to-transparent"></div>
 
             {/* Slide Content */}
             <div className="absolute inset-0 flex items-center uppercase-none">

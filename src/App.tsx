@@ -1158,19 +1158,23 @@ export default function App() {
     fetchStoreData();
     parseRoute();
     // Load local cart if any
-    const localCart = localStorage.getItem("apex_shop_cart");
-    if (localCart) {
-      try {
-        setCart(JSON.parse(localCart));
-      } catch (err) {
-        console.error("Failed to parse cart", err);
-      }
-    }
+    let initialToken = null;
+    let loginTime = null;
+    let isExpired = false;
 
-    // Dynamic Server Token verification on program startup with 1 hour limit check
-    const initialToken = localStorage.getItem("apex_admin_token");
-    const loginTime = localStorage.getItem("apex_admin_login_time");
-    const isExpired = loginTime && (Date.now() - Number(loginTime) > 3600000);
+    try {
+      const localCart = localStorage.getItem("apex_shop_cart");
+      if (localCart) {
+        setCart(JSON.parse(localCart));
+      }
+      
+      // Dynamic Server Token verification on program startup with 1 hour limit check
+      initialToken = localStorage.getItem("apex_admin_token");
+      loginTime = localStorage.getItem("apex_admin_login_time");
+      isExpired = !!(loginTime && (Date.now() - Number(loginTime) > 3600000));
+    } catch (err) {
+      console.warn("Storage reading is blocked or disabled: ", err);
+    }
     
     if (initialToken && !isExpired) {
       verifyAdminToken(initialToken);
@@ -1510,7 +1514,11 @@ export default function App() {
   // Persist cart
   const saveCartToLocalStorage = (newCart: CartItem[]) => {
     setCart(newCart);
-    localStorage.setItem("apex_shop_cart", JSON.stringify(newCart));
+    try {
+      localStorage.setItem("apex_shop_cart", JSON.stringify(newCart));
+    } catch (err) {
+      console.warn("Storage writing is blocked or disabled: ", err);
+    }
   };
 
   const handleAddToCart = (product: Product, size?: string, color?: string, qty = 1) => {

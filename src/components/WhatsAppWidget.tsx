@@ -241,6 +241,9 @@ export default function WhatsAppWidget({ whatsappNumber, siteTitle = "Ventas Jue
         }`}
       >
         {/* Pulsing Concentric Aura Ring (only when closed) */}
+        {!isOpen && (
+          <span className="absolute inset-0 rounded-full bg-[#25D366]/50 animate-ping pointer-events-none" />
+        )}
 
         {isOpen ? (
           <X className="h-6 w-6 text-white shrink-0" />

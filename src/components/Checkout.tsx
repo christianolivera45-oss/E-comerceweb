@@ -238,31 +238,34 @@ export default function Checkout({
         const cleanVal = value.trim();
         if (!cleanVal) return "El teléfono de contacto es obligatorio.";
         
-        // Solo permitir números, espacios, guiones y el prefijo +
-        const allowedChars = /^[0-9\s\-+]+$/;
+        // Permitir números, espacios, guiones, paréntesis y el prefijo +
+        const allowedChars = /^[0-9\s\-+()]+$/;
         if (!allowedChars.test(cleanVal)) {
-          return "Solo se permiten números, espacios, guiones y el prefijo +.";
+          return "Solo se permiten números, espacios, guiones, paréntesis y el prefijo +.";
         }
 
         const digitsOnly = cleanVal.replace(/\D/g, "");
         if (digitsOnly.length < 8) return "El teléfono debe tener un mínimo de 8 dígitos.";
-        if (digitsOnly.length > 12) return "El teléfono no puede tener más de 12 dígitos.";
+        if (digitsOnly.length > 15) return "El teléfono no puede tener más de 15 dígitos.";
 
-        // Validar formato de teléfono uruguayo
+        // Validar formato de teléfono uruguayo de forma amplia y flexible
         let isUruguayFormat = false;
         if (digitsOnly.startsWith("598")) {
           const rest = digitsOnly.slice(3);
-          if (/^(0?9|2|4)/.test(rest) && rest.length >= 7 && rest.length <= 9) {
+          // Permite formatos como 59899123456, 598099123456, 59824001234
+          if (/^(0?9|2|4)/.test(rest) && rest.length >= 7 && rest.length <= 10) {
             isUruguayFormat = true;
           }
         } else {
-          if (/^(0?9|2|4)/.test(digitsOnly) && (digitsOnly.length === 8 || digitsOnly.length === 9)) {
+          // Permite formatos nacionales sin prefijo internacional (ej. 099123456, 99123456, 24001234)
+          // El largo suele ser 8 o 9 (o hasta 10 si se incluye prefijo local)
+          if (/^(0?9|9|2|4)/.test(digitsOnly) && digitsOnly.length >= 8 && digitsOnly.length <= 10) {
             isUruguayFormat = true;
           }
         }
 
         if (!isUruguayFormat) {
-          return "Debe ser un teléfono uruguayo válido: 8 dígitos para fijos (ej: 24001234) o 9 dígitos para celulares (ej: 099123456).";
+          return "Debe ser un teléfono uruguayo válido: fijos (ej: 24001234) o celulares (ej: 099123456).";
         }
         return "";
       }
@@ -270,7 +273,7 @@ export default function Checkout({
         if (!activeWantsInvoice) return "";
         const cleanVal = value.replace(/\D/g, "");
         if (!value.trim()) return "El RUT es obligatorio.";
-        if (cleanVal.length !== 12) return "El RUT debe tener exactamente 12 dígitos.";
+        if (cleanVal.length !== 12) return `El RUT debe tener exactamente 12 dígitos (se detectaron ${cleanVal.length}). Al escribir puedes incluir puntos, guiones o espacios.`;
 
         const isValidRut = validateRUTUruguay(cleanVal);
         if (!isValidRut) {
@@ -569,6 +572,19 @@ export default function Checkout({
 
     if (hasValidationError) {
       setErrorMessage("Por favor corrige los campos inválidos marcados en rojo en el formulario.");
+      
+      // Auto-scroller to the first field that fails validation
+      setTimeout(() => {
+        const firstErrorField = activeFields.find(field => currentErrors[field]);
+        if (firstErrorField) {
+          const element = document.getElementById(firstErrorField);
+          if (element) {
+            element.scrollIntoView({ behavior: "smooth", block: "center" });
+            element.focus();
+          }
+        }
+      }, 100);
+      
       return false;
     }
     return true;
@@ -903,7 +919,18 @@ export default function Checkout({
         const cleanPhone = settings.whatsappNumber.replace(/[^0-9]/g, "");
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodedText}`;
         
-        window.open(waUrl, "_blank", "referrer");
+        // Safe anchor fallback to solve pop-up blockages inside iframes and sandboxes
+        try {
+          const opened = window.open(waUrl, "_blank", "noopener,noreferrer");
+          if (!opened || opened.closed || typeof opened.closed === "undefined") {
+            // Fallback for sandboxed iframe environments: redirect top frame or local frame
+            window.location.href = waUrl;
+          }
+        } catch (e) {
+          // Absolute fallback redirection
+          window.location.href = waUrl;
+        }
+
         setIsProcessing(false);
         onClearCart();
         onBackToCatalog();
@@ -1011,6 +1038,7 @@ export default function Checkout({
                     <User className="absolute left-3.5 top-3.5 h-4 w-4 text-[#E6BF76]/70" />
                     <input
                       required
+                      id="firstName"
                       type="text"
                       placeholder="Ej: Juan"
                       value={firstName}
@@ -1039,6 +1067,7 @@ export default function Checkout({
                     <User className="absolute left-3.5 top-3.5 h-4 w-4 text-[#E6BF76]/70" />
                     <input
                       required
+                      id="lastName"
                       type="text"
                       placeholder="Ej: Pérez"
                       value={lastName}
@@ -1067,6 +1096,7 @@ export default function Checkout({
                     <Phone className="absolute left-3.5 top-3.5 h-4 w-4 text-[#E6BF76]/70" />
                     <input
                       required
+                      id="phone"
                       type="tel"
                       maxLength={15}
                       placeholder="Ej: 099123456"
@@ -1099,6 +1129,7 @@ export default function Checkout({
                     <Mail className="absolute left-3.5 top-3.5 h-4 w-4 text-[#E6BF76]/70" />
                     <input
                       required
+                      id="email"
                       type="email"
                       placeholder="Ej: nombre@correo.com"
                       value={email}

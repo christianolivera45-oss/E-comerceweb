@@ -248,6 +248,15 @@ export default function ProductDetails({
     autoSwitchedColorRef.current = ""; // Reset matched color on product change
   }, [product.id, is3D, sizes.length, colors.length]);
 
+  // Lock body scrolling while ProductDetails overlay is mounted to prevent double scrollbar issues
+  useEffect(() => {
+    const originalStyle = window.getComputedStyle(document.body).overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = originalStyle;
+    };
+  }, []);
+
   // Automatically update activeImgIndex when selectedColor changes
   useEffect(() => {
     if (selectedColor && selectedColor !== autoSwitchedColorRef.current) {
@@ -804,22 +813,41 @@ Me gustaría coordinar stock, fabricación y envío.`;
 
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   const url = `${window.location.origin}/producto/${product.id}`;
-                  navigator.clipboard.writeText(url);
-                  setCopiedShare(true);
-                  setTimeout(() => setCopiedShare(false), 2500);
+                  const shareData = {
+                    title: product.name,
+                    text: `${product.name} - ${product.category}: ${settings.siteTitle || "Ventas Juem"}`,
+                    url: url
+                  };
+
+                  if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+                    try {
+                      await navigator.share(shareData);
+                    } catch (e: any) {
+                      // fallback if canceled or locked
+                      if (e.name !== "AbortError") {
+                        navigator.clipboard.writeText(url);
+                        setCopiedShare(true);
+                        setTimeout(() => setCopiedShare(false), 2500);
+                      }
+                    }
+                  } else {
+                    navigator.clipboard.writeText(url);
+                    setCopiedShare(true);
+                    setTimeout(() => setCopiedShare(false), 2500);
+                  }
                 }}
-                className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 py-2.5 px-1 rounded-lg font-bold text-[10px] sm:text-xs uppercase tracking-wider border transition-all duration-200 select-none cursor-pointer ${
+                className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 py-2.5 px-3 rounded-lg font-bold text-[10px] sm:text-xs uppercase tracking-wider border transition-all duration-200 select-none cursor-pointer ${
                   isThemeDark 
                     ? "border-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-900/20" 
-                    : "border-slate-100 text-zinc-550 hover:bg-slate-50/50"
+                    : "border-slate-100 text-zinc-500 hover:bg-slate-50/50"
                 }`}
                 title="Compartir o copiar enlace"
               >
-                <Share2 className="h-4 w-4 text-sky-500" />
+                <Share2 className="h-4 w-4 text-sky-500 animate-pulse" />
                 <span className="text-[9px] sm:text-[11px] truncate">
-                  {copiedShare ? "Copiado!" : "Compartir"}
+                  {copiedShare ? "¡Copiado!" : "Compartir"}
                 </span>
               </button>
             </div>

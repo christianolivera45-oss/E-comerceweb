@@ -273,6 +273,9 @@ export default function ImageGalleryEditor({ images, onChange, isThemeDark }: Im
           <p className="text-[10px] text-zinc-450 dark:text-zinc-500">
             Sube o arrastra tus imágenes. La primera de la lista será la <strong className="text-indigo-600 dark:text-indigo-400">Principal</strong>. Arrástralas para reordenar.
           </p>
+          <div className="mt-1.5 p-2 bg-indigo-50/50 dark:bg-zinc-900/45 border border-indigo-500/10 rounded-xl text-[9.5px] text-slate-600 dark:text-zinc-400 leading-relaxed max-w-2xl">
+            💡 <strong>Guía Visual de Calidad:</strong> Para que tus imágenes se exhiban en su máximo tamaño posible y queden perfectamente encuadradas, te recomendamos usar <strong>formato cuadrado (relación de aspecto 1:1)</strong>, fotos tomadas con <strong>fondo transparente o de un color sólido uniforme</strong>, y dejar un <strong>margen o "aire" de aproximadamente 10%</strong> en los bordes para una visualización premium y pulida sin recortes accidentales.
+          </div>
         </div>
         <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-200 dark:bg-zinc-905 text-zinc-600 dark:text-zinc-400 self-start sm:self-center">
           Total: {images.length}

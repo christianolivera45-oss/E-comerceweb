@@ -30,6 +30,26 @@ export default function CartDrawer({
   const [appliedDiscount, setAppliedDiscount] = useState(0); // in percentage
   const [promoStatus, setPromoStatus] = useState<"none" | "success" | "invalid">("none");
 
+  // Help to get available stock
+  const getAvailableStock = (product: any, size?: string, color?: string): number => {
+    if (product.is3D) return 99;
+    if (product.variants && product.variants.length > 0) {
+      if (size && color) {
+        const match = product.variants.find((v: any) => v.size === size && v.color === color);
+        if (match) return match.stock;
+      }
+      if (size) {
+        const match = product.variants.find((v: any) => v.size === size);
+        if (match) return match.stock;
+      }
+      if (color) {
+        const match = product.variants.find((v: any) => v.color === color);
+        if (match) return match.stock;
+      }
+    }
+    return product.stock !== undefined ? product.stock : 99;
+  };
+
   // Helper to resolve actual item price (checking variants for overriding price or delta)
   const getItemPrice = (item: CartItem): number => {
     const p = item.product;
@@ -198,8 +218,18 @@ export default function CartDrawer({
                             </button>
                             <span className="px-2 font-mono text-xs text-[#F4EAD7]">{item.quantity}</span>
                             <button
-                              onClick={() => onUpdateQuantity(item.product.id, item.quantity + 1, item.selectedSize, item.selectedColor)}
-                              className="px-2 py-1 text-zinc-400 hover:text-[#E6BF76] cursor-pointer"
+                              onClick={() => {
+                                const stock = getAvailableStock(item.product, item.selectedSize, item.selectedColor);
+                                if (item.quantity < stock) {
+                                  onUpdateQuantity(item.product.id, item.quantity + 1, item.selectedSize, item.selectedColor);
+                                }
+                              }}
+                              disabled={item.quantity >= getAvailableStock(item.product, item.selectedSize, item.selectedColor)}
+                              className={`px-2 py-1 text-zinc-400 hover:text-[#E6BF76] cursor-pointer ${
+                                item.quantity >= getAvailableStock(item.product, item.selectedSize, item.selectedColor)
+                                  ? "opacity-25 cursor-not-allowed text-zinc-650"
+                                  : ""
+                              }`}
                             >
                               <Plus className="h-3.5 w-3.5" />
                             </button>

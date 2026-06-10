@@ -1551,6 +1551,25 @@ export default function App() {
     }
   };
 
+  const getAvailableStockForProduct = (product: Product, size?: string, color?: string): number => {
+    if (product.is3D) return 99; // Items 3D can be printed on-demand, maximum order is 99
+    if (product.variants && product.variants.length > 0) {
+      if (size && color) {
+        const match = product.variants.find((v) => v.size === size && v.color === color);
+        if (match) return match.stock;
+      }
+      if (size) {
+        const match = product.variants.find((v) => v.size === size);
+        if (match) return match.stock;
+      }
+      if (color) {
+        const match = product.variants.find((v) => v.color === color);
+        if (match) return match.stock;
+      }
+    }
+    return product.stock !== undefined ? product.stock : 99;
+  };
+
   const handleAddToCart = (product: Product, size?: string, color?: string, qty = 1) => {
     const existingIndex = cart.findIndex(
       (item) =>
@@ -1559,13 +1578,35 @@ export default function App() {
         item.selectedColor === color
     );
 
+    const availableStock = getAvailableStockForProduct(product, size, color);
     let newCart = [...cart];
+    let qtyAdded = qty;
+
     if (existingIndex > -1) {
-      newCart[existingIndex].quantity += qty;
+      const currentQty = newCart[existingIndex].quantity;
+      if (currentQty + qty > availableStock) {
+        qtyAdded = availableStock - currentQty;
+        if (qtyAdded <= 0) {
+          showAdminToast(`Stock límite alcanzado para este talle/color (${availableStock} un. máximo)`, "error");
+          return;
+        }
+        newCart[existingIndex].quantity = availableStock;
+        showAdminToast(`Se ajustó la cantidad al stock máximo de (${availableStock} un.)`, "neutral");
+      } else {
+        newCart[existingIndex].quantity += qty;
+      }
     } else {
+      if (qty > availableStock) {
+        qtyAdded = availableStock;
+        if (qtyAdded <= 0) {
+          showAdminToast("Este artículo no tiene stock inmediato disponible.", "error");
+          return;
+        }
+        showAdminToast(`Cantidad ajustada al stock disponible (${availableStock} un.)`, "neutral");
+      }
       newCart.push({
         product,
-        quantity: qty,
+        quantity: qtyAdded,
         selectedSize: size,
         selectedColor: color
       });
@@ -1575,7 +1616,7 @@ export default function App() {
     // Trigger the beautiful confirmation modal instead of just adding silently
     setAddedItemModal({
       product,
-      quantity: qty,
+      quantity: qtyAdded,
       size,
       color,
       isOpen: true
@@ -1585,6 +1626,11 @@ export default function App() {
   const handleUpdateQuantity = (productId: string, quantity: number, size?: string, color?: string) => {
     const newCart = cart.map((item) => {
       if (item.product.id === productId && item.selectedSize === size && item.selectedColor === color) {
+        const availableStock = getAvailableStockForProduct(item.product, size, color);
+        if (quantity > availableStock) {
+          showAdminToast(`Límite de stock alcanzado (${availableStock} un. disponibles)`, "neutral");
+          return { ...item, quantity: availableStock };
+        }
         return { ...item, quantity };
       }
       return item;
@@ -2956,21 +3002,11 @@ export default function App() {
 
           {/* Search bar container */}
           <section id="catalog-view" className="py-8 max-w-7xl mx-auto px-6 w-full flex-1">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-6 border-b pb-6 border-zinc-200/50 dark:border-zinc-800/50">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className="w-1.5 h-4 bg-indigo-500 rounded-full"></span>
-                  <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-zinc-400">
-                    Búsqueda de Catálogo
-                  </h2>
-                </div>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">Encuentra prendas de vestir, tecnología y accesorios al instante.</p>
-              </div>
-
-              {/* Premium Search, Sorting & Stock Filter Bar */}
-              <div className="w-full md:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
-                {/* Show elegant Filtros & Orden button ONLY when a category is selected */}
-                {selectedCategory !== "todos" && (
+            {selectedCategory !== "todos" && (
+              <div className="flex flex-col md:flex-row md:items-center justify-end gap-6 mb-6 border-b pb-6 border-zinc-200/50 dark:border-zinc-800/50">
+                {/* Premium Search, Sorting & Stock Filter Bar */}
+                <div className="w-full md:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+                  {/* Show elegant Filtros & Orden button ONLY when a category is selected */}
                   <button
                     id="btn-advanced-filters"
                     onClick={() => setShowFiltersPanel(!showFiltersPanel)}
@@ -2988,9 +3024,9 @@ export default function App() {
                       <span className="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
                     )}
                   </button>
-                )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Collapsible advanced filters panel (Only shown inside a category) */}
             <AnimatePresence>
@@ -5363,7 +5399,7 @@ export default function App() {
                     </div>
 
                     {/* Talles y Colores Configuration Panel */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border border-indigo-500/10 p-4 rounded-xl bg-slate-50/50 dark:bg-zinc-900/40">
+                    <div className="flex flex-col gap-6 border border-indigo-500/10 p-4 rounded-xl bg-slate-50/50 dark:bg-zinc-900/40">
                       <div>
                         {newProduct.is3D || is3DProduct(newProduct as Product) ? (
                           <div>
@@ -6499,7 +6535,7 @@ export default function App() {
                     </div>
 
                     {/* Talles y Colores Configuration Panel */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border border-indigo-500/10 p-4 rounded-xl bg-slate-50/50 dark:bg-zinc-900/40">
+                    <div className="flex flex-col gap-6 border border-indigo-500/10 p-4 rounded-xl bg-slate-50/50 dark:bg-zinc-900/40">
                       <div>
                         {editingProduct.is3D || is3DProduct(editingProduct) ? (
                           <div>

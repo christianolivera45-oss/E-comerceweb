@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Product, SiteSettings } from "../types";
 import { ShoppingCart, Eye, Tag } from "lucide-react";
 
@@ -60,6 +60,29 @@ export default function ProductCard({
     return { price, imageUrl };
   }, [product]);
 
+  const [currentImage, setCurrentImage] = useState<string>("");
+  const [fallbackAttempt, setFallbackAttempt] = useState<number>(0);
+
+  useEffect(() => {
+    setCurrentImage(product.imageUrl || "");
+    setFallbackAttempt(0);
+  }, [product.imageUrl]);
+
+  const handleImageError = () => {
+    const gallery = product.imagenes || [];
+    if (fallbackAttempt < gallery.length) {
+      const nextImg = gallery[fallbackAttempt];
+      setFallbackAttempt(prev => prev + 1);
+      if (nextImg && nextImg !== currentImage) {
+        setCurrentImage(nextImg);
+      } else {
+        setCurrentImage("https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80");
+      }
+    } else {
+      setCurrentImage("https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80");
+    }
+  };
+
   const getPriceDisplay = () => {
     return `$${Math.round(cheapestOption.price)}`;
   };
@@ -79,14 +102,15 @@ export default function ProductCard({
       {/* Aspect Ratio container for Portrait Product Image - Larger visual presence */}
       <div 
         onClick={() => onViewProduct(product)}
-        className="relative aspect-[3/4] overflow-hidden bg-[#050B1A]/40 cursor-pointer"
+        className="relative aspect-[3/4] overflow-hidden bg-[#050B1A]/40 cursor-pointer flex items-center justify-center p-2"
       >
         <img
-          src={optimizeImageUrl(cheapestOption.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80")}
+          src={optimizeImageUrl(currentImage || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80")}
           alt={product.name}
-          className="h-full w-full object-cover object-center transition-transform duration-700 ease-out group-hover:scale-106"
+          className="max-h-full max-w-full object-contain transition-transform duration-700 ease-out group-hover:scale-106"
           referrerPolicy="no-referrer"
           loading="lazy"
+          onError={handleImageError}
         />
 
         {/* Promo Badge */}

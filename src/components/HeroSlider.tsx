@@ -175,36 +175,7 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
         <ChevronRight className="h-5 w-5" />
       </button>
 
-      {/* Interactive indicator dots and actions bar */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-25 flex items-center gap-4 bg-[#0B1730]/80 backdrop-blur-md border border-[#D4A55A]/20 px-4 py-2.5 rounded-full shadow-2xl">
-        {/* Play / Pause Autoplay state */}
-        <button 
-          onClick={() => setIsPlaying(!isPlaying)}
-          title={isPlaying ? "Pausar carrusel" : "Iniciar reproducción automática"}
-          className="text-[#E6BF76] hover:text-white transition cursor-pointer"
-        >
-          {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-        </button>
 
-        {/* Indicators */}
-        <div className="flex items-center gap-2">
-          {slides.map((_, idx) => (
-            <button
-              key={idx}
-              onClick={() => {
-                setDirection(idx > currentIndex ? 1 : -1);
-                setCurrentIndex(idx);
-              }}
-              aria-label={`Ir a la diapositiva ${idx + 1}`}
-              className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
-                currentIndex === idx 
-                  ? "w-8 bg-[#D4A55A]" 
-                  : "w-2 bg-slate-500/50 hover:bg-[#E6BF76]"
-              }`}
-            />
-          ))}
-        </div>
-      </div>
 
     </div>
   );

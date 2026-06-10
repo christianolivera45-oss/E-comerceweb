@@ -732,6 +732,7 @@ export default function App() {
   const [mobileAdminMenuOpen, setMobileAdminMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isHeaderSearchOpen, setIsHeaderSearchOpen] = useState(false);
   const [bannerProductSearch, setBannerProductSearch] = useState("");
   const [uploadingSlideIdx, setUploadingSlideIdx] = useState<number | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -1393,6 +1394,35 @@ export default function App() {
     if (bannerSlides.length <= 1) return;
     setCurrentBannerIdx((prev) => (prev + 1) % bannerSlides.length);
   };
+
+  // Collapse and close header search bar when clicking outside or pressing Escape key
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const container = document.getElementById("header-search-container");
+      if (container && !container.contains(event.target as Node)) {
+        setIsHeaderSearchOpen(false);
+        setShowSuggestions(false);
+        setSearchQuery("");
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsHeaderSearchOpen(false);
+        setShowSuggestions(false);
+        setSearchQuery("");
+      }
+    }
+    
+    if (isHeaderSearchOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("keydown", handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isHeaderSearchOpen]);
 
   // Dynamic Tab Title, Favicon, Meta Description, Categories and Canonical URL Synchronization based on admin settings & selected product
   useEffect(() => {
@@ -2532,6 +2562,245 @@ export default function App() {
         <div className="flex items-center gap-3 md:gap-4 font-sans text-sm shrink-0">
           {activeTab === "storefront" ? (
             <>
+              {/* Expandable Search Input on Header */}
+              <div id="header-search-container" className="relative flex items-center">
+                <motion.div
+                  initial={false}
+                  animate={{
+                    width: isHeaderSearchOpen ? (window.innerWidth < 640 ? "170px" : "260px") : "36px"
+                  }}
+                  transition={{ type: "spring", stiffness: 350, damping: 26 }}
+                  className={`flex items-center overflow-hidden rounded-full h-9 border ${
+                    isHeaderSearchOpen 
+                      ? "border-[#D4A55A]/50 bg-[#0B1730]/90 shadow-lg shadow-[#D4A55A]/5" 
+                      : "border-[#D4A55A]/20 bg-[#0B1730]/30 hover:border-[#D4A55A]/55 hover:bg-[#0B1730]/60"
+                  } transition-colors duration-250`}
+                >
+                  <button
+                    onClick={() => {
+                      if (!isHeaderSearchOpen) {
+                        setIsHeaderSearchOpen(true);
+                        // Focus the input
+                        setTimeout(() => {
+                          document.getElementById("header-search-input")?.focus();
+                        }, 100);
+                        // Scroll to catalog section if user is at the top
+                        const el = document.getElementById("catalog-view");
+                        if (el) el.scrollIntoView({ behavior: "smooth" });
+                      } else {
+                        // Close if empty, otherwise do nothing
+                        if (!searchQuery) {
+                          setIsHeaderSearchOpen(false);
+                          setShowSuggestions(false);
+                        }
+                      }
+                    }}
+                    className="p-2 flex items-center justify-center text-[#E6BF76] hover:text-[#F4EAD7] cursor-pointer shrink-0"
+                    title="Buscar productos"
+                  >
+                    <Search className="h-4 w-4" />
+                  </button>
+
+                  <AnimatePresence>
+                    {isHeaderSearchOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -10 }}
+                        transition={{ duration: 0.15 }}
+                        className="flex items-center w-full pr-2.5"
+                      >
+                        <input
+                          id="header-search-input"
+                          type="text"
+                          placeholder="Buscar..."
+                          value={searchQuery}
+                          onChange={(e) => {
+                            setSearchQuery(e.target.value);
+                            setShowSuggestions(true);
+                          }}
+                          onFocus={() => {
+                            setShowSuggestions(true);
+                            const el = document.getElementById("catalog-view");
+                            if (el) el.scrollIntoView({ behavior: "smooth" });
+                          }}
+                          onBlur={() => setTimeout(() => setShowSuggestions(false), 250)}
+                          className="w-full bg-transparent text-[#F4EAD7] placeholder-zinc-500 border-none outline-none ring-0 focus:ring-0 text-xs py-1 select-all"
+                        />
+                        {searchQuery && (
+                          <button
+                            onClick={() => {
+                              setSearchQuery("");
+                              setShowSuggestions(false);
+                            }}
+                            className="text-[#E6BF76] hover:text-[#F4EAD7] text-sm px-1.5 font-bold font-mono cursor-pointer shrink-0"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+
+                {/* Float Autocomplete Suggestions right under Header Search */}
+                {isHeaderSearchOpen && showSuggestions && searchQuery.trim().length >= 2 && (() => {
+                  const normQ = normalizeText(searchQuery);
+                  
+                  // 1. Match categories
+                  const matchingCats = (store.dbCategories || [])
+                    .filter(c => c.active !== false && normalizeText(c.nombre).includes(normQ));
+                  
+                  const matchingSubs = (store.dbSubcategories || [])
+                    .filter(s => s.active !== false && normalizeText(s.nombre).includes(normQ));
+
+                  // 2. Match products (top 5 matched)
+                  const matchingProds = store.products
+                    .filter(p => !p.paused && p.active !== false)
+                    .map(p => ({
+                      product: p,
+                      score: calculateRelevance(p, searchQuery, store.dbCategories, store.dbSubcategories)
+                    }))
+                    .filter(item => item.score > 0)
+                    .sort((a, b) => b.score - a.score)
+                    .slice(0, 5);
+
+                  const hasAnySuggestion = matchingCats.length > 0 || matchingSubs.length > 0 || matchingProds.length > 0;
+
+                  return (
+                    <AnimatePresence>
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 top-full mt-2 bg-[#0B1730]/95 border border-[#D4A55A]/30 backdrop-blur-md rounded-xl shadow-2xl z-55 overflow-hidden divide-y divide-[#D4A55A]/10 w-[280px] sm:w-[320px] md:w-[360px]"
+                      >
+                        {!hasAnySuggestion ? (
+                          <div className="p-4 text-center">
+                            <p className="text-xs text-zinc-400">
+                              No hay sugerencias para "{searchQuery}"
+                            </p>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Categories */}
+                            {(matchingCats.length > 0 || matchingSubs.length > 0) && (
+                              <div className="p-2 bg-[#0B1730]/50">
+                                <span className="block text-[9px] font-extrabold uppercase text-[#E6BF76]/60 px-2 py-0.5 tracking-wider">
+                                  Categorías sugeridas
+                                </span>
+                                <div className="space-y-0.5 mt-1">
+                                  {matchingCats.map(cat => (
+                                    <button
+                                      key={`header-cat-sug-${cat.id}`}
+                                      onClick={() => {
+                                        setSelectedCategory(cat.id);
+                                        setSelectedSubcategory("all");
+                                        setSearchQuery("");
+                                        setShowSuggestions(false);
+                                        setIsHeaderSearchOpen(false);
+                                        document.getElementById("catalog-view")?.scrollIntoView({ behavior: "smooth" });
+                                      }}
+                                      className="w-full text-left px-2 py-1 rounded text-xs hover:bg-[#D4A55A]/10 text-[#F4EAD7] hover:text-[#E6BF76] transition-colors flex items-center justify-between cursor-pointer border-0 bg-transparent"
+                                    >
+                                      <span className="font-semibold">{cat.nombre}</span>
+                                      <span className="text-[9px] text-[#E6BF76]/70">Ver ›</span>
+                                    </button>
+                                  ))}
+                                  {matchingSubs.map(sub => {
+                                    const parentCat = (store.dbCategories || []).find(c => c.id === sub.categoria_id);
+                                    return (
+                                      <button
+                                        key={`header-sub-sug-${sub.id}`}
+                                        onClick={() => {
+                                          if (parentCat) {
+                                            setSelectedCategory(parentCat.id);
+                                          }
+                                          setSelectedSubcategory(sub.id);
+                                          setSearchQuery("");
+                                          setShowSuggestions(false);
+                                          setIsHeaderSearchOpen(false);
+                                          document.getElementById("catalog-view")?.scrollIntoView({ behavior: "smooth" });
+                                        }}
+                                        className="w-full text-left px-2 py-1 rounded text-xs hover:bg-[#D4A55A]/10 text-[#F4EAD7] hover:text-[#E6BF76] transition-colors flex items-center justify-between cursor-pointer border-0 bg-transparent"
+                                      >
+                                        <span>{parentCat?.nombre || "Otros"} › <span className="font-semibold text-[#E6BF76]">{sub.nombre}</span></span>
+                                        <span className="text-[9px] text-[#E6BF76]/70">Ver ›</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Products */}
+                            {matchingProds.length > 0 && (
+                              <div className="p-2">
+                                <span className="block text-[9px] font-extrabold uppercase text-[#E6BF76]/60 px-2 py-0.5 tracking-wider">
+                                  Artículos sugeridos
+                                </span>
+                                <div className="space-y-1 mt-1">
+                                  {matchingProds.map(item => {
+                                    const p = item.product;
+                                    return (
+                                      <button
+                                        key={`header-prod-sug-${p.id}`}
+                                        onClick={() => {
+                                          handleOpenProduct(p);
+                                          setShowSuggestions(false);
+                                          setIsHeaderSearchOpen(false);
+                                        }}
+                                        className="w-full text-left p-1 rounded hover:bg-[#D4A55A]/10 transition-colors flex items-center gap-2 cursor-pointer group border-0 bg-transparent"
+                                      >
+                                        <div className="w-8 h-8 rounded overflow-hidden bg-[#050B1A] shrink-0 border border-[#D4A55A]/25">
+                                          <img
+                                            src={p.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=100&q=80"}
+                                            alt={p.name}
+                                            referrerPolicy="no-referrer"
+                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                          />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <span className="block text-[11px] font-bold text-[#F4EAD7] truncate group-hover:text-[#E6BF76] transition-colors">
+                                            {p.name}
+                                          </span>
+                                          <span className="block text-[9px] text-zinc-400 truncate">
+                                            {p.category} | {p.stock > 0 ? `${p.stock} dispo` : "Bajo demanda"}
+                                          </span>
+                                        </div>
+                                        <div className="text-right shrink-0">
+                                          <span className="text-[11px] font-black text-[#E6BF76]">
+                                            ${Math.round(p.price)}
+                                          </span>
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="p-1 px-2 flex justify-between bg-[#0B1730] text-[9px] text-[#E6BF76]/80">
+                              <span>Sugerido</span>
+                              <button
+                                onClick={() => {
+                                  setShowSuggestions(false);
+                                  document.getElementById("catalog-view")?.scrollIntoView({ behavior: "smooth" });
+                                }}
+                                className="hover:underline font-bold bg-transparent border-0 cursor-pointer text-[#E6BF76]"
+                              >
+                                Ver todos ({filteredProducts.length})
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </motion.div>
+                    </AnimatePresence>
+                  );
+                })()}
+              </div>
+
               {/* Shopping Cart Trigger */}
               <button
                 onClick={() => setIsCartOpen(true)}
@@ -2700,192 +2969,6 @@ export default function App() {
 
               {/* Premium Search, Sorting & Stock Filter Bar */}
               <div className="w-full md:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
-                <div className="relative w-full md:w-80">
-                  <input
-                    type="text"
-                    placeholder="Buscar por nombre, descripción o marca..."
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setShowSuggestions(true);
-                    }}
-                    onFocus={() => setShowSuggestions(true)}
-                    onBlur={() => setTimeout(() => setShowSuggestions(false), 250)}
-                    className={`w-full pl-9 pr-10 py-3 rounded-xl text-xs outline-none border transition-all ${
-                      store.settings.themeMode === "dark"
-                        ? "bg-zinc-900 border-zinc-800 text-white placeholder-zinc-500 focus:border-zinc-700 focus:bg-zinc-950"
-                        : "bg-slate-50 border-slate-150 text-slate-800 focus:bg-white focus:border-blue-400"
-                    }`}
-                  />
-                  <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-                  {searchQuery && (
-                    <button
-                      onClick={() => {
-                        setSearchQuery("");
-                        setShowSuggestions(false);
-                      }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white text-xs font-bold font-mono cursor-pointer"
-                    >
-                      ×
-                    </button>
-                  )}
-
-                  {/* Autocomplete / Search Suggestions Popover */}
-                  {showSuggestions && searchQuery.trim().length >= 2 && (() => {
-                    const normQ = normalizeText(searchQuery);
-                    
-                    // 1. Match categories
-                    const matchingCats = (store.dbCategories || [])
-                      .filter(c => c.active !== false && normalizeText(c.nombre).includes(normQ));
-                    
-                    const matchingSubs = (store.dbSubcategories || [])
-                      .filter(s => s.active !== false && normalizeText(s.nombre).includes(normQ));
-
-                    // 2. Match products (top 5 matched)
-                    const matchingProds = store.products
-                      .filter(p => !p.paused && p.active !== false)
-                      .map(p => ({
-                        product: p,
-                        score: calculateRelevance(p, searchQuery, store.dbCategories, store.dbSubcategories)
-                      }))
-                      .filter(item => item.score > 0)
-                      .sort((a, b) => b.score - a.score)
-                      .slice(0, 5);
-
-                    const hasAnySuggestion = matchingCats.length > 0 || matchingSubs.length > 0 || matchingProds.length > 0;
-
-                    if (!hasAnySuggestion) {
-                      return (
-                        <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800/85 rounded-xl shadow-xl z-50 p-4 text-center">
-                          <p className="text-xs text-zinc-400 dark:text-zinc-500">
-                            No se encontraron sugerencias para "<span className="font-semibold">{searchQuery}</span>"
-                          </p>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div className="absolute right-0 top-full mt-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800/85 rounded-xl shadow-xl z-50 overflow-hidden divide-y divide-slate-100 dark:divide-zinc-900 transition-all duration-200 w-[300px] sm:w-[360px] md:w-[400px]">
-                        
-                        {/* Render category direct link suggestions */}
-                        {(matchingCats.length > 0 || matchingSubs.length > 0) && (
-                          <div className="p-2 bg-slate-50/50 dark:bg-zinc-900/20">
-                            <span className="block text-[9px] font-extrabold uppercase text-slate-400 dark:text-zinc-550 px-2.5 py-1 tracking-wider">
-                              Categorías sugeridas
-                            </span>
-                            <div className="space-y-0.5">
-                              {matchingCats.map(cat => (
-                                <button
-                                  key={`cat-sug-${cat.id}`}
-                                  onClick={() => {
-                                    setSelectedCategory(cat.id);
-                                    setSelectedSubcategory("all");
-                                    setSearchQuery("");
-                                    setShowSuggestions(false);
-                                    // Smooth scroll to catalog
-                                    document.getElementById("catalog-view")?.scrollIntoView({ behavior: "smooth" });
-                                  }}
-                                  className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-700 dark:text-zinc-300 transition-colors flex items-center justify-between cursor-pointer border-0 bg-transparent"
-                                >
-                                  <span className="font-semibold text-indigo-650 dark:text-indigo-400">
-                                    {cat.nombre}
-                                  </span>
-                                  <span className="text-[10px] text-slate-400 font-mono">Ir a categoría ›</span>
-                                </button>
-                              ))}
-                              {matchingSubs.map(sub => {
-                                const parentCat = (store.dbCategories || []).find(c => c.id === sub.categoria_id);
-                                return (
-                                  <button
-                                    key={`sub-sug-${sub.id}`}
-                                    onClick={() => {
-                                      if (parentCat) {
-                                        setSelectedCategory(parentCat.id);
-                                      }
-                                      setSelectedSubcategory(sub.id);
-                                      setSearchQuery("");
-                                      setShowSuggestions(false);
-                                      document.getElementById("catalog-view")?.scrollIntoView({ behavior: "smooth" });
-                                    }}
-                                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-700 dark:text-zinc-300 transition-colors flex items-center justify-between cursor-pointer border-0 bg-transparent"
-                                  >
-                                    <span className="text-zinc-700 dark:text-zinc-300">
-                                      {parentCat?.nombre || "Otros"} › <span className="font-semibold text-indigo-650 dark:text-indigo-400">{sub.nombre}</span>
-                                    </span>
-                                    <span className="text-[10px] text-slate-400 font-mono">Ir a subcategoría ›</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Render top matched products */}
-                        {matchingProds.length > 0 && (
-                          <div className="p-2">
-                            <span className="block text-[9px] font-extrabold uppercase text-slate-400 dark:text-zinc-550 px-2.5 py-1 tracking-wider">
-                              Artículos sugeridos
-                            </span>
-                            <div className="space-y-1">
-                              {matchingProds.map(item => {
-                                const p = item.product;
-                                return (
-                                  <button
-                                    key={`prod-sug-${p.id}`}
-                                    onClick={() => {
-                                      handleOpenProduct(p);
-                                      setShowSuggestions(false);
-                                    }}
-                                    className="w-full text-left p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-zinc-900 transition-colors flex items-center gap-3 cursor-pointer group border-0 bg-transparent"
-                                  >
-                                    <div className="relative w-10 h-10 rounded-md overflow-hidden bg-slate-100 dark:bg-zinc-800 shrink-0 border border-slate-150 dark:border-zinc-900">
-                                      <img
-                                        src={p.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=100&q=80"}
-                                        alt={p.name}
-                                        referrerPolicy="no-referrer"
-                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                                      />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <span className="block text-xs font-bold text-slate-800 dark:text-zinc-100 truncate group-hover:text-indigo-650 dark:group-hover:text-indigo-400 transition-colors">
-                                        {p.name}
-                                      </span>
-                                      <span className="block text-[10px] text-slate-450 dark:text-zinc-500 truncate">
-                                        {p.category} | {p.stock > 0 ? `${p.stock} dispo` : "Bajo demanda"}
-                                      </span>
-                                    </div>
-                                    <div className="text-right shrink-0">
-                                      <span className="text-xs font-black text-indigo-655 dark:text-indigo-400">
-                                        ${Math.round(p.price)}
-                                      </span>
-                                      {p.originalPrice && p.originalPrice > p.price && (
-                                        <span className="block text-[9px] text-slate-400 dark:text-zinc-500 line-through">
-                                          ${Math.round(p.originalPrice)}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="p-2 bg-slate-50 dark:bg-zinc-900/40 text-center">
-                          <button
-                            onClick={() => {
-                              setShowSuggestions(false);
-                            }}
-                            className="text-[10px] text-indigo-605 dark:text-indigo-400 font-bold hover:underline cursor-pointer border-0 bg-transparent"
-                          >
-                            Ver todos los resultados ({filteredProducts.length})
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-
                 {/* Show elegant Filtros & Orden button ONLY when a category is selected */}
                 {selectedCategory !== "todos" && (
                   <button

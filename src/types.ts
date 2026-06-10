@@ -139,6 +139,7 @@ export interface SiteSettings {
   emailTemplateOrderStatusChangedBody?: string;
   emailHeaderImageUrl?: string;
   bannerOpacity?: number;
+  featuredSliderSpeed?: number;
 }
 
 export interface Category {

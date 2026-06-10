@@ -218,6 +218,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   bannerSubtitle: "Descubre las últimas tendencias con descuentos de hasta el 40%.",
   bannerImageUrl: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80",
   bannerOpacity: 35,
+  featuredSliderSpeed: 2500,
   whatsappNumber: "5491123456789",
   primaryColor: "#2563eb",
   accentColor: "#10b981",
@@ -544,6 +545,12 @@ const getCategoryDisplayName = (cat: string) => {
 
 // Temas y Paletas de Colores Predeterminadas para el eCommerce
 const THEME_PRESETS = [
+  {
+    name: "Colores Juem 🎨",
+    primaryColor: "#D4A55A",
+    accentColor: "#E6BF76",
+    themeMode: "dark" as "dark" | "light"
+  },
   {
     name: "Apex Clásico",
     primaryColor: "#2563eb",
@@ -3710,6 +3717,21 @@ export default function App() {
                       />
                     </div>
 
+                    <div>
+                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Velocidad de Giro (Especiales Destacados)</label>
+                      <select
+                        value={editingSettings.featuredSliderSpeed !== undefined ? editingSettings.featuredSliderSpeed : 2500}
+                        onChange={(e) => setEditingSettings({ ...editingSettings, featuredSliderSpeed: Number(e.target.value) })}
+                        className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
+                      >
+                        <option value={1500}>Muy Rápido (1.5 segundos)</option>
+                        <option value={2500}>Rápido (2.5 segundos)</option>
+                        <option value={4000}>Normal (4 segundos)</option>
+                        <option value={6000}>Lento (6 segundos)</option>
+                        <option value={0}>Pausa (Sin rotación automática)</option>
+                      </select>
+                    </div>
+
                     {/* Logo Configurator inside store general settings */}
                     <div className="border border-slate-200 dark:border-zinc-800 rounded-xl p-4 bg-slate-50/50 dark:bg-zinc-900/30 space-y-3">
                       <div className="flex items-center gap-2 border-b border-slate-200 dark:border-zinc-800 pb-2">
@@ -4616,6 +4638,123 @@ export default function App() {
                             </button>
                           );
                         })}
+                      </div>
+                    </div>
+
+                    {/* Luxurious Info Card: Colores Juem & Style Specifications */}
+                    <div className="border border-[#D4A55A]/30 bg-[#050B1A] p-6 rounded-2xl text-[#F4EAD7] space-y-6 mt-4 shadow-xl">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#D4A55A]/20 pb-4">
+                        <div>
+                          <h4 className="font-serif text-lg font-bold tracking-tight text-[#E6BF76] flex items-center gap-2">
+                            Colores Juem 🎨
+                          </h4>
+                          <p className="text-[10px] uppercase font-bold tracking-widest text-[#D4A55A]/80 mt-1">
+                            Especificación de Alta Costura y Lujo Editorial
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingSettings({
+                              ...editingSettings,
+                              primaryColor: "#D4A55A",
+                              accentColor: "#E6BF76",
+                              themeMode: "dark"
+                            });
+                            showAdminToast('Tema "Colores Juem 🎨" seleccionado temporalmente.', "success");
+                          }}
+                          className="py-2 px-4 rounded-xl border border-[#D4A55A] bg-[#D4A55A]/10 text-[#E6BF76] hover:bg-[#D4A55A] hover:text-[#050B1A] transition text-[11px] font-extrabold uppercase tracking-widest active:scale-95 cursor-pointer flex items-center gap-1.5 self-start sm:self-center"
+                        >
+                          <Sparkles className="h-3 w-3" />
+                          <span>Aplicar Tema Juem</span>
+                        </button>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div>
+                          <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-450 block mb-2">
+                            🎨 Paleta de Colores Aplicados en la Web
+                          </span>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            <div className="p-3 rounded-xl border border-zinc-900 bg-[#0B1730]/40 space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="w-3 h-3 rounded-full bg-[#050B1A] border border-zinc-700"></span>
+                                <span className="font-bold text-[#E6BF76] font-mono">#050B1A</span>
+                              </div>
+                              <p className="font-medium text-slate-200">Fondo Principal (Azul Profundo)</p>
+                              <p className="text-[10px] text-zinc-400">Fondo del sitio o de la página, pie de página y fondos principales de desplegables.</p>
+                            </div>
+
+                            <div className="p-3 rounded-xl border border-zinc-900 bg-[#0B1730]/40 space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="w-3 h-3 rounded-full bg-[#0B1730] border border-zinc-700"></span>
+                                <span className="font-bold text-[#E6BF76] font-mono">#0B1730</span>
+                              </div>
+                              <p className="font-medium text-slate-200">Fondo Secundario (Azul Cobalto Oscuro)</p>
+                              <p className="text-[10px] text-zinc-400">Tarjetas de producto, contenedor de carrito, inputs y botones inactivos de menú.</p>
+                            </div>
+
+                            <div className="p-3 rounded-xl border border-zinc-900 bg-[#0B1730]/40 space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="w-3 h-3 rounded-full bg-[#D4A55A] border border-black/10"></span>
+                                <span className="font-bold text-[#E6BF76] font-mono">#D4A55A</span>
+                              </div>
+                              <p className="font-medium text-slate-200">Dorado Principal (Accent Gold)</p>
+                              <p className="text-[10px] text-zinc-400">Botones principales, categorías activas, precio seleccionado y acentos decorativos.</p>
+                            </div>
+
+                            <div className="p-3 rounded-xl border border-zinc-900 bg-[#0B1730]/40 space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="w-3 h-3 rounded-full bg-[#E6BF76] border border-black/10"></span>
+                                <span className="font-bold text-[#E6BF76] font-mono">#E6BF76</span>
+                              </div>
+                              <p className="font-medium text-slate-200">Dorado Arena (Light Gold)</p>
+                              <p className="text-[10px] text-zinc-400">Enlaces interactivos, subtextos destacados, indicador activo de talles.</p>
+                            </div>
+
+                            <div className="p-3 rounded-xl border border-zinc-900 bg-[#0B1730]/40 space-y-1 col-span-1 md:col-span-2">
+                              <div className="flex items-center gap-2">
+                                <span className="w-3 h-3 rounded-full bg-[#F4EAD7] border border-zinc-400"></span>
+                                <span className="font-bold text-[#E6BF76] font-mono">#F4EAD7</span>
+                              </div>
+                              <p className="font-medium text-slate-200">Blanco Crema Elegante</p>
+                              <p className="text-[10px] text-zinc-400">Títulos principales de sección, títulos de productos en portada y textos esenciales.</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-[#D4A55A]/10 pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#E6BF76] block mb-2">
+                              ✍️ Estilo de Tipografía (Letras)
+                            </span>
+                            <ul className="text-xs space-y-2 text-zinc-300">
+                              <li>
+                                <strong className="text-[#F4EAD7] font-serif">Tipografía Display / Serif:</strong> Utilizada en títulos principales, cabeceras del carrusel y título de tu marca para transmitir elegancia y prestigio de alta gama.
+                              </li>
+                              <li>
+                                <strong className="text-[#F4EAD7] font-sans">Tipografía Sans (Inter):</strong> Para cuerpo de texto, descripciones del producto, botones de compra y tablas de medidas, garantizando legibilidad perfecta.
+                              </li>
+                              <li>
+                                <strong className="text-[#F4EAD7] font-mono text-[10px]">Tipografía Mono (JetBrains Mono):</strong> Reservada para números de transacciones, códigos de cupones y medidas exactas de talles.
+                              </li>
+                            </ul>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#E6BF76] block mb-2">
+                              ✨ Interacciones y Hover de Menú Aplicados
+                            </span>
+                            <ul className="text-xs space-y-2 text-zinc-300">
+                              <li>
+                                <strong className="text-[#F4EAD7]">Botones e Items de Menú:</strong> Reaccionan con animación de escala (<code className="text-[#E6BF76] font-mono text-[10px]">scale-[1.03]</code>), cambio suave de borde a un tono dorado vibrante y destellos de opacidad dorada al pasar el cursor.
+                              </li>
+                              <li>
+                                <strong className="text-[#F4EAD7]">Botón del Carrito:</strong> Reacciona dinámicamente convirtiendo su icono de dorado a crema claro con fondo cobalto satinado.
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
                       </div>
                     </div>
 

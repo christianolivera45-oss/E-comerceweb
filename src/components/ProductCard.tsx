@@ -166,7 +166,7 @@ export default function ProductCard({
             }`}
           >
             <ShoppingCart className="h-3 w-3" />
-            <span>{product.stock > 0 ? "Añadir / Comprar" : "Sin Stock"}</span>
+            <span>{product.stock > 0 ? "Comprar" : "Sin Stock"}</span>
           </button>
         </div>
       </div>

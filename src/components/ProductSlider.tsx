@@ -27,6 +27,7 @@ export default function ProductSlider({
   const [canScrollRight, setCanScrollRight] = useState(false);
 
   const [isPaused, setIsPaused] = useState(false);
+  const autoplaySpeed = settings.featuredSliderSpeed !== undefined ? settings.featuredSliderSpeed : 2500;
 
   // Render all products provided
   const displayedProducts = products;
@@ -58,7 +59,7 @@ export default function ProductSlider({
 
   // Autoplay auto-scrolling effect
   useEffect(() => {
-    if (displayedProducts.length <= 1 || isPaused) return;
+    if (displayedProducts.length <= 1 || isPaused || autoplaySpeed <= 0) return;
 
     const interval = setInterval(() => {
       const el = containerRef.current;
@@ -74,10 +75,10 @@ export default function ProductSlider({
           el.scrollBy({ left: scrollAmount, behavior: "smooth" });
         }
       }
-    }, 4000); // Transitions every 4 seconds
+    }, autoplaySpeed); // Transitions every autoplaySpeed ms
 
     return () => clearInterval(interval);
-  }, [displayedProducts, isPaused]);
+  }, [displayedProducts, isPaused, autoplaySpeed]);
 
   const scroll = (direction: "left" | "right") => {
     const el = containerRef.current;

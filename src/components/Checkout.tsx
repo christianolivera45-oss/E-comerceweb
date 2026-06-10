@@ -1651,16 +1651,6 @@ export default function Checkout({
 
         {checkoutStep === 3 && (
           <div className="space-y-6 animate-fade-in">
-            {/* Back Link to edit details */}
-            <button
-              type="button"
-              onClick={() => setCheckoutStep(2)}
-              className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider py-2.5 px-4 rounded-xl border border-[#D4A55A]/25 bg-[#050B1A]/60 text-zinc-300 hover:bg-[#050B1A]/90 hover:border-[#D4A55A]/50 hover:text-[#E6BF76] transition cursor-pointer"
-            >
-              <ArrowLeft className="h-4 w-4 text-[#D4A55A]" />
-              <span>Modificar Forma de Envío</span>
-            </button>
-
             {/* Box 4: OPCIÓN DE PAGO */}
             <div className="p-6 rounded-2xl border bg-[#0B1730] border-[#D4A55A]/20 text-[#F4EAD7] shadow-xl shadow-black/35">
               <h2 className="text-base font-extrabold tracking-tight mb-4 uppercase flex items-center gap-2.5">
@@ -1806,7 +1796,7 @@ export default function Checkout({
             </div>
 
             {/* Step 3 Inline Actions */}
-            <div className="pt-4 flex items-center justify-start gap-4">
+            <div className="pt-4 flex items-center justify-between gap-4 flex-wrap">
               <button
                 type="button"
                 onClick={() => setCheckoutStep(2)}
@@ -1814,6 +1804,15 @@ export default function Checkout({
               >
                 <ArrowLeft className="h-4 w-4 text-[#E6BF76]" />
                 <span>Volver</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCheckoutStep(2)}
+                className="flex items-center gap-2 py-3 px-5 rounded-xl text-xs font-extrabold uppercase tracking-widest border border-[#D4A55A]/25 bg-[#050B1A]/60 text-[#E6BF76] hover:bg-[#050B1A]/90 hover:border-[#D4A55A]/50 hover:text-white transition active:scale-95 cursor-pointer"
+              >
+                <ArrowLeft className="h-4 w-4 text-[#D4A55A]" />
+                <span>Modificar Forma de Envío</span>
               </button>
             </div>
           </div>

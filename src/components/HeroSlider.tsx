@@ -118,16 +118,6 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
             <div className="absolute inset-0 flex items-center uppercase-none">
               <div className="max-w-7xl mx-auto px-6 w-full text-center md:text-left relative z-10">
                 <div className="max-w-2xl">
-                  {/* Category Accent in Gold */}
-                  <motion.div
-                    initial={{ opacity: 0, y: -15 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.15, duration: 0.4 }}
-                    className="inline-flex items-center gap-2 mb-3 bg-[#D4A55A]/10 border border-[#D4A55A]/20 px-3 py-1 rounded-full text-[10px] font-sans font-semibold tracking-widest text-[#E6BF76] uppercase"
-                  >
-                    <Sparkles className="h-3 w-3 text-[#D4A55A]" />
-                    {settings.siteTitle || "Juem Colecciones"}
-                  </motion.div>
 
                   <motion.h1 
                     initial={{ opacity: 0, y: 20 }}

@@ -2455,12 +2455,10 @@ export default function App() {
                         e.stopPropagation();
                         setActiveDropdown(isOpen ? null : catObj.id);
                       }}
-                      className={`flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs font-bold transition-all duration-300 border select-none cursor-pointer tracking-tight ${
+                      className={`flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs font-bold transition-all duration-305 border select-none cursor-pointer tracking-tight ${
                         isCatActive
-                          ? "theme-btn-primary border-transparent text-white shadow-md shadow-indigo-500/10 scale-[1.02]"
-                          : store.settings.themeMode === "dark"
-                          ? "border-zinc-800 bg-zinc-900/50 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800/80 hover:text-white"
-                          : "border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-slate-950 hover:border-slate-300 shadow-sm"
+                          ? "bg-[#D4A55A] border-transparent text-[#050B1A] shadow-md shadow-[#D4A55A]/25 scale-[1.02]"
+                          : "border-[#D4A55A]/25 bg-[#0B1730]/65 text-[#F4EAD7] hover:border-[#D4A55A]/60 hover:bg-[#D4A55A]/10 hover:text-[#E6BF76] hover:scale-[1.03] duration-300"
                       }`}
                     >
                       <span className="shrink-0 size-3.5 flex items-center justify-center [&_svg]:h-3.5 [&_svg]:w-3.5 opacity-80">
@@ -2478,7 +2476,7 @@ export default function App() {
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: 8, scale: 0.95 }}
                           transition={{ duration: 0.2, ease: "easeOut" }}
-                          className="absolute top-full left-1/2 -translate-x-1/2 md:-translate-x-0 md:left-0 mt-2.5 w-48 rounded-xl shadow-2xl p-1.5 z-50 origin-top bg-zinc-950/95 border border-zinc-800 backdrop-blur-md text-white select-none"
+                          className="absolute top-full left-1/2 -translate-x-1/2 md:-translate-x-0 md:left-0 mt-2.5 w-48 rounded-xl shadow-2xl p-1.5 z-50 origin-top bg-[#0B1730]/95 border border-[#D4A55A]/30 backdrop-blur-md text-[#F4EAD7] select-none"
                         >
                           {/* Inner list */}
                           <div className="flex flex-col gap-0.5">
@@ -2494,13 +2492,13 @@ export default function App() {
                                   }}
                                   className={`w-full text-left text-[11px] py-2 px-2.5 rounded-lg transition-all cursor-pointer font-bold uppercase tracking-wider flex items-center justify-between ${
                                     isSubcatActive
-                                      ? "bg-indigo-600/30 text-indigo-400"
-                                      : "text-zinc-300 hover:bg-zinc-900 hover:text-white"
+                                      ? "bg-[#D4A55A]/20 text-[#E6BF76]"
+                                      : "text-[#F4EAD7]/80 hover:bg-[#D4A55A]/10 hover:text-[#E6BF76]"
                                   }`}
                                 >
                                   <span>{subcat.name}</span>
                                   {isSubcatActive && (
-                                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shadow shadow-indigo-500/50" />
+                                    <span className="w-1.5 h-1.5 rounded-full bg-[#E6BF76] shadow shadow-[#D4A55A]/40" />
                                   )}
                                 </button>
                               );
@@ -2522,14 +2520,10 @@ export default function App() {
               {/* Shopping Cart Trigger */}
               <button
                 onClick={() => setIsCartOpen(true)}
-                className={`relative p-2 rounded-xl transition flex items-center gap-1.5 ${
-                  store.settings.themeMode === "dark" 
-                    ? "hover:bg-zinc-800 text-zinc-300 hover:text-white" 
-                    : "hover:bg-slate-100 text-slate-600 hover:text-slate-900"
-                }`}
+                className="relative p-2 rounded-xl transition flex items-center gap-1.5 hover:bg-[#0B1730] text-[#E6BF76] hover:text-[#F4EAD7] cursor-pointer"
               >
                 <CartIcon className="h-5 w-5" />
-                <span className="text-xs font-mono font-bold bg-indigo-600 text-white rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
+                <span className="text-xs font-sans font-bold bg-[#D4A55A] text-[#050B1A] rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
                   {cart.reduce((sum, item) => sum + item.quantity, 0)}
                 </span>
               </button>
@@ -2541,7 +2535,7 @@ export default function App() {
                     setActiveTab("admin");
                     window.history.pushState(null, "", `/admin/${adminSection}`);
                   }}
-                  className="hidden lg:flex items-center gap-1 text-xs font-bold py-1.5 px-3 rounded-lg bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 transition cursor-pointer"
+                  className="hidden lg:flex items-center gap-1 text-xs font-bold py-1.5 px-3 rounded-lg bg-[#D4A55A]/10 hover:bg-[#D4A55A]/20 text-[#E6BF76] transition cursor-pointer"
                 >
                   <Settings className="h-3.5 w-3.5" />
                   <span>Panel Admin</span>
@@ -10446,14 +10440,10 @@ export default function App() {
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className={`fixed inset-y-0 left-0 z-50 w-4/5 max-w-sm h-full flex flex-col p-6 shadow-2xl border-r md:hidden overflow-y-auto ${
-                store.settings.themeMode === "dark"
-                  ? "bg-zinc-950 border-zinc-800 text-white"
-                  : "bg-white border-slate-200 text-slate-800"
-              }`}
+              className="fixed inset-y-0 left-0 z-50 w-4/5 max-w-sm h-full flex flex-col p-6 shadow-2xl border-r border-[#D4A55A]/15 md:hidden overflow-y-auto bg-[#050B1A] text-[#F4EAD7]"
             >
               {/* Drawer Header */}
-              <div className="flex items-center justify-between mb-6 pb-4 border-b border-zinc-200/55 dark:border-zinc-800/55">
+              <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#D4A55A]/15">
                 <div 
                   onClick={() => {
                     navigateToProductRoute("todos", "all");
@@ -10463,25 +10453,21 @@ export default function App() {
                 >
                   {store.settings.logoType === "image" && !!store.settings.logoImageUrl ? (
                     <img
-                      src={store.settings.logoImageUrl || null}
+                      src={store.settings.logoImageUrl}
                       alt={store.settings.siteTitle}
                       className="w-8 h-8 rounded-xl object-cover shadow-sm"
                       referrerPolicy="no-referrer"
                     />
                   ) : (
-                    <div className="w-8 h-8 theme-btn-primary rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-sm">
+                    <div className="w-8 h-8 bg-[#D4A55A] rounded-xl flex items-center justify-center text-[#050B1A] font-bold text-lg shadow-sm">
                       {store.settings.logoText || "J"}
                     </div>
                   )}
-                  <span className="font-bold text-base tracking-tight">{store.settings.siteTitle}</span>
+                  <span className="font-bold text-base tracking-tight font-serif text-[#F4EAD7]">{store.settings.siteTitle}</span>
                 </div>
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className={`p-2 rounded-xl transition cursor-pointer ${
-                    store.settings.themeMode === "dark"
-                      ? "hover:bg-zinc-900 text-zinc-400 hover:text-white"
-                      : "hover:bg-slate-150 text-slate-600 hover:text-slate-900"
-                  }`}
+                  className="p-2 rounded-xl transition cursor-pointer hover:bg-[#0B1730] text-[#E6BF76] hover:text-white"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -10490,7 +10476,7 @@ export default function App() {
               {/* Categories Navigation Block */}
               <div className="flex-1 space-y-6">
                 <div>
-                  <h3 className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 dark:text-zinc-500 mb-3">
+                  <h3 className="text-[10px] font-extrabold uppercase tracking-widest text-[#D4A55A]/80 mb-3">
                     Explorar Categorías
                   </h3>
                   <div className="flex flex-col gap-1.5">
@@ -10502,10 +10488,8 @@ export default function App() {
                       }}
                       className={`w-full text-left flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                         selectedCategory === "todos"
-                          ? "theme-btn-primary text-white"
-                          : store.settings.themeMode === "dark"
-                          ? "bg-zinc-900/50 hover:bg-zinc-900 text-zinc-300 hover:text-white"
-                          : "bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-slate-900"
+                          ? "bg-[#D4A55A] text-[#050B1A]"
+                          : "bg-[#0B1730]/65 text-[#F4EAD7] hover:bg-[#0B1730] border border-[#D4A55A]/10 hover:border-[#D4A55A]/40 hover:text-[#E6BF76]"
                       }`}
                     >
                       <div className="flex items-center gap-2">
@@ -10531,10 +10515,8 @@ export default function App() {
                               }}
                               className={`w-full text-left flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                                 isCatActive
-                                  ? "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30"
-                                  : store.settings.themeMode === "dark"
-                                  ? "hover:bg-zinc-900 text-zinc-300 hover:text-white"
-                                  : "hover:bg-slate-105 text-slate-700 hover:text-slate-900"
+                                  ? "bg-[#D4A55A]/20 text-[#E6BF76] border border-[#D4A55A]/45"
+                                  : "hover:bg-[#0B1730] text-[#F4EAD7]/80 hover:text-[#E6BF76] border border-transparent hover:border-[#D4A55A]/25"
                               }`}
                             >
                               <div className="flex items-center gap-2">
@@ -10548,7 +10530,7 @@ export default function App() {
 
                             {/* Mobile nested Subcategories */}
                             {dbSubs.length > 0 && (
-                              <div className="pl-6 border-l border-zinc-200 dark:border-zinc-805 ml-5 py-0.5 space-y-1">
+                              <div className="pl-6 border-l border-[#D4A55A]/20 ml-5 py-0.5 space-y-1">
                                 {dbSubs.map((sub) => {
                                   const isSubActive = isCatActive && selectedSubcategory === sub.id;
                                   return (
@@ -10560,8 +10542,8 @@ export default function App() {
                                       }}
                                       className={`w-full text-left py-1.5 px-2 rounded-lg text-[11px] font-semibold transition cursor-pointer ${
                                         isSubActive
-                                          ? "text-indigo-400 font-bold"
-                                          : "text-zinc-500 hover:text-zinc-300"
+                                          ? "text-[#E6BF76] font-bold"
+                                          : "text-zinc-400 hover:text-[#E6BF76]"
                                       }`}
                                     >
                                       • {sub.nombre}

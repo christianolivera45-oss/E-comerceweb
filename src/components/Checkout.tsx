@@ -1020,10 +1020,10 @@ export default function Checkout({
             </div>
 
             <h2 className="text-2xl font-black text-zinc-100 tracking-tight leading-tight mb-2">
-              ¡Pedido Registrado con Éxito! 🎉
+              ¡Tu compra está siendo procesada! 📦
             </h2>
             <p className="text-sm text-zinc-400 max-w-md mb-6 leading-relaxed">
-              Hemos registrado tu pedido en nuestro sistema y está listo para ser coordinado.
+              Hemos registrado tu pedido en nuestro sistema y te enviamos la confirmación por correo electrónico. Ahora puedes abrir WhatsApp para comunicarte directamente con nosotros y finalizar los detalles de entrega.
             </p>
 
             {/* Order status card info */}

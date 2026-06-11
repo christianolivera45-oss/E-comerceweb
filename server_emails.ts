@@ -255,11 +255,11 @@ export async function sendEmail(params: {
   }
 
   // Pick up configurations from environment variables first, falling back to settings
-  const host = process.env.EMAIL_SENDER_SMTP_HOST || settings.emailSenderSmtpHost?.trim();
+  const host = (process.env.EMAIL_SENDER_SMTP_HOST || settings.emailSenderSmtpHost || "").trim().replace(/[\s\t\r\n]/g, "");
   const port = Number(process.env.EMAIL_SENDER_SMTP_PORT) || Number(settings.emailSenderSmtpPort) || 465;
-  const user = process.env.EMAIL_SENDER_SMTP_USER || settings.emailSenderSmtpUser?.trim();
-  const pass = process.env.EMAIL_SENDER_SMTP_PASS || settings.emailSenderSmtpPass?.trim();
-  const from = process.env.EMAIL_SENDER_FROM_ADDRESS || settings.emailSenderFromAddress?.trim() || "Ventas Juem <no-reply@tienda.com>";
+  const user = (process.env.EMAIL_SENDER_SMTP_USER || settings.emailSenderSmtpUser || "").trim();
+  const pass = (process.env.EMAIL_SENDER_SMTP_PASS || settings.emailSenderSmtpPass || "").trim();
+  const from = (process.env.EMAIL_SENDER_FROM_ADDRESS || settings.emailSenderFromAddress || "").trim() || "Ventas Juem <no-reply@tienda.com>";
 
   // If SMTP configurations are missing, operate as a simulator log
   if (!host || !user || !pass) {
@@ -268,40 +268,34 @@ export async function sendEmail(params: {
   }
 
   try {
-    // Resolve the host to IP to bypass local node.js container DNS resolver bugs
-    const resolvedIp = await resolveHostToIp(host);
-    console.log(`[SMTP Mailbox] Connecting to host: ${host} (IP: ${resolvedIp}) on port: ${port}`);
+    console.log(`[SMTP Mailbox] Connecting to host: ${host} on port: ${port}`);
 
     const transporter = nodemailer.createTransport({
-      host: resolvedIp,
+      host, // Pass the clean hostname to nodemailer so TLS/handshake headers remain fully compliant
       port,
       secure: port === 465, 
       auth: {
         user,
         pass
       },
+      // Avoid hanging indefinitely if the network/firewall drops/blocks packets
+      connectionTimeout: 10000, 
+      greetingTimeout: 10000,   
+      socketTimeout: 15000,    
       tls: {
-        rejectUnauthorized: false, // avoids common self-signed certificate errors
-        servername: host // Essential: keeps TLS certificate validation working for smtp.gmail.com on direct IP connections
+        rejectUnauthorized: false
       },
+      // Override DNS resolving inside Node's socket connection using our robust fallback logic
       lookup: (hostname, options, callback) => {
         const cb = typeof options === 'function' ? options : callback;
-        const opts = typeof options === 'object' ? options : {};
+        const cleanHostname = hostname.replace(/[\s\t\r\n]/g, "");
         
-        dns.lookup(hostname, opts, (err, address, family) => {
-          if (!err) {
-            return cb(null, address, family || 4);
-          }
-          
-          console.warn(`[Custom DNS Inside Transporter] dns.lookup falló para ${hostname}: ${err.message}. Intentando resolver vía dns.resolve4...`);
-          
-          dns.resolve4(hostname, (resolveErr, addresses) => {
-            if (!resolveErr && addresses && addresses.length > 0) {
-              console.log(`[Custom DNS Inside Transporter] Resuelto: ${hostname} -> ${addresses[0]}`);
-              return cb(null, addresses[0], 4);
-            }
-            return cb(err);
-          });
+        resolveHostToIp(cleanHostname).then(ip => {
+          console.log(`[Custom DNS Inside Transporter] Resolved ${cleanHostname} to IP: ${ip}`);
+          cb(null, ip, 4);
+        }).catch(err => {
+          console.warn(`[Custom DNS Inside Transporter] Standard resolving failed for ${cleanHostname}, trying direct dns.lookup fallback...`);
+          dns.lookup(cleanHostname, typeof options === 'object' ? options : {}, cb);
         });
       }
     } as any);

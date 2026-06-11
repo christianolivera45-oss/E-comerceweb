@@ -852,6 +852,25 @@ export default function Checkout({
 
         const data = await response.json();
         if (response.ok && data.success && data.initPoint) {
+          // GA4 purchase tracking before MercadoPago redirect
+          if (settings?.googleAnalyticsId && typeof window !== "undefined" && (window as any).gtag) {
+            try {
+              (window as any).gtag('event', 'purchase', {
+                transaction_id: serverOrderId || `mp_${Date.now()}`,
+                value: totalUYU,
+                currency: 'UYU',
+                items: cartItems.map(item => ({
+                  item_id: item.product.id,
+                  item_name: item.product.name,
+                  price: item.product.price,
+                  item_variant: `${item.selectedSize || 'estándar'}-${item.selectedColor || 'único'}`,
+                  quantity: item.quantity
+                }))
+              });
+            } catch (gaError) {
+              console.warn("GA tracking error: ", gaError);
+            }
+          }
           // Send to official secure payment gateway
           window.location.href = data.initPoint;
         } else {
@@ -919,6 +938,26 @@ export default function Checkout({
         const cleanPhone = settings.whatsappNumber.replace(/[^0-9]/g, "");
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodedText}`;
         
+        // GA4 purchase tracking before WhatsApp redirect
+        if (settings?.googleAnalyticsId && typeof window !== "undefined" && (window as any).gtag) {
+          try {
+            (window as any).gtag('event', 'purchase', {
+              transaction_id: serverOrderId || `wa_${Date.now()}`,
+              value: totalUYU,
+              currency: 'UYU',
+              items: cartItems.map(item => ({
+                item_id: item.product.id,
+                item_name: item.product.name,
+                price: item.product.price,
+                item_variant: `${item.selectedSize || 'estándar'}-${item.selectedColor || 'único'}`,
+                quantity: item.quantity
+              }))
+            });
+          } catch (gaError) {
+            console.warn("GA tracking error: ", gaError);
+          }
+        }
+
         // Safe anchor fallback to solve pop-up blockages inside iframes and sandboxes
         try {
           const opened = window.open(waUrl, "_blank", "noopener,noreferrer");

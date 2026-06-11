@@ -79,7 +79,8 @@ import {
   Mail,
   Send,
   Info,
-  MapPin
+  MapPin,
+  Globe
 } from "lucide-react";
 import { Product, SiteSettings, ShopState, CartItem, Category, Subcategory, ProductVariant, is3DProduct } from "./types";
 import ThemeStyles from "./components/ThemeStyles";
@@ -219,6 +220,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   bannerImageUrl: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80",
   bannerOpacity: 80,
   featuredSliderSpeed: 2500,
+  googleAnalyticsId: "",
   whatsappNumber: "5491123456789",
   primaryColor: "#2563eb",
   accentColor: "#10b981",
@@ -1256,6 +1258,103 @@ export default function App() {
     };
   }, []);
 
+  // Synchronize and Initialize Google Analytics (GA4) dynamically based on admin settings
+  useEffect(() => {
+    const gaId = store.settings?.googleAnalyticsId;
+    if (!gaId) return;
+
+    // Check if script already exists to avoid redundant tags
+    const scriptId = "google-analytics-script";
+    let script = document.getElementById(scriptId) as HTMLScriptElement;
+
+    if (!script) {
+      script = document.createElement("script");
+      script.id = scriptId;
+      script.async = true;
+      script.src = `https://www.googletagmanager.com/gtag/js?id=${gaId}`;
+      document.head.appendChild(script);
+
+      const inlineScript = document.createElement("script");
+      inlineScript.id = "google-analytics-inline";
+      inlineScript.innerHTML = `
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){window.dataLayer.push(arguments);}
+        window.gtag = gtag;
+        gtag('js', new Date());
+        gtag('config', '${gaId}', { 'send_page_view': false });
+      `;
+      document.head.appendChild(inlineScript);
+    } else {
+      // Re-configure if ID changed
+      if (typeof window !== "undefined" && (window as any).gtag) {
+        (window as any).gtag('config', gaId, { 'send_page_view': false });
+      }
+    }
+  }, [store.settings?.googleAnalyticsId]);
+
+  // Dynamic GA4 Pageview & view_item Tracking based on navigational State changes
+  useEffect(() => {
+    const gaId = store.settings?.googleAnalyticsId;
+    if (!gaId || typeof window === "undefined" || !(window as any).gtag) return;
+
+    const baseTitle = store.settings.siteTitle || "Ventas Juem";
+    const title = selectedProduct 
+      ? `${selectedProduct.name} | ${baseTitle}`
+      : activeTab === "admin" 
+        ? `Consola de Administración | ${baseTitle}`
+        : activeTab === "checkout"
+          ? `Realizar Pedido / Carrito | ${baseTitle}`
+          : baseTitle;
+
+    const path = selectedProduct
+      ? `/producto/${generateSlug(selectedProduct.name)}`
+      : activeTab === "admin"
+        ? "/admin"
+        : activeTab === "checkout"
+          ? "/checkout"
+          : "/";
+
+    try {
+      (window as any).gtag('event', 'page_view', {
+        page_title: title,
+        page_location: window.location.href,
+        page_path: path
+      });
+
+      // Trigger automatic e-commerce begin_checkout when view first changes to checkout
+      if (activeTab === "checkout") {
+        (window as any).gtag('event', 'begin_checkout', {
+          currency: 'UYU',
+          value: cart.reduce((acc, c) => acc + (c.product.price * c.quantity), 0),
+          items: cart.map(c => ({
+            item_id: c.product.id,
+            item_name: c.product.name,
+            price: c.product.price,
+            item_variant: `${c.selectedSize || 'estándar'}-${c.selectedColor || 'único'}`,
+            quantity: c.quantity
+          }))
+        });
+      }
+
+      // Trigger standard GA4 view_item event when looking at a product!
+      if (selectedProduct) {
+        (window as any).gtag('event', 'view_item', {
+          currency: 'UYU',
+          value: selectedProduct.price,
+          items: [{
+            item_id: selectedProduct.id,
+            item_name: selectedProduct.name,
+            price: selectedProduct.price,
+            item_category: selectedProduct.category || "",
+            quantity: 1
+          }]
+        });
+      }
+    } catch (gaError) {
+      console.warn("GA transition tracking error: ", gaError);
+    }
+  }, [store.settings?.googleAnalyticsId, activeTab, selectedProduct?.id]);
+
   // Reset scroll to top when changing views/pages for a smooth user experience as requested by the user
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1612,6 +1711,26 @@ export default function App() {
       });
     }
     saveCartToLocalStorage(newCart);
+
+    // Dynamic GA4 add_to_cart event tracking
+    if (store.settings?.googleAnalyticsId && typeof window !== "undefined" && (window as any).gtag) {
+      try {
+        (window as any).gtag("event", "add_to_cart", {
+          currency: "UYU",
+          value: product.price * qtyAdded,
+          items: [{
+            item_id: product.id,
+            item_name: product.name,
+            price: product.price,
+            item_category: product.category || "",
+            item_variant: `${size || "estándar"}-${color || "único"}`,
+            quantity: qtyAdded
+          }]
+        });
+      } catch (gaError) {
+        console.warn("GA add_to_cart event error: ", gaError);
+      }
+    }
 
     // Trigger the beautiful confirmation modal instead of just adding silently
     setAddedItemModal({
@@ -3014,7 +3133,7 @@ export default function App() {
                       showFiltersPanel || onlyInStock || sortBy !== "featured"
                         ? "theme-btn-accent text-zinc-950 border-transparent shadow-sm scale-102"
                         : store.settings.themeMode === "dark"
-                        ? "bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-850"
+                        ? "bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800"
                         : "bg-slate-100 border-slate-200 text-zinc-700 hover:bg-slate-200"
                     }`}
                   >
@@ -3041,7 +3160,7 @@ export default function App() {
                   <div className={`p-5 rounded-2xl border ${
                     store.settings.themeMode === "dark"
                       ? "bg-zinc-950/40 border-zinc-900"
-                      : "bg-slate-50/50 border-slate-150"
+                      : "bg-slate-50/50 border-slate-200"
                   } grid grid-cols-1 sm:grid-cols-2 gap-6`}>
                     
                     {/* Collapsible Sorting options */}
@@ -3064,7 +3183,7 @@ export default function App() {
                                 ? "theme-btn-primary text-white scale-[1.01]"
                                 : store.settings.themeMode === "dark"
                                 ? "bg-zinc-900/50 text-zinc-400 hover:bg-zinc-900 hover:text-white border border-zinc-800"
-                                : "bg-slate-100 text-zinc-650 hover:bg-slate-200/60 hover:text-zinc-900 border border-slate-200"
+                                : "bg-slate-100 text-zinc-600 hover:bg-slate-200/60 hover:text-zinc-900 border border-slate-200"
                             }`}
                           >
                             {option.label}
@@ -3084,7 +3203,7 @@ export default function App() {
                             type="checkbox"
                             checked={onlyInStock}
                             onChange={(e) => setOnlyInStock(e.target.checked)}
-                            className="rounded border-zinc-300 dark:border-zinc-850 text-indigo-600 focus:ring-indigo-550 h-4 w-4 pointer-events-auto cursor-pointer"
+                            className="rounded border-zinc-300 dark:border-zinc-800 text-indigo-600 focus:ring-indigo-550 h-4 w-4 pointer-events-auto cursor-pointer"
                           />
                           <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Mostrar solo productos con Stock disponible</span>
                         </label>
@@ -3226,7 +3345,7 @@ export default function App() {
                     
                     return (
                       <div key={catObj.id} className="scroll-mt-24">
-                        <div className="flex items-center justify-between border-b border-zinc-100/10 dark:border-zinc-850 pb-3 mb-6">
+                        <div className="flex items-center justify-between border-b border-zinc-100/10 dark:border-zinc-800 pb-3 mb-6">
                           <button
                             onClick={() => navigateToProductRoute(catObj.id, "all")}
                             className="flex items-center gap-2 text-left group cursor-pointer focus:outline-none"
@@ -3410,17 +3529,17 @@ export default function App() {
         <div className="flex-grow flex flex-col md:flex-row min-h-0">
           
           {/* Left sidebar nav following Professional Polish theme instructions */}
-          <aside className="w-full md:w-60 bg-zinc-900 text-zinc-100 flex flex-col shrink-0 border-r border-zinc-800">
-            {/* Header de menú móvil visible sólo en pantallas chicas(Celular) */}
+          <aside className="w-full md:w-64 bg-zinc-900 text-zinc-200 flex flex-col shrink-0 border-r border-zinc-800/80">
+            {/* Header de menú móvil visible sólo en pantallas chicas */}
             <div className="flex md:hidden items-center justify-between p-4 bg-zinc-950 border-b border-zinc-800 select-none">
               <div className="flex items-center gap-2">
                 <span className="text-base">⚙️</span>
-                <span className="text-xs font-black uppercase tracking-widest text-zinc-200">Panel Control</span>
+                <span className="text-xs font-black uppercase tracking-widest text-zinc-100">Control Panel</span>
               </div>
               <button
                 type="button"
                 onClick={() => setMobileAdminMenuOpen(!mobileAdminMenuOpen)}
-                className="p-1.5 focus:outline-none hover:bg-zinc-800 rounded-lg transition-colors text-zinc-350 hover:text-white flex items-center justify-center border border-zinc-800"
+                className="p-1.5 focus:outline-none hover:bg-zinc-800 rounded-lg transition-colors text-zinc-300 hover:text-white flex items-center justify-center border border-zinc-800"
                 id="admin-mobile-menu-toggle"
               >
                 {mobileAdminMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
@@ -3431,7 +3550,7 @@ export default function App() {
             <div className={`${mobileAdminMenuOpen ? "flex" : "hidden"} md:flex flex-col flex-grow min-h-0`}>
               <nav className="p-4 space-y-1">
               <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-4 px-3">
-                Gestión Operativa
+                Operaciones Comerciales
               </div>
 
                <button
@@ -3443,211 +3562,252 @@ export default function App() {
                 }`}
               >
                 <TrendingUp className="h-4 w-4" />
-                <span>Dashboard de Negocio 📊</span>
+                <span>Dashboard Principal</span>
               </button>
 
-              <button
-                onClick={() => navigateAdminSection("sales")}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
-                  adminSection === "sales"
-                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
-                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <CartIcon className="h-4 w-4" />
-                  <span>Ventas y Pedidos 🧾</span>
+
+              {/* Category Group 1 - Operaciones */}
+              <div className="space-y-1.5 pt-2">
+                <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-2 px-3">
+                  Operaciones de Venta
                 </div>
-                {store.orders && store.orders.filter(o => o.status === "pedido_iniciado" || o.status === "pago_pendiente").length > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-sky-500 text-white animate-pulse">
-                    {store.orders.filter(o => o.status === "pedido_iniciado" || o.status === "pago_pendiente").length}
-                  </span>
-                )}
-              </button>
-              
-              <button
-                onClick={() => navigateAdminSection("general")}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
-                  adminSection === "general"
-                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
-                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                }`}
-              >
-                <Palette className="h-4 w-4" />
-                <span>Identidad de Marca🎨</span>
-              </button>
 
-              <button
-                onClick={() => navigateAdminSection("banner")}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
-                  adminSection === "banner"
-                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
-                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                }`}
-              >
-                <Image className="h-4 w-4" />
-                <span>Banners y Carrusel 📷</span>
-              </button>
+                <button
+                  onClick={() => navigateAdminSection("sales")}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
+                    adminSection === "sales"
+                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
+                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <CartIcon className="h-4 w-4" />
+                    <span>Control de Pedidos</span>
+                  </div>
+                  {store.orders && store.orders.filter(o => o.status === "pedido_iniciado" || o.status === "pago_pendiente").length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-blue-550 text-white animate-pulse">
+                      {store.orders.filter(o => o.status === "pedido_iniciado" || o.status === "pago_pendiente").length}
+                    </span>
+                  )}
+                </button>
 
-              <button
-                onClick={() => navigateAdminSection("footer")}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
-                  adminSection === "footer"
-                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
-                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                }`}
-              >
-                <Layout className="h-4 w-4" />
-                <span>Pie de Página (Footer) 👣</span>
-              </button>
-
-              <button
-                onClick={() => navigateAdminSection("products")}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
-                  adminSection === "products"
-                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
-                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                }`}
-              >
-                <Grid className="h-4 w-4" />
-                <span>Catálogo de Productos ({store.products.length})</span>
-              </button>
-
-              <button
-                onClick={() => navigateAdminSection("stock")}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
-                  adminSection === "stock"
-                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
-                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Box className="h-4 w-4" />
-                  <span>Gestión de Stock</span>
-                </div>
-                {totalStockAlerts > 0 && (
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                    outOfStockProducts.length > 0
-                      ? "bg-red-500 text-white"
-                      : "bg-amber-500 text-zinc-950"
-                  }`}>
-                    {totalStockAlerts}
-                  </span>
-                )}
-              </button>
-
-              <button
-                onClick={() => navigateAdminSection("categories")}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
-                  adminSection === "categories"
-                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
-                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                }`}
-              >
-                <Sliders className="h-4 w-4" />
-                <span>Modificar Categorías</span>
-              </button>
-
-              <button
-                onClick={() => navigateAdminSection("promos")}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
-                  adminSection === "promos"
-                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
-                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                }`}
-              >
-                <Tag className="h-4 w-4" />
-                <span>Cupones y Descuentos</span>
-              </button>
-
-              <button
-                onClick={() => navigateAdminSection("checkout_config")}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
-                  adminSection === "checkout_config"
-                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
-                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                }`}
-              >
-                <ShoppingCart className="h-4 w-4" />
-                <span>Carrito y Envíos 🛒</span>
-              </button>
-
-              <button
-                onClick={() => navigateAdminSection("payments")}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
-                  adminSection === "payments"
-                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
-                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                }`}
-              >
-                <CreditCard className="h-4 w-4" />
-                <span>Métodos de Pago 💳</span>
-              </button>
-
-              <button
-                onClick={() => navigateAdminSection("reviews")}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
-                  adminSection === "reviews"
-                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
-                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                }`}
-              >
-                <Star className="h-4 w-4 text-amber-400 fill-amber-400" />
-                <span>Opiniones Google ⭐</span>
-              </button>
-
-              <button
-                onClick={() => navigateAdminSection("security")}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
-                  adminSection === "security"
-                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
-                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                }`}
-              >
-                <Lock className="h-4 w-4" />
-                <span>Seguridad de Acceso</span>
-              </button>
-
-              <button
-                onClick={() => navigateAdminSection("emails")}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
-                  adminSection === "emails"
-                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
-                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                }`}
-              >
-                <Mail className="h-4 w-4" />
-                <span>Emails Automáticos 📧</span>
-              </button>
-
-              <div className="pt-8 text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-4 px-3">
-                Soporte de Sistema
+                <button
+                  onClick={() => navigateAdminSection("stock")}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
+                    adminSection === "stock"
+                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
+                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Box className="h-4 w-4" />
+                    <span>Inventario & Stock</span>
+                  </div>
+                  {totalStockAlerts > 0 && (
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold shrink-0 ${
+                      outOfStockProducts.length > 0
+                        ? "bg-red-500 text-white"
+                        : "bg-amber-500 text-zinc-950"
+                    }`}>
+                      {totalStockAlerts}
+                    </span>
+                  )}
+                </button>
               </div>
               
-              <div className="px-3 py-1 space-y-1">
-                <div className="flex items-center gap-2 text-xs text-zinc-400">
-                  <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block"></span>
-                  <span className="font-mono">User: Juem</span>
+              {/* Category Group 2 - Catálogo */}
+              <div className="space-y-1.5 pt-2">
+                <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-2 px-3">
+                  Catálogo
                 </div>
-                <div className="text-[10px] text-zinc-500 font-sans">
-                  Nivel de Accesibilidad: Máxima (Admin Principal)
+
+                <button
+                  onClick={() => navigateAdminSection("products")}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
+                    adminSection === "products"
+                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
+                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Grid className="h-4 w-4 text-zinc-400" />
+                    <span>Mis Productos</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-zinc-400 bg-zinc-800 px-1.5 py-0.5 rounded">
+                    {store.products.length}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => navigateAdminSection("categories")}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
+                    adminSection === "categories"
+                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
+                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  <Sliders className="h-4 w-4 text-zinc-400" />
+                  <span>Categorías & Menús</span>
+                </button>
+
+                <button
+                  onClick={() => navigateAdminSection("promos")}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
+                    adminSection === "promos"
+                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
+                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  <Tag className="h-4 w-4 text-zinc-400" />
+                  <span>Cupones & Descuentos</span>
+                </button>
+              </div>
+
+              {/* Category Group 3 - Personalización */}
+              <div className="space-y-1.5 pt-2">
+                <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-2 px-3">
+                  Visuales y Portada
                 </div>
+
+                <button
+                  onClick={() => navigateAdminSection("general")}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
+                    adminSection === "general"
+                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
+                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  <Palette className="h-4 w-4 text-zinc-400" />
+                  <span>Marca & Identidad</span>
+                </button>
+
+                <button
+                  onClick={() => navigateAdminSection("banner")}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
+                    adminSection === "banner"
+                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
+                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  <Image className="h-4 w-4 text-zinc-400" />
+                  <span>Banners & Carrusel</span>
+                </button>
+
+                <button
+                  onClick={() => navigateAdminSection("footer")}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
+                    adminSection === "footer"
+                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
+                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  <Layout className="h-4 w-4 text-zinc-400" />
+                  <span>Pie de Página (Footer)</span>
+                </button>
+              </div>
+
+              {/* Category Group 4 - Configuración */}
+              <div className="space-y-1.5 pt-2">
+                <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-2 px-3">
+                  Configuración de Tienda
+                </div>
+
+                <button
+                  onClick={() => navigateAdminSection("checkout_config")}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
+                    adminSection === "checkout_config"
+                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
+                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  <ShoppingCart className="h-4 w-4 text-zinc-400" />
+                  <span>Carrito & Envíos</span>
+                </button>
+
+                <button
+                  onClick={() => navigateAdminSection("payments")}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
+                    adminSection === "payments"
+                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
+                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  <CreditCard className="h-4 w-4 text-zinc-400" />
+                  <span>Métodos de Pago</span>
+                </button>
+
+                <button
+                  onClick={() => navigateAdminSection("reviews")}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
+                    adminSection === "reviews"
+                      ? "bg-[#4285F4]/15 text-[#4285F4] dark:text-blue-400 border-l-2 border-[#4285F4] font-bold"
+                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  <Globe className="h-4 w-4 text-[#4285F4]" />
+                  <span>Google Integraciones</span>
+                </button>
+              </div>
+
+              <div className="space-y-1.5 pt-2">
+                <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-2 px-3">
+                  Soporte & Seguridad
+                </div>
+
+                <button
+                  onClick={() => navigateAdminSection("emails")}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
+                    adminSection === "emails"
+                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
+                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  <Mail className="h-4 w-4 text-zinc-400" />
+                  <span>Emails de Soporte</span>
+                </button>
+
+                <button
+                  onClick={() => navigateAdminSection("security")}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
+                    adminSection === "security"
+                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
+                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  <Lock className="h-4 w-4 text-zinc-400" />
+                  <span>Seguridad de Acceso</span>
+                </button>
               </div>
             </nav>
 
-            <div className="mt-auto p-4 border-t border-zinc-800">
-              <div className="p-3 bg-white/[0.03] rounded-lg border border-zinc-800">
-                <p className="text-[10px] text-zinc-500 mb-1.5 flex items-center gap-1.5 justify-between">
-                  <span>Espacio en DB</span>
-                  <span className="text-[9px] font-semibold uppercase text-indigo-400 font-mono">Activa</span>
-                </p>
-                <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
-                  <div className="w-1/4 h-full bg-blue-500"></div>
+            {/* Support Terminal Status Card */}
+            <div className="mt-auto p-4 border-t border-zinc-800 bg-zinc-950/20">
+              <div className="p-3 bg-zinc-900/40 rounded-xl border border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-extrabold uppercase tracking-widest text-zinc-400">Terminal Activo</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 </div>
-                <p className="text-[10px] text-zinc-400 mt-2 font-mono flex items-center justify-between">
-                  <span>14.5 KB / 1 GB</span>
-                  <span className="text-[10px] text-zinc-500">PostgreSQL Cloud</span>
-                </p>
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[10px] text-zinc-300 font-extrabold uppercase font-sans">
+                    JU
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] text-zinc-200 truncate font-semibold">Admin Principal</p>
+                    <p className="text-[9px] text-zinc-400 truncate">PostgreSQL Online</p>
+                  </div>
+                </div>
+                <div className="border-t border-zinc-800/65 pt-2 shrink-0">
+                  <div className="flex items-center justify-between text-[10px] text-zinc-500 mb-1 font-mono">
+                    <span>Espacio de Datos</span>
+                    <span className="text-[9.5px] font-semibold text-blue-400 uppercase">Activo</span>
+                  </div>
+                  <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="w-1/4 h-full bg-blue-500"></div>
+                  </div>
+                  <p className="text-[9.5px] text-zinc-400 mt-1 font-mono">
+                    14.5 KB / 1.0 GB
+                  </p>
+                </div>
               </div>
             </div>
             </div> {/* Closing mobile wrapper */}
@@ -3670,9 +3830,9 @@ export default function App() {
                   {adminSection === "security" && "Seguridad y Control de Acceso"}
                   {adminSection === "stock" && "Control y Alertas de Stock Bajo"}
                   {adminSection === "payments" && "Administración de Métodos de Pago (Uruguay)"}
-                  {adminSection === "reviews" && "Ficha de Opiniones de Google Maps y Reputación"}
+                  {adminSection === "reviews" && "Integraciones de Google (Analytics, Maps y Opiniones)"}
                 </h2>
-                <p className="text-slate-550 dark:text-zinc-400 text-xs flex flex-col sm:flex-row sm:items-center gap-3 mt-1.5 leading-relaxed">
+                <p className="text-slate-600 dark:text-zinc-400 text-xs flex flex-col sm:flex-row sm:items-center gap-3 mt-1.5 leading-relaxed">
                   <span>Modifica los contenidos de tu tienda en tiempo real. Los cambios se sincronizarán directamente con tu base de datos central sin tocar código.</span>
                   
                   {adminSection !== "dashboard" && adminSection !== "sales" && adminSection !== "security" && adminSection !== "stock" && (
@@ -3806,10 +3966,10 @@ export default function App() {
                 
                 {/* 1. GENERAL & BRANDING EDITOR */}
                 {adminSection === "general" && (
-                  <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4">
+                  <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
                     <div className="flex items-center gap-2 border-b border-zinc-800/10 dark:border-zinc-800 pb-3 mb-2">
                       <Palette className="h-4 w-4 theme-text-primary" />
-                      <h3 className="font-bold text-sm text-slate-950 dark:text-zinc-150">Diseño & Textos de Tienda</h3>
+                      <h3 className="font-bold text-sm text-slate-950 dark:text-zinc-200">Diseño & Textos de Tienda</h3>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
@@ -3892,12 +4052,12 @@ export default function App() {
                             />
                             
                             <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-zinc-900/40 border border-slate-200/50 dark:border-zinc-800/40 mt-1">
-                              <span className="text-[9px] font-semibold text-slate-500 dark:text-zinc-450">Sincronizar Logo con Cloudinary:</span>
+                              <span className="text-[9px] font-semibold text-slate-500 dark:text-zinc-400">Sincronizar Logo con Cloudinary:</span>
                               <label 
                                 className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded font-bold text-[9px] cursor-pointer transition-all shadow-xs select-none ${
                                   uploadingLogo 
                                     ? "bg-slate-105 dark:bg-zinc-800 text-zinc-500 pointer-events-none animate-pulse" 
-                                    : "bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-750 text-white"
+                                    : "bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white"
                                 }`}
                               >
                                 {uploadingLogo ? (
@@ -4005,10 +4165,10 @@ export default function App() {
                 )}
 
                 {adminSection === "banner" && (
-                  <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4 animate-fade-in">
+                  <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4 animate-fade-in">
                     <div className="flex items-center gap-2 border-b border-zinc-800/10 dark:border-zinc-800 pb-3 mb-2">
                       <Image className="h-4 w-4 theme-text-primary" />
-                      <h3 className="font-bold text-sm text-slate-950 dark:text-zinc-150 font-sans">Banners del Carrusel de Tienda</h3>
+                      <h3 className="font-bold text-sm text-slate-950 dark:text-zinc-200 font-sans">Banners del Carrusel de Tienda</h3>
                     </div>
 
                     {/* Carousel Slides Manager in Admin Section */}
@@ -4205,10 +4365,10 @@ export default function App() {
 
                                   <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between p-2 rounded-lg bg-slate-100/60 dark:bg-zinc-900/40 border border-slate-200 dark:border-zinc-800/40">
                                     <div className="space-y-0.5 max-w-sm">
-                                      <p className="text-[10px] font-semibold text-slate-700 dark:text-zinc-350">
+                                      <p className="text-[10px] font-semibold text-slate-700 dark:text-zinc-300">
                                         Subir directamente a Cloudinary:
                                       </p>
-                                      <p className="text-[9px] text-slate-500 dark:text-zinc-450 leading-relaxed">
+                                      <p className="text-[9px] text-slate-500 dark:text-zinc-400 leading-relaxed">
                                         Las fotos grandes de paisajes (16:9 o 21:9) lucen más nítidas e impactantes. Te aconsejamos usar imágenes optimizadas de aproximadamente <strong>1920 x 800 píxeles</strong>.
                                       </p>
                                     </div>
@@ -4218,7 +4378,7 @@ export default function App() {
                                         className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded font-medium text-[10px] cursor-pointer transition-all shadow-sm select-none ${
                                           uploadingSlideIdx === idx 
                                             ? "bg-slate-100 dark:bg-zinc-800 text-zinc-500 pointer-events-none" 
-                                            : "bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-750 text-white"
+                                            : "bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-white"
                                         }`}
                                       >
                                         {uploadingSlideIdx === idx ? (
@@ -4288,7 +4448,7 @@ export default function App() {
                                 </div>
                                 
                                 {/* Quick Unsplash selector for this slide */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 pt-3 border-t border-slate-100 dark:border-zinc-850">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800">
                                   <div>
                                     <label className="block text-[9px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-wider mb-1">
                                       Texto del Botón (Opcional)
@@ -4377,7 +4537,7 @@ export default function App() {
                                               value={bannerProductSearch}
                                               onChange={(e) => setBannerProductSearch(e.target.value)}
                                               placeholder="🔍 Buscar producto..."
-                                              className="w-full px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200/60 dark:bg-zinc-850 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 rounded text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-blue-500"
+                                              className="w-full px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200/60 dark:bg-zinc-800 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 rounded text-xs text-slate-900 dark:text-white outline-none focus:ring-1 focus:ring-blue-500"
                                             />
                                             {bannerProductSearch && (
                                               <button
@@ -4472,7 +4632,7 @@ export default function App() {
 
                     {/* Ajuste de Opacidad del Banner General */}
                     <div className="border border-slate-200 dark:border-zinc-800 rounded-xl p-4 bg-slate-50/50 dark:bg-zinc-900/30 space-y-3.5">
-                      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-zinc-850 pb-2">
+                      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-zinc-800 pb-2">
                         <Palette className="h-4 w-4 text-blue-500" />
                         <h4 className="text-xs font-bold uppercase tracking-wider text-slate-705 dark:text-zinc-300">
                           Diseño y Opacidad del Banner
@@ -4530,10 +4690,10 @@ export default function App() {
                 )}
 
                 {adminSection === "footer" && (
-                  <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4 animate-fade-in">
+                  <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4 animate-fade-in">
                     <div className="flex items-center gap-2 border-b border-zinc-800/10 dark:border-zinc-800 pb-3 mb-2">
                       <Layout className="h-4 w-4 theme-text-primary" />
-                      <h3 className="font-bold text-sm text-slate-950 dark:text-zinc-150 font-sans">Información del Pie de Página (Footer)</h3>
+                      <h3 className="font-bold text-sm text-slate-950 dark:text-zinc-200 font-sans">Información del Pie de Página (Footer)</h3>
                     </div>
 
                     {/* Footer Customizer Card */}
@@ -4546,7 +4706,7 @@ export default function App() {
 
                       <div className="space-y-4">
                         {/* Columna 1 */}
-                        <div className="p-3 bg-white dark:bg-zinc-950/70 border border-slate-150 dark:border-zinc-850 rounded-xl space-y-2.5">
+                        <div className="p-3 bg-white dark:bg-zinc-950/70 border border-slate-200 dark:border-zinc-800 rounded-xl space-y-2.5">
                           <label className="block text-[10px] font-black text-blue-500 uppercase tracking-widest">Columna 1: Información de Envío o Compra</label>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div className="md:col-span-1">
@@ -4572,7 +4732,7 @@ export default function App() {
                         </div>
 
                         {/* Columna 2 */}
-                        <div className="p-3 bg-white dark:bg-zinc-950/70 border border-slate-150 dark:border-zinc-850 rounded-xl space-y-2.5">
+                        <div className="p-3 bg-white dark:bg-zinc-950/70 border border-slate-200 dark:border-zinc-800 rounded-xl space-y-2.5">
                           <label className="block text-[10px] font-black text-emerald-500 uppercase tracking-widest">Columna 2: Calidad o Garantía</label>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div className="md:col-span-1">
@@ -4598,7 +4758,7 @@ export default function App() {
                         </div>
 
                         {/* Columna 3 */}
-                        <div className="p-3 bg-white dark:bg-zinc-950/70 border border-slate-150 dark:border-zinc-850 rounded-xl space-y-2.5">
+                        <div className="p-3 bg-white dark:bg-zinc-950/70 border border-slate-200 dark:border-zinc-800 rounded-xl space-y-2.5">
                           <label className="block text-[10px] font-black text-pink-500 uppercase tracking-widest">Columna 3: Información de Contacto / Soporte</label>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div className="md:col-span-1">
@@ -4624,7 +4784,7 @@ export default function App() {
                         </div>
 
                         {/* Copyright */}
-                        <div className="p-3 bg-white dark:bg-zinc-950/70 border border-slate-150 dark:border-zinc-850 rounded-xl">
+                        <div className="p-3 bg-white dark:bg-zinc-950/70 border border-slate-200 dark:border-zinc-800 rounded-xl">
                           <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Texto del Copyright (Derechos Reservados)</label>
                           <input
                             type="text"
@@ -4652,10 +4812,10 @@ export default function App() {
 
                 {/* Colors section remains combined with general branding */}
                 {adminSection === "general" && (
-                  <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4 animate-fade-in mt-4">
+                  <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4 animate-fade-in mt-4">
                     <div className="flex items-center gap-2 border-b border-zinc-800/10 dark:border-zinc-800 pb-3 mb-2">
                       <Palette className="h-4 w-4 theme-text-primary" />
-                      <h3 className="font-bold text-sm text-slate-950 dark:text-zinc-150 font-sans">Paleta de Colores de Tienda y Tematización</h3>
+                      <h3 className="font-bold text-sm text-slate-950 dark:text-zinc-200 font-sans">Paleta de Colores de Tienda y Tematización</h3>
                     </div>
 
                     <div className="grid grid-cols-3 gap-4">
@@ -4709,7 +4869,7 @@ export default function App() {
                     </div>
 
                     {/* Preloaded visual default themes for fast customization */}
-                    <div className="border border-slate-150 dark:border-zinc-850 bg-slate-50/50 dark:bg-zinc-900/40 p-4 rounded-xl space-y-3">
+                    <div className="border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/40 p-4 rounded-xl space-y-3">
                       <div className="flex items-center gap-1.5 text-slate-700 dark:text-zinc-300">
                         <Sparkles className="h-3.5 w-3.5 text-blue-500" />
                         <span className="text-[10px] font-extrabold uppercase tracking-widest">Temas Predeterminados (Haz click para aplicar)</span>
@@ -4738,7 +4898,7 @@ export default function App() {
                               className={`p-2 border rounded-xl text-left transition cursor-pointer flex flex-col gap-1.5 relative overflow-hidden group ${
                                 isSelected 
                                   ? "bg-white dark:bg-zinc-900 border-indigo-500 shadow-md ring-1 ring-indigo-500/30" 
-                                  : "bg-white/80 dark:bg-zinc-900/20 border-slate-200 dark:border-zinc-850 hover:bg-white dark:hover:bg-zinc-900/60 hover:border-zinc-400 dark:hover:border-zinc-750"
+                                  : "bg-white/80 dark:bg-zinc-900/20 border-slate-200 dark:border-zinc-800 hover:bg-white dark:hover:bg-zinc-900/60 hover:border-zinc-400 dark:hover:border-zinc-700"
                               }`}
                             >
                               <div className="flex items-center justify-between w-full">
@@ -4748,7 +4908,7 @@ export default function App() {
                                 </div>
                                 <span className={`text-[7px] px-1 py-0.2 rounded font-extrabold tracking-wider uppercase ${
                                   preset.themeMode === 'dark' 
-                                    ? 'bg-zinc-850 text-zinc-400 border border-zinc-800' 
+                                    ? 'bg-zinc-800 text-zinc-400 border border-zinc-800' 
                                     : 'bg-zinc-100 text-zinc-600 border border-slate-200'
                                 }`}>
                                   {preset.themeMode === 'dark' ? "Oscuro" : "Claro"}
@@ -4799,7 +4959,7 @@ export default function App() {
 
                       <div className="space-y-4">
                         <div>
-                          <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-450 block mb-2">
+                          <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 block mb-2">
                             🎨 Paleta de Colores Aplicados en la Web
                           </span>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
@@ -4904,17 +5064,17 @@ export default function App() {
                     
                     {/* Catalog management header & metrics */}
                     <div className="grid grid-cols-3 gap-4">
-                      <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm text-center">
+                      <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm text-center">
                         <span className="text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase">Total Productos</span>
                         <p className="text-xl font-bold font-mono text-slate-900 dark:text-white mt-1">{store.products.length}</p>
                       </div>
-                      <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm text-center">
+                      <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm text-center">
                         <span className="text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase">Sin Stock</span>
                         <p className="text-xl font-bold font-mono text-red-500 mt-1">
                           {store.products.filter(p => p.stock <= 0).length}
                         </p>
                       </div>
-                      <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm text-center">
+                      <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm text-center">
                         <span className="text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase">Destacados</span>
                         <p className="text-xl font-bold font-mono text-yellow-500 mt-1">
                           {store.products.filter(p => p.featured).length}
@@ -4923,13 +5083,13 @@ export default function App() {
                     </div>
 
                     {/* Products Grid list detail for editor quick action */}
-                    <div className="bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm overflow-hidden">
-                      <div className="p-4 border-b border-slate-100 dark:border-zinc-850 flex items-center justify-between">
+                    <div className="bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+                      <div className="p-4 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between">
                         <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500">Listado de Artículos</h4>
                         <span className="text-[10px] font-mono text-zinc-400">Total: {store.products.length} productos</span>
                       </div>
 
-                      <div className="divide-y divide-slate-100 dark:divide-zinc-850">
+                      <div className="divide-y divide-slate-100 dark:divide-zinc-800">
                         {store.products.map((p) => (
                           <div key={p.id} className="p-4 flex gap-4 items-center justify-between hover:bg-slate-50 dark:hover:bg-zinc-900/40 transition">
                             <img
@@ -4978,7 +5138,7 @@ export default function App() {
                                 className={`p-1.5 rounded-lg transition cursor-pointer ${
                                   p.paused 
                                     ? "bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-500" 
-                                    : "bg-zinc-800/80 hover:bg-zinc-700 hover:text-white text-zinc-450"
+                                    : "bg-zinc-800/80 hover:bg-zinc-700 hover:text-white text-zinc-400"
                                 }`}
                                 title={p.paused ? "Reanudar (Mostrar en la web)" : "Pausar (Ocultar en la web)"}
                               >
@@ -5008,8 +5168,8 @@ export default function App() {
 
                 {/* 3. NEW PRODUCT FORM DISPLAY */}
                 {adminSection === "products" && isNewProductMode && (
-                  <form onSubmit={handleCreateProduct} className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4">
-                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-850 pb-3 mb-2">
+                  <form onSubmit={handleCreateProduct} className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3 mb-2">
                       <div className="flex items-center gap-2">
                         <Plus className="h-4 w-4 text-emerald-400" />
                         <h3 className="font-bold text-sm text-slate-900 dark:text-white">Nuevo Artículo de Catálogo</h3>
@@ -5177,7 +5337,7 @@ export default function App() {
                                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all cursor-pointer select-none active:scale-95 ${
                                     isChecked
                                       ? "bg-[#5346ff]/10 text-[#5346ff] border-[#5346ff]/40 dark:bg-[#5346ff]/20 dark:text-[#9086ff] dark:border-[#5346ff]/60"
-                                      : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-850 hover:bg-slate-100 dark:hover:bg-zinc-850"
+                                      : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-800"
                                   }`}
                                 >
                                   <span>{c.nombre}</span>
@@ -5244,7 +5404,7 @@ export default function App() {
                                           className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 border transition-all cursor-pointer select-none active:scale-95 ${
                                             isChecked
                                               ? "bg-[#5346ff]/10 text-[#5346ff] border-[#5346ff]/35 dark:bg-[#5346ff]/20 dark:text-[#9086ff] dark:border-[#5346ff]/50"
-                                              : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-850 hover:bg-slate-100 dark:hover:bg-zinc-850"
+                                              : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-800"
                                           }`}
                                         >
                                           <span>{s.nombre}</span>
@@ -5414,7 +5574,7 @@ export default function App() {
                                 setNewProduct({ ...newProduct, sizes: arr });
                               }}
                               placeholder="p.ej. PLA, PETG, ABS, TPU (Separados por comas)"
-                              className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
+                              className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
                             />
                             <div className="flex flex-wrap gap-1.5">
                               <span className="text-[9px] text-zinc-500 mr-1 self-center">Preajustes rápidos:</span>
@@ -5547,7 +5707,7 @@ export default function App() {
                                                   : [...currentSizes, sz];
                                                 setNewProduct({ ...newProduct, sizes: next });
                                               }}
-                                              className="h-3 w-3 rounded border-slate-300 dark:border-zinc-750 text-[#5346ff] focus:ring-[#5346ff] cursor-pointer"
+                                              className="h-3 w-3 rounded border-slate-300 dark:border-zinc-700 text-[#5346ff] focus:ring-[#5346ff] cursor-pointer"
                                             />
                                             <span className="text-xs truncate">{sz}</span>
                                           </div>
@@ -5609,7 +5769,7 @@ export default function App() {
                                   </button>
                                 </div>
 
-                                <hr className="border-slate-150 dark:border-zinc-800" />
+                                <hr className="border-slate-200 dark:border-zinc-800" />
 
                                 <p className="text-[10px] text-slate-800 dark:text-zinc-300 leading-normal">
                                   <strong>2. Completa las medidas de la tabla:</strong> Agrega columnas editables (Ej: Ancho, Largo, Cadera, Manga) y pon la medida de cada talle.
@@ -5665,7 +5825,7 @@ export default function App() {
                                               ))}
                                             </tr>
                                           </thead>
-                                          <tbody className="divide-y divide-slate-100 dark:divide-zinc-850">
+                                          <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
                                             {mRows.map((rowObj) => {
                                               const sizeVal = rowObj["Talle"];
                                               return (
@@ -5698,7 +5858,7 @@ export default function App() {
                                                             });
                                                           }}
                                                           placeholder="ej: 50 cm"
-                                                          className="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/80 rounded px-1.5 py-0.5 text-[11px] outline-none text-slate-950 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-650 focus:ring-1 focus:ring-indigo-500"
+                                                          className="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/80 rounded px-1.5 py-0.5 text-[11px] outline-none text-slate-950 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus:ring-1 focus:ring-indigo-500"
                                                         />
                                                       </td>
                                                     );
@@ -5776,7 +5936,7 @@ export default function App() {
                                 setNewProduct({ ...newProduct, sizes: arr });
                               }}
                               placeholder="p.ej. S, M, L, XL (Separados por comas)"
-                              className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
+                              className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
                             />
                             <div className="flex flex-wrap gap-1.5">
                               <span className="text-[9px] text-zinc-500 mr-1 self-center">Preajustes rápidos:</span>
@@ -5818,7 +5978,7 @@ export default function App() {
                             setNewProduct({ ...newProduct, colors: arr });
                           }}
                           placeholder="p.ej. Negro, Blanco, Gris, Rojo (Separados por comas)"
-                          className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
+                          className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
                         />
                         <div className="flex flex-wrap gap-1.5">
                           <span className="text-[9px] text-zinc-500 mr-1 self-center">Preajustes rápidos:</span>
@@ -5901,7 +6061,7 @@ export default function App() {
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-100/30 dark:bg-zinc-950 p-2.5 rounded-lg border border-slate-150 dark:border-zinc-850">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-100/30 dark:bg-zinc-950 p-2.5 rounded-lg border border-slate-200 dark:border-zinc-800">
                         <div>
                           <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Talle</label>
                           <select id="new-var-size" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold text-zinc-800 dark:text-zinc-200">
@@ -5965,10 +6125,10 @@ export default function App() {
                       </div>
 
                       {((newProduct.variants || []).length > 0) ? (
-                        <div className="max-h-52 overflow-y-auto border border-slate-150 dark:border-zinc-850 rounded-lg text-xs shadow-inner">
+                        <div className="max-h-52 overflow-y-auto border border-slate-200 dark:border-zinc-800 rounded-lg text-xs shadow-inner">
                           <table className="w-full text-left border-collapse bg-white dark:bg-zinc-950">
                             <thead>
-                              <tr className="bg-slate-100 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-850 text-[10px] text-zinc-400 font-extrabold uppercase">
+                              <tr className="bg-slate-100 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-800 text-[10px] text-zinc-400 font-extrabold uppercase">
                                 <th className="p-2">Talle</th>
                                 <th className="p-2">Color / Tono</th>
                                 <th className="p-2">Stock Disponible</th>
@@ -6074,7 +6234,7 @@ export default function App() {
                                                     variants: nextArr
                                                   });
                                                 }}
-                                                className="w-full px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-805 rounded text-[10px] outline-none font-mono"
+                                                className="w-full px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-[10px] outline-none font-mono"
                                               />
                                               <div className="flex items-center gap-1 mt-1">
                                                 <span className="text-[8px] text-zinc-400 font-bold uppercase shrink-0">Subir:</span>
@@ -6094,7 +6254,7 @@ export default function App() {
                                                           },
                                                           body: formData,
                                                         });
-                                                        const resText = await uploadRes.text();
+const resText = await uploadRes.text();
                                                         let parsedData: any = null;
                                                         
                                                         if (resText.trim().startsWith("<!doctype") || resText.trim().startsWith("<html")) {
@@ -6125,7 +6285,7 @@ export default function App() {
                                                       }
                                                     }
                                                   }}
-                                                  className="w-full text-[8px] text-zinc-550 dark:text-zinc-400 file:mr-1 file:py-0.5 file:px-1 file:rounded file:border-0 file:text-[8px] file:font-semibold file:bg-zinc-100 dark:file:bg-zinc-800 file:text-zinc-700 dark:file:text-zinc-350 hover:file:opacity-80 cursor-pointer"
+                                                  className="w-full text-[8px] text-zinc-500 dark:text-zinc-400 file:mr-1 file:py-0.5 file:px-1 file:rounded file:border-0 file:text-[8px] file:font-semibold file:bg-zinc-100 dark:file:bg-zinc-800 file:text-zinc-700 dark:file:text-zinc-300 hover:file:opacity-80 cursor-pointer"
                                                 />
                                               </div>
                                             </div>
@@ -6183,7 +6343,7 @@ export default function App() {
                           id="newProductIs3D"
                           checked={!!newProduct.is3D}
                           onChange={(e) => setNewProduct({ ...newProduct, is3D: e.target.checked, hoursPerUnit: e.target.checked ? (newProduct.hoursPerUnit || 1) : undefined })}
-                          className="rounded border-zinc-750 bg-zinc-950 text-indigo-500 focus:ring-0 cursor-pointer h-4 w-4"
+                          className="rounded border-zinc-700 bg-zinc-950 text-indigo-500 focus:ring-0 cursor-pointer h-4 w-4"
                         />
                         <label htmlFor="newProductIs3D" className="text-xs text-zinc-300 select-none cursor-pointer font-bold flex items-center gap-1.5 text-indigo-400">
                           <Cpu className="w-4 h-4 shrink-0" />
@@ -6246,8 +6406,8 @@ export default function App() {
 
                 {/* 4. EDIT PRODUCT FORM DISPLAY */}
                 {adminSection === "products" && editingProduct && (
-                  <form onSubmit={handleUpdateProduct} className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4">
-                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-850 pb-3 mb-2">
+                  <form onSubmit={handleUpdateProduct} className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3 mb-2">
                       <div className="flex items-center gap-2">
                         <Edit className="h-4 w-4 text-amber-400" />
                         <h3 className="font-bold text-sm text-slate-900 dark:text-white">Modificar Detalles de Producto</h3>
@@ -6361,7 +6521,7 @@ export default function App() {
                                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all cursor-pointer select-none active:scale-95 ${
                                     isChecked
                                       ? "bg-[#5346ff]/10 text-[#5346ff] border-[#5346ff]/40 dark:bg-[#5346ff]/20 dark:text-[#9086ff] dark:border-[#5346ff]/60"
-                                      : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-850 hover:bg-slate-100 dark:hover:bg-zinc-850"
+                                      : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-800"
                                   }`}
                                 >
                                   <span>{c.nombre}</span>
@@ -6428,7 +6588,7 @@ export default function App() {
                                           className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 border transition-all cursor-pointer select-none active:scale-95 ${
                                             isChecked
                                               ? "bg-[#5346ff]/10 text-[#5346ff] border-[#5346ff]/35 dark:bg-[#5346ff]/20 dark:text-[#9086ff] dark:border-[#5346ff]/50"
-                                              : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-850 hover:bg-slate-100 dark:hover:bg-zinc-850"
+                                              : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-800"
                                           }`}
                                         >
                                           <span>{s.nombre}</span>
@@ -6550,7 +6710,7 @@ export default function App() {
                                 setEditingProduct({ ...editingProduct, sizes: arr });
                               }}
                               placeholder="p.ej. PLA, PETG, ABS, TPU (Separados por comas)"
-                              className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
+                              className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
                             />
                             <div className="flex flex-wrap gap-1.5">
                               <span className="text-[9px] text-zinc-500 mr-1 self-center">Preajustes rápidos:</span>
@@ -6683,7 +6843,7 @@ export default function App() {
                                                   : [...currentSizes, sz];
                                                 setEditingProduct({ ...editingProduct, sizes: next });
                                               }}
-                                              className="h-3 w-3 rounded border-slate-300 dark:border-zinc-750 text-[#5346ff] focus:ring-[#5346ff] cursor-pointer"
+                                              className="h-3 w-3 rounded border-slate-300 dark:border-zinc-700 text-[#5346ff] focus:ring-[#5346ff] cursor-pointer"
                                             />
                                             <span className="text-xs truncate">{sz}</span>
                                           </div>
@@ -6745,7 +6905,7 @@ export default function App() {
                                   </button>
                                 </div>
 
-                                <hr className="border-slate-150 dark:border-zinc-800" />
+                                <hr className="border-slate-200 dark:border-zinc-800" />
 
                                 <p className="text-[10px] text-slate-800 dark:text-zinc-300 leading-normal">
                                   <strong>2. Completa las medidas de la tabla:</strong> Agrega columnas editables (Ej: Ancho, Largo, Cadera, Manga) y pon la medida de cada talle.
@@ -6801,7 +6961,7 @@ export default function App() {
                                               ))}
                                             </tr>
                                           </thead>
-                                          <tbody className="divide-y divide-slate-100 dark:divide-zinc-850">
+                                          <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
                                             {mRows.map((rowObj) => {
                                               const sizeVal = rowObj["Talle"];
                                               return (
@@ -6834,7 +6994,7 @@ export default function App() {
                                                             });
                                                           }}
                                                           placeholder="ej: 50 cm"
-                                                          className="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/80 rounded px-1.5 py-0.5 text-[11px] outline-none text-slate-950 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-650 focus:ring-1 focus:ring-indigo-500"
+                                                          className="w-full bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/80 rounded px-1.5 py-0.5 text-[11px] outline-none text-slate-950 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus:ring-1 focus:ring-indigo-500"
                                                         />
                                                       </td>
                                                     );
@@ -6912,7 +7072,7 @@ export default function App() {
                                 setEditingProduct({ ...editingProduct, sizes: arr });
                               }}
                               placeholder="p.ej. S, M, L, XL (Separados por comas)"
-                              className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
+                              className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
                             />
                             <div className="flex flex-wrap gap-1.5">
                               <span className="text-[9px] text-zinc-500 mr-1 self-center">Preajustes rápidos:</span>
@@ -6954,7 +7114,7 @@ export default function App() {
                             setEditingProduct({ ...editingProduct, colors: arr });
                           }}
                           placeholder="p.ej. Negro, Blanco, Gris, Rojo (Separados por comas)"
-                          className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
+                          className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
                         />
                         <div className="flex flex-wrap gap-1.5">
                           <span className="text-[9px] text-zinc-500 mr-1 self-center">Preajustes rápidos:</span>
@@ -7037,7 +7197,7 @@ export default function App() {
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-100/30 dark:bg-zinc-950 p-2.5 rounded-lg border border-slate-150 dark:border-zinc-850">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-100/30 dark:bg-zinc-950 p-2.5 rounded-lg border border-slate-200 dark:border-zinc-800">
                         <div>
                           <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Talle</label>
                           <select id="edit-var-size" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold text-zinc-800 dark:text-zinc-200">
@@ -7101,10 +7261,10 @@ export default function App() {
                       </div>
 
                       {((editingProduct.variants || []).length > 0) ? (
-                        <div className="max-h-52 overflow-y-auto border border-slate-150 dark:border-zinc-850 rounded-lg text-xs shadow-inner">
+                        <div className="max-h-52 overflow-y-auto border border-slate-200 dark:border-zinc-800 rounded-lg text-xs shadow-inner">
                           <table className="w-full text-left border-collapse bg-white dark:bg-zinc-950">
                             <thead>
-                              <tr className="bg-slate-100 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-850 text-[10px] text-zinc-400 font-extrabold uppercase">
+                              <tr className="bg-slate-100 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-800 text-[10px] text-zinc-400 font-extrabold uppercase">
                                 <th className="p-2">Talle</th>
                                 <th className="p-2">Color / Tono</th>
                                 <th className="p-2">Stock Disponible</th>
@@ -7210,7 +7370,7 @@ export default function App() {
                                                     variants: nextArr
                                                   });
                                                 }}
-                                                className="w-full px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-805 rounded text-[10px] outline-none font-mono"
+                                                className="w-full px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-[10px] outline-none font-mono"
                                               />
                                               <div className="flex items-center gap-1 mt-1">
                                                 <span className="text-[8px] text-zinc-400 font-bold uppercase shrink-0">Subir:</span>
@@ -7230,7 +7390,7 @@ export default function App() {
                                                           },
                                                           body: formData,
                                                         });
-                                                        const resText = await uploadRes.text();
+const resText = await uploadRes.text();
                                                         let parsedData: any = null;
                                                         
                                                         if (resText.trim().startsWith("<!doctype") || resText.trim().startsWith("<html")) {
@@ -7261,7 +7421,7 @@ export default function App() {
                                                       }
                                                     }
                                                   }}
-                                                  className="w-full text-[8px] text-zinc-550 dark:text-zinc-400 file:mr-1 file:py-0.5 file:px-1 file:rounded file:border-0 file:text-[8px] file:font-semibold file:bg-zinc-100 dark:file:bg-zinc-800 file:text-zinc-700 dark:file:text-zinc-350 hover:file:opacity-80 cursor-pointer"
+                                                  className="w-full text-[8px] text-zinc-500 dark:text-zinc-400 file:mr-1 file:py-0.5 file:px-1 file:rounded file:border-0 file:text-[8px] file:font-semibold file:bg-zinc-100 dark:file:bg-zinc-800 file:text-zinc-700 dark:file:text-zinc-300 hover:file:opacity-80 cursor-pointer"
                                                 />
                                               </div>
                                             </div>
@@ -7319,7 +7479,7 @@ export default function App() {
                           id="editProductIs3D"
                           checked={!!editingProduct.is3D}
                           onChange={(e) => setEditingProduct({ ...editingProduct, is3D: e.target.checked, hoursPerUnit: e.target.checked ? (editingProduct.hoursPerUnit || 1) : undefined })}
-                          className="rounded border-zinc-750 bg-zinc-950 text-indigo-500 focus:ring-0 cursor-pointer h-4 w-4"
+                          className="rounded border-zinc-700 bg-zinc-950 text-indigo-500 focus:ring-0 cursor-pointer h-4 w-4"
                         />
                         <label htmlFor="editProductIs3D" className="text-xs text-zinc-300 select-none cursor-pointer font-bold flex items-center gap-1.5 text-indigo-400">
                           <Cpu className="w-4 h-4 shrink-0" />
@@ -7387,7 +7547,7 @@ export default function App() {
                     <div id="admin-categories-editor-form-row" className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       
                       {/* Left: main category form (create or edit) */}
-                      <div className="bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4">
+                      <div className="bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
                         {editingCategory ? (
                           <form onSubmit={handleUpdateDynamicCategory} className="space-y-3">
                             <div className="flex items-center justify-between border-b border-zinc-100/10 dark:border-zinc-900 pb-2">
@@ -7510,7 +7670,7 @@ export default function App() {
                       </div>
 
                       {/* Right: subcategory form (create or edit) */}
-                      <div className="bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4">
+                      <div className="bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
                         {editingSubcategory ? (
                           <form onSubmit={handleUpdateSubcategory} className="space-y-3">
                             <div className="flex items-center justify-between border-b border-zinc-100/10 dark:border-zinc-900 pb-2">
@@ -7597,8 +7757,8 @@ export default function App() {
                     </div>
 
                     {/* Listing of all categories and nested subcategories */}
-                    <div className="bg-white dark:bg-zinc-950 rounded-2xl border border-slate-200 dark:border-zinc-850 shadow-sm overflow-hidden">
-                      <div className="p-4 border-b border-slate-100 dark:border-zinc-850 bg-slate-50/50 dark:bg-zinc-950/80 flex items-center justify-between">
+                    <div className="bg-white dark:bg-zinc-950 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+                      <div className="p-4 border-b border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-950/80 flex items-center justify-between">
                         <div>
                           <h4 className="font-extrabold text-xs uppercase tracking-wider text-slate-800 dark:text-zinc-300">
                             Jerarquía de Categorías y Subcategorías
@@ -7610,7 +7770,7 @@ export default function App() {
                         </span>
                       </div>
 
-                      <div className="divide-y divide-slate-100 dark:divide-zinc-850">
+                      <div className="divide-y divide-slate-100 dark:divide-zinc-800">
                         {(store.dbCategories || []).length === 0 ? (
                           <div className="p-8 text-center text-zinc-500 text-xs">
                             No hay categorías principales creadas aún. Utiliza el formulario superior para crear la primera.
@@ -7666,7 +7826,7 @@ export default function App() {
                                         className={`text-[10.5px] font-bold py-1 px-2.5 rounded-lg border transition cursor-pointer ${
                                           cat.active === false
                                             ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-                                            : "border-zinc-750 bg-zinc-900/50 hover:bg-zinc-800 text-zinc-450 hover:text-white"
+                                            : "border-zinc-700 bg-zinc-900/50 hover:bg-zinc-800 text-zinc-400 hover:text-white"
                                         }`}
                                       >
                                         {cat.active === false ? "Mostrar en Web" : "Ocultar de Web"}
@@ -7674,7 +7834,7 @@ export default function App() {
                                       
                                       <button
                                         onClick={() => handleStartEditCategory(cat)}
-                                        className="p-1.5 rounded bg-zinc-850 hover:bg-zinc-700 text-zinc-300 transition cursor-pointer"
+                                        className="p-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition cursor-pointer"
                                         title="Editar Categoría"
                                       >
                                         <Edit className="h-3.5 w-3.5" />
@@ -7701,7 +7861,7 @@ export default function App() {
                                         {children.map((sub) => {
                                           const subProductsCount = store.products.filter(p => p.subcategoria_id === sub.id).length;
                                           return (
-                                            <div key={sub.id} className="p-2.5 bg-slate-50 dark:bg-zinc-900/60 rounded-xl border border-slate-100 dark:border-zinc-850/40 flex items-center justify-between">
+                                            <div key={sub.id} className="p-2.5 bg-slate-50 dark:bg-zinc-900/60 rounded-xl border border-slate-100 dark:border-zinc-800/40 flex items-center justify-between">
                                               <div className="min-w-0">
                                                 <div className="flex items-center gap-1.5 flex-wrap">
                                                   <p className="text-xs font-semibold truncate text-slate-900 dark:text-zinc-300">{sub.nombre}</p>
@@ -7729,7 +7889,7 @@ export default function App() {
                                                   className={`px-1.5 py-0.5 rounded text-[9px] transition cursor-pointer font-bold ${
                                                     sub.active === false 
                                                       ? "bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-500 border border-amber-500/20" 
-                                                      : "bg-zinc-800 hover:bg-zinc-750 text-zinc-400 hover:text-white"
+                                                      : "bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white"
                                                   }`}
                                                   title={sub.active === false ? "Mostrar en Web" : "Ocultar en Web"}
                                                 >
@@ -7769,7 +7929,7 @@ export default function App() {
                 {adminSection === "promos" && (
                   <div className="space-y-4">
                     {/* General Promotion banner config */}
-                    <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4">
+                    <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
                       <div className="flex items-center gap-2 border-b border-zinc-800/10 dark:border-zinc-800 pb-3 mb-2">
                         <Tag className="h-4 w-4 text-amber-500" />
                         <h3 className="font-bold text-sm text-slate-900 dark:text-white">Conf. de Cintillo de Descuento (Barra Superior)</h3>
@@ -7784,7 +7944,7 @@ export default function App() {
                       <div className="space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="flex flex-col">
-                            <span className="text-xs font-semibold text-slate-850 dark:text-zinc-200">Activar Cintillo de Promoción General</span>
+                            <span className="text-xs font-semibold text-slate-800 dark:text-zinc-200">Activar Cintillo de Promoción General</span>
                             <span className="text-[10px] text-zinc-400">Habilita un mensaje flotante con texto personalizado o cupones de tu elección.</span>
                           </div>
                           
@@ -7888,7 +8048,7 @@ export default function App() {
                     </div>
 
                     {/* Free shipping banner config */}
-                    <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4">
+                    <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
                       <div className="flex items-center gap-2 border-b border-zinc-800/10 dark:border-zinc-800 pb-3 mb-2">
                         <Truck className="h-4 w-4 text-emerald-500" />
                         <h3 className="font-bold text-sm text-slate-900 dark:text-white">Conf. de Cintillo de Envío Gratis por Zonas</h3>
@@ -7897,7 +8057,7 @@ export default function App() {
                       <div className="space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="flex flex-col">
-                            <span className="text-xs font-semibold text-slate-850 dark:text-zinc-200">Activar Cintillo y Lógica de Envío Gratis</span>
+                            <span className="text-xs font-semibold text-slate-800 dark:text-zinc-200">Activar Cintillo y Lógica de Envío Gratis</span>
                             <span className="text-[10px] text-zinc-400">Calcula y aplica automáticamente el beneficio si la localidad califica al superar el monto mínimo.</span>
                           </div>
                           
@@ -7928,7 +8088,7 @@ export default function App() {
                                 value={editingSettings.freeShippingMinAmount !== undefined ? editingSettings.freeShippingMinAmount : 2000}
                                 onChange={(e) => setEditingSettings({ ...editingSettings, freeShippingMinAmount: Number(e.target.value) })}
                                 placeholder="Ej: 2000"
-                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-slate-50 dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-slate-50 dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-white"
                               />
                             </div>
                             <div>
@@ -7938,7 +8098,7 @@ export default function App() {
                                 value={editingSettings.freeShippingRegions || ""}
                                 onChange={(e) => setEditingSettings({ ...editingSettings, freeShippingRegions: e.target.value })}
                                 placeholder="Ej: Pinamar, Salinas, Marindia, Neptunia"
-                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-slate-50 dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-slate-50 dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-white"
                               />
                               <p className="text-[9px] text-zinc-400 dark:text-zinc-500 mt-1.5 leading-tight">Cualquier compra con localidad que figure en esta lista recibirá Envío Gratis si supera el monto.</p>
                             </div>
@@ -7946,7 +8106,7 @@ export default function App() {
                         )}
                       </div>
 
-                      <div className="pt-4 flex justify-end border-t border-slate-100 dark:border-zinc-850">
+                      <div className="pt-4 flex justify-end border-t border-slate-100 dark:border-zinc-800">
                         <button
                           onClick={handleSaveSettings}
                           disabled={saving}
@@ -7958,13 +8118,13 @@ export default function App() {
                     </div>
 
                   {/* Dynamic coupon CRUD card */}
-                  <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4">
+                  <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
                     <div className="flex items-center gap-2 border-b border-zinc-800/10 dark:border-zinc-800 pb-3 mb-2">
                       <Percent className="h-4 w-4 text-emerald-500" />
                       <h3 className="font-bold text-sm text-slate-900 dark:text-white">Crear y Gestionar Cupones de Descuento</h3>
                     </div>
 
-                    <form onSubmit={handleAddCoupon} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end bg-slate-50 dark:bg-zinc-905/30 p-4 rounded-xl border border-slate-100 dark:border-zinc-850/40">
+                    <form onSubmit={handleAddCoupon} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end bg-slate-50 dark:bg-zinc-905/30 p-4 rounded-xl border border-slate-100 dark:border-zinc-800/40">
                       <div>
                         <div className="flex items-center justify-between gap-1 mb-1.5">
                           <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Código Único (PK/Code)</label>
@@ -8030,7 +8190,7 @@ export default function App() {
                           {store.coupons.map((c) => {
                             const isExpired = c.expiration_date ? new Date(c.expiration_date).getTime() < Date.now() : false;
                             return (
-                              <div key={c.code} className="p-3 bg-slate-50 dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-850 flex items-center justify-between">
+                              <div key={c.code} className="p-3 bg-slate-50 dark:bg-zinc-900 rounded-xl border border-slate-200 dark:border-zinc-800 flex items-center justify-between">
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="text-xs font-mono font-black text-indigo-400 uppercase tracking-wide bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded">
@@ -8105,11 +8265,11 @@ export default function App() {
                     </div>
 
                     {/* Selector de límite de Alerta de Stock Bajo */}
-                    <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-3">
+                    <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <Sliders className="h-4.5 w-4.5 text-indigo-500" />
-                          <h4 className="font-bold text-xs uppercase tracking-wider text-slate-950 dark:text-zinc-150">Límite de Alerta de Stock Bajo</h4>
+                          <h4 className="font-bold text-xs uppercase tracking-wider text-slate-950 dark:text-zinc-200">Límite de Alerta de Stock Bajo</h4>
                         </div>
                         <span className="text-[10px] font-mono text-zinc-500 dark:text-zinc-400 font-bold">Configuración persistente</span>
                       </div>
@@ -8134,12 +8294,12 @@ export default function App() {
                     </div>
 
                     {/* Alertas List View & Interactive Stock Adjustment */}
-                    <div className="bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm overflow-hidden space-y-4">
+                    <div className="bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm overflow-hidden space-y-4">
                       
                       {/* Filter Pills with labels and counters */}
-                      <div className="p-4 border-b border-slate-200 dark:border-zinc-850 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div>
-                          <h4 className="font-bold text-xs uppercase tracking-wider text-slate-550">Registro del Inventario de Negocio</h4>
+                          <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-400">Registro del Inventario de Negocio</h4>
                         </div>
 
                         {/* Switch bar */}
@@ -8148,7 +8308,7 @@ export default function App() {
                             { id: "alerts", label: "Solo Alertas ⚠", count: totalStockAlerts, color: "text-red-500" },
                             { id: "outOfStock", label: "Agotado", count: outOfStockProducts.length, color: "text-red-400" },
                             { id: "lowStock", label: "Stock Bajo", count: lowStockProducts.length, color: "text-amber-400" },
-                            { id: "all", label: "Todo el Catálogo", count: store.products.filter(p => p.active !== false).length, color: "text-zinc-450" }
+                            { id: "all", label: "Todo el Catálogo", count: store.products.filter(p => p.active !== false).length, color: "text-zinc-400" }
                           ].map(tab => (
                             <button
                               key={tab.id}
@@ -8156,7 +8316,7 @@ export default function App() {
                               className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
                                 stockFilterTab === tab.id
                                   ? "bg-indigo-600 text-white shadow"
-                                  : "border border-slate-200 dark:border-zinc-850 text-zinc-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-900"
+                                  : "border border-slate-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-900"
                               }`}
                             >
                               <span>{tab.label}</span>
@@ -8188,7 +8348,7 @@ export default function App() {
                         }
 
                         return (
-                          <div className="divide-y divide-slate-150 dark:divide-zinc-850">
+                          <div className="divide-y divide-slate-200 dark:divide-zinc-800">
                             {displayedStockProducts.map((p) => {
                               const isOutOfStock = p.stock <= 0;
                               const isLowStock = p.stock > 0 && p.stock <= lowStockThresholdSetting;
@@ -8202,7 +8362,7 @@ export default function App() {
                                     <img
                                       src={p.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=100&q=80"}
                                       alt={p.name}
-                                      className="h-9 w-9 rounded-lg object-cover bg-zinc-850 shrink-0 border border-slate-200 dark:border-zinc-800"
+                                      className="h-9 w-9 rounded-lg object-cover bg-zinc-800 shrink-0 border border-slate-200 dark:border-zinc-800"
                                     />
                                     <div className="min-w-0">
                                       <div className="flex items-center gap-2 flex-wrap">
@@ -8286,10 +8446,10 @@ export default function App() {
                                           </button>
                                         </div>
                                       ) : (
-                                        <div className="flex items-center gap-1 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-850 p-1 rounded-xl">
+                                        <div className="flex items-center gap-1 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded-xl">
                                           <button
                                             onClick={() => handleQuickUpdateStock(p.id, p.stock - 1)}
-                                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-750 text-xs font-bold font-mono text-zinc-550 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-zinc-750 transition active:scale-90"
+                                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs font-bold font-mono text-zinc-500 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-zinc-700 transition active:scale-90"
                                             title="Descontar 1 unidad"
                                           >
                                             -
@@ -8302,7 +8462,7 @@ export default function App() {
                                           />
                                           <button
                                             onClick={() => handleQuickUpdateStock(p.id, p.stock + 1)}
-                                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-750 text-xs font-bold font-mono text-zinc-550 hover:text-emerald-500 hover:bg-slate-100 dark:hover:bg-zinc-750 transition active:scale-90"
+                                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs font-bold font-mono text-zinc-500 hover:text-emerald-500 hover:bg-slate-100 dark:hover:bg-zinc-700 transition active:scale-90"
                                             title="Sumar 1 unidad"
                                           >
                                             +
@@ -8325,26 +8485,26 @@ export default function App() {
 
                 {/* 11. PAYMENTS CONTROL CENTER PANEL */}
                 {adminSection === "payments" && (
-                  <div className="bg-white dark:bg-zinc-950 rounded-2xl border border-slate-200 dark:border-zinc-850 p-6 space-y-6 shadow-sm">
-                    <div className="space-y-1.5 pb-4 border-b border-slate-150 dark:border-zinc-850">
+                  <div className="bg-white dark:bg-zinc-950 rounded-2xl border border-slate-200 dark:border-zinc-800 p-6 space-y-6 shadow-sm">
+                    <div className="space-y-1.5 pb-4 border-b border-slate-200 dark:border-zinc-800">
                       <h3 className="font-extrabold text-sm uppercase text-slate-800 dark:text-zinc-200 tracking-wider flex items-center gap-2">
                         <CreditCard className="h-4.5 w-4.5 text-indigo-500" />
                         <span>Pasarelas & Métodos de Pago Habilitados (Uruguay)</span>
                       </h3>
-                      <p className="text-xs text-zinc-450 dark:text-zinc-450">
+                      <p className="text-xs text-zinc-400 dark:text-zinc-400">
                         Configura y personaliza qué métodos de pago ofreces a tus compradores uruguayos en la pantalla del carrito. Los clientes verán estas instrucciones y el método seleccionado se adjuntará de forma automatizada al iniciar el pedido en tu WhatsApp.
                       </p>
                     </div>
 
                     <div className="space-y-6">
                       {/* Method 1: Mercado Pago Uruguay */}
-                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-150 dark:border-zinc-850 rounded-2xl space-y-4">
+                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-200 dark:border-zinc-800 rounded-2xl space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <span className="text-2xl">🇺🇾</span>
                             <div>
                               <h4 className="font-bold text-sm text-slate-800 dark:text-zinc-200">Mercado Pago Uruguay</h4>
-                              <p className="text-[10px] text-zinc-450 dark:text-zinc-500">Tarjetas de Crédito, Débito (OCA, VISA, MasterCard, Lider, Diners) y Cobros Abitab/Redpagos.</p>
+                              <p className="text-[10px] text-zinc-400 dark:text-zinc-500">Tarjetas de Crédito, Débito (OCA, VISA, MasterCard, Lider, Diners) y Cobros Abitab/Redpagos.</p>
                             </div>
                           </div>
                           
@@ -8378,7 +8538,7 @@ export default function App() {
                                 value={editingSettings.mercadopagoMessage || ""}
                                 onChange={(e) => setEditingSettings({ ...editingSettings, mercadopagoMessage: e.target.value })}
                                 placeholder="Escribe las indicaciones o beneficios que el cliente visualizará..."
-                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-white"
                               />
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -8392,7 +8552,7 @@ export default function App() {
                                     placeholder="ej: APP_USR-8cfaeed0-bf51-4040-af84-48ff61cb38b2"
                                     value={editingSettings.mercadopagoPublicKey || ""}
                                     onChange={(e) => setEditingSettings({ ...editingSettings, mercadopagoPublicKey: e.target.value })}
-                                    className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white font-mono"
+                                    className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-white font-mono"
                                   />
                                 </div>
                                 <div>
@@ -8405,7 +8565,7 @@ export default function App() {
                                       placeholder="ej: APP_USR-492751947293-PROD..."
                                       value={editingSettings.mercadopagoAccessToken || ""}
                                       onChange={(e) => setEditingSettings({ ...editingSettings, mercadopagoAccessToken: e.target.value })}
-                                      className="text-xs w-full pl-3 pr-10 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white font-mono"
+                                      className="text-xs w-full pl-3 pr-10 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-white font-mono"
                                     />
                                     <button
                                       type="button"
@@ -8431,7 +8591,7 @@ export default function App() {
                                     placeholder="40"
                                     value={editingSettings.exchangeRate || 40}
                                     onChange={(e) => setEditingSettings({ ...editingSettings, exchangeRate: parseFloat(e.target.value) || 40 })}
-                                    className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white font-mono"
+                                    className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-white font-mono"
                                   />
                                 </div>
                               </div>
@@ -8450,8 +8610,8 @@ export default function App() {
                             </div>
 
                             {/* Botón directo de verificación y salvado de claves */}
-                            <div className="mt-3 pt-3 border-t border-dashed border-slate-150 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50 dark:bg-zinc-900/40 p-4 rounded-xl">
-                              <div className="text-[11px] text-zinc-550 dark:text-zinc-400 max-w-md">
+                            <div className="mt-3 pt-3 border-t border-dashed border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50 dark:bg-zinc-900/40 p-4 rounded-xl">
+                              <div className="text-[11px] text-zinc-500 dark:text-zinc-400 max-w-md">
                                 <span className="font-bold text-slate-800 dark:text-zinc-200 block mb-0.5">¿Ingresaste tus credenciales correctamente?</span>
                                 Haz click en el botón de la derecha para aplicar, guardar y validar tus claves de Mercado Pago de inmediato en la tienda.
                               </div>
@@ -8476,13 +8636,13 @@ export default function App() {
                       </div>
 
                       {/* Method 2: Transferencia Bancaria Directa */}
-                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-150 dark:border-zinc-850 rounded-2xl space-y-4">
+                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-200 dark:border-zinc-800 rounded-2xl space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <span className="text-2xl">🏦</span>
                             <div>
                               <h4 className="font-bold text-sm text-slate-800 dark:text-zinc-200">Transferencia Bancaria Uruguaya</h4>
-                              <p className="text-[10px] text-zinc-450 dark:text-zinc-500">BROU, Itaú, Santander, BBVA, Scotiabank u otros bancos nacionales.</p>
+                              <p className="text-[10px] text-zinc-400 dark:text-zinc-500">BROU, Itaú, Santander, BBVA, Scotiabank u otros bancos nacionales.</p>
                             </div>
                           </div>
                           
@@ -8516,7 +8676,7 @@ export default function App() {
                                 value={editingSettings.transferDetails || ""}
                                 onChange={(e) => setEditingSettings({ ...editingSettings, transferDetails: e.target.value })}
                                 placeholder="Escribe el Banco, Número de Caja de Ahorro, Moneda (UYU/USD), Nombre del titular y RUT/Documento..."
-                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white font-mono"
+                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-white font-mono"
                               />
                             </div>
                           </div>
@@ -8524,13 +8684,13 @@ export default function App() {
                       </div>
 
                       {/* Method 3: Efectivo Contraentrega */}
-                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-150 dark:border-zinc-850 rounded-2xl space-y-4">
+                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-200 dark:border-zinc-800 rounded-2xl space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <span className="text-2xl">💵</span>
                             <div>
                               <h4 className="font-bold text-sm text-slate-800 dark:text-zinc-200">Efectivo contra el envío (Contraentrega)</h4>
-                              <p className="text-[10px] text-zinc-450 dark:text-zinc-500 font-medium">Recomendado para logística propia en Montevideo o áreas coordinadas.</p>
+                              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">Recomendado para logística propia en Montevideo o áreas coordinadas.</p>
                             </div>
                           </div>
                           
@@ -8564,7 +8724,7 @@ export default function App() {
                                 value={editingSettings.cashMessage || ""}
                                 onChange={(e) => setEditingSettings({ ...editingSettings, cashMessage: e.target.value })}
                                 placeholder="Escribe las zonas de cobertura para cobros físicos..."
-                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-white"
                               />
                             </div>
                           </div>
@@ -8574,7 +8734,7 @@ export default function App() {
                     </div>
 
                     {/* Submit Saving command */}
-                    <div className="pt-4 flex justify-end border-t border-slate-150 dark:border-zinc-850">
+                    <div className="pt-4 flex justify-end border-t border-slate-200 dark:border-zinc-800">
                       <button
                         type="button"
                         onClick={handleSaveSettings}
@@ -8590,8 +8750,8 @@ export default function App() {
 
                 {/* 11b. CHECKOUT & SHIPPING CONTROL CENTER PANEL */}
                 {adminSection === "checkout_config" && (
-                  <div className="bg-white dark:bg-zinc-950 rounded-2xl border border-slate-200 dark:border-zinc-850 p-6 space-y-6 shadow-sm">
-                    <div className="space-y-1.5 pb-4 border-b border-slate-150 dark:border-zinc-850">
+                  <div className="bg-white dark:bg-zinc-950 rounded-2xl border border-slate-200 dark:border-zinc-800 p-6 space-y-6 shadow-sm">
+                    <div className="space-y-1.5 pb-4 border-b border-slate-200 dark:border-zinc-800">
                       <h3 className="text-base font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
                         <span>🛒</span> Configuración de Carrito y Envíos
                       </h3>
@@ -8602,13 +8762,13 @@ export default function App() {
 
                     <div className="space-y-5">
                       {/* 1. RETIRO EN LOCAL */}
-                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-150 dark:border-zinc-850 rounded-2xl space-y-4">
+                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-200 dark:border-zinc-800 rounded-2xl space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <span className="text-2xl">🏪</span>
                             <div>
                               <h4 className="font-bold text-sm text-slate-800 dark:text-zinc-200">Retiro físico en empresa (Pickup)</h4>
-                              <p className="text-[10px] text-zinc-450 dark:text-zinc-500 font-medium">Permite a los usuarios retirar sus pedidos directamente en tu local comercial.</p>
+                              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">Permite a los usuarios retirar sus pedidos directamente en tu local comercial.</p>
                             </div>
                           </div>
                           
@@ -8642,7 +8802,7 @@ export default function App() {
                                 value={editingSettings.pickupAddress || ""}
                                 onChange={(e) => setEditingSettings({ ...editingSettings, pickupAddress: e.target.value })}
                                 placeholder="Ej: Av. Italia 3824, Parque Batlle, Montevideo, Uruguay"
-                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-white"
                               />
                             </div>
                             
@@ -8656,7 +8816,7 @@ export default function App() {
                                   value={editingSettings.pickupHours || ""}
                                   onChange={(e) => setEditingSettings({ ...editingSettings, pickupHours: e.target.value })}
                                   placeholder="Ej: Lunes a Viernes de 10:00 a 18:00 hs"
-                                  className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                                  className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-white"
                                 />
                               </div>
                               <div>
@@ -8668,7 +8828,7 @@ export default function App() {
                                   value={editingSettings.pickupSuccessMessage || ""}
                                   onChange={(e) => setEditingSettings({ ...editingSettings, pickupSuccessMessage: e.target.value })}
                                   placeholder="Ej: Listo para retirar el mismo día hábil"
-                                  className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                                  className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-white"
                                 />
                               </div>
                             </div>
@@ -8677,13 +8837,13 @@ export default function App() {
                       </div>
 
                       {/* 2. ENVÍO A DOMICILIO */}
-                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-150 dark:border-zinc-850 rounded-2xl space-y-4">
+                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-200 dark:border-zinc-800 rounded-2xl space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <span className="text-2xl">🚚</span>
                             <div>
                               <h4 className="font-bold text-sm text-slate-800 dark:text-zinc-200">Envío a domicilio</h4>
-                              <p className="text-[10px] text-zinc-450 dark:text-zinc-500 font-medium">Habilita o deshabilita los métodos de entrega del país.</p>
+                              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">Habilita o deshabilita los métodos de entrega del país.</p>
                             </div>
                           </div>
                           
@@ -8750,7 +8910,7 @@ export default function App() {
                                 ];
 
                                 return listMethods.map((method, idx) => (
-                                  <div key={method.id} className="p-4 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl space-y-3 relative group">
+                                  <div key={method.id} className="p-4 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl space-y-3 relative group">
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -8774,7 +8934,7 @@ export default function App() {
                                             setEditingSettings({ ...editingSettings, deliveryMethods: updated });
                                           }}
                                           placeholder="Ej: Envío Express"
-                                          className="text-xs w-full px-2.5 py-1.5 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                                          className="text-xs w-full px-2.5 py-1.5 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-white"
                                         />
                                       </div>
 
@@ -8788,7 +8948,7 @@ export default function App() {
                                             setEditingSettings({ ...editingSettings, deliveryMethods: updated });
                                           }}
                                           placeholder="Aclaración rápida"
-                                          className="text-xs w-full px-2.5 py-1.5 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                                          className="text-xs w-full px-2.5 py-1.5 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-white"
                                         />
                                       </div>
 
@@ -8800,7 +8960,7 @@ export default function App() {
                                             const updated = listMethods.map((m, i) => i === idx ? { ...m, iconType: e.target.value } : m);
                                             setEditingSettings({ ...editingSettings, deliveryMethods: updated });
                                           }}
-                                          className="text-xs w-full px-2.5 py-1.5 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                                          className="text-xs w-full px-2.5 py-1.5 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-white"
                                         >
                                           <option value="truck_orange">🚚 Camión Naranja</option>
                                           <option value="motorcycle">🏍️ Moto Express</option>
@@ -8820,13 +8980,13 @@ export default function App() {
                       </div>
 
                       {/* 3. FACTURACIÓN CON RUT */}
-                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-150 dark:border-zinc-850 rounded-2xl space-y-4">
+                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-200 dark:border-zinc-800 rounded-2xl space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <span className="text-2xl">🧾</span>
                             <div>
                               <h4 className="font-bold text-sm text-slate-800 dark:text-zinc-200">Facturación con RUT (Empresas)</h4>
-                              <p className="text-[10px] text-zinc-450 dark:text-zinc-500 font-medium font-sans">Permite al comprador solicitar factura oficial ingresando RUT de 12 dígitos y Razón Social.</p>
+                              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium font-sans">Permite al comprador solicitar factura oficial ingresando RUT de 12 dígitos y Razón Social.</p>
                             </div>
                           </div>
                           
@@ -8851,13 +9011,13 @@ export default function App() {
                       </div>
 
                       {/* 4. ENVÍO GRATUITO CONFIGURABLE */}
-                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-150 dark:border-zinc-850 rounded-2xl space-y-4">
+                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-200 dark:border-zinc-800 rounded-2xl space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <span className="text-2xl">🎁</span>
                             <div>
                               <h4 className="font-bold text-sm text-slate-800 dark:text-zinc-200">Envío Gratis por Zona</h4>
-                              <p className="text-[10px] text-zinc-450 dark:text-zinc-500 font-medium font-sans">Configura un monto mínimo de compra y las zonas/localidades que acceden al envío gratuito.</p>
+                              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium font-sans">Configura un monto mínimo de compra y las zonas/localidades que acceden al envío gratuito.</p>
                             </div>
                           </div>
                           
@@ -8889,7 +9049,7 @@ export default function App() {
                                 value={editingSettings.freeShippingMinAmount !== undefined ? editingSettings.freeShippingMinAmount : 2000}
                                 onChange={(e) => setEditingSettings({ ...editingSettings, freeShippingMinAmount: Number(e.target.value) })}
                                 placeholder="Ej: 2000"
-                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-white"
                               />
                             </div>
                             <div>
@@ -8899,7 +9059,7 @@ export default function App() {
                                 value={editingSettings.freeShippingRegions || ""}
                                 onChange={(e) => setEditingSettings({ ...editingSettings, freeShippingRegions: e.target.value })}
                                 placeholder="Ej: Pinamar, Salinas, Marindia, Neptunia"
-                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                                className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-white"
                               />
                               <p className="text-[9px] text-zinc-400 dark:text-zinc-500 mt-1.5 leading-tight">Cualquier entrega en la zona de Canelones que figure en este campo recibirá Envío Gratis si el subtotal supera el monto indicado.</p>
                             </div>
@@ -8908,12 +9068,12 @@ export default function App() {
                       </div>
 
                       {/* 5. DESTINATARIO PREESTABLECIDO */}
-                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-150 dark:border-zinc-850 rounded-2xl space-y-4">
+                      <div className="p-5 bg-gradient-to-br from-white to-slate-50 dark:from-zinc-900/40 dark:to-zinc-900/25 border border-slate-200 dark:border-zinc-800 rounded-2xl space-y-4">
                         <div className="flex items-center gap-3">
                           <span className="text-2xl">👤</span>
                           <div>
                             <h4 className="font-bold text-sm text-slate-800 dark:text-zinc-200">Datos por Defecto del Comprador</h4>
-                            <p className="text-[10px] text-zinc-450 dark:text-zinc-500 font-medium">Define los datos cargados automáticamente en el checkout como sugeridos de inicio.</p>
+                            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium">Define los datos cargados automáticamente en el checkout como sugeridos de inicio.</p>
                           </div>
                         </div>
 
@@ -8925,7 +9085,7 @@ export default function App() {
                               value={editingSettings.defaultFirstName || ""}
                               onChange={(e) => setEditingSettings({ ...editingSettings, defaultFirstName: e.target.value })}
                               placeholder="Ej: Christian"
-                              className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                              className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-white"
                             />
                           </div>
                           <div>
@@ -8935,7 +9095,7 @@ export default function App() {
                               value={editingSettings.defaultLastName || ""}
                               onChange={(e) => setEditingSettings({ ...editingSettings, defaultLastName: e.target.value })}
                               placeholder="Ej: Olivera"
-                              className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                              className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-white"
                             />
                           </div>
                           <div>
@@ -8945,7 +9105,7 @@ export default function App() {
                               value={editingSettings.defaultPhone || ""}
                               onChange={(e) => setEditingSettings({ ...editingSettings, defaultPhone: e.target.value })}
                               placeholder="Ej: 095085181"
-                              className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-805 text-slate-800 dark:text-white"
+                              className="text-xs w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-white"
                             />
                           </div>
                         </div>
@@ -8954,7 +9114,7 @@ export default function App() {
                     </div>
 
                     {/* Submit Saving command */}
-                    <div className="pt-4 flex justify-end border-t border-slate-150 dark:border-zinc-850">
+                    <div className="pt-4 flex justify-end border-t border-slate-200 dark:border-zinc-800">
                       <button
                         type="button"
                         onClick={handleSaveSettings}
@@ -8967,13 +9127,55 @@ export default function App() {
                   </div>
                 )}
 
-                {/* 9.5 GOOGLE REVIEWS SETTINGS */}
+                {/* 9.5 GOOGLE REVIEWS & ANALYTICS INTEGRATIONS GROUP */}
                 {adminSection === "reviews" && (
                   <div className="space-y-6 animate-fade-in select-none">
-                    <div className="p-6 bg-slate-55 rounded-3xl border border-slate-150 dark:bg-zinc-950/40 dark:border-zinc-850/50 space-y-4">
+                    
+                    {/* PANEL A: GOOGLE ANALYTICS 4 */}
+                    <div className="p-6 bg-slate-50 dark:bg-zinc-950/40 rounded-3xl border border-slate-200 dark:border-zinc-800/50 space-y-4">
+                      {/* Banner Info */}
+                      <div className="flex gap-4 items-start pb-4 border-b border-slate-200 dark:border-zinc-800">
+                        <div className="p-3 bg-[#4285F4]/10 text-[#4285F4] rounded-2xl shrink-0">
+                          <Globe className="w-6 h-6 text-[#4285F4] animate-pulse" />
+                        </div>
+                        <div className="space-y-1 flex-1">
+                          <h3 className="font-extrabold text-base text-slate-800 dark:text-zinc-100">Analytics de Google (GA4)</h3>
+                          <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed">
+                            Mide de manera 100% automatizada el tráfico de tu tienda online, el interés en stock de productos de cada talle y las ventas finales. Al ingresar tu ID de Medición de Google Analytics 4, la plataforma disparará eventos de métricas de alta conversión en tiempo real.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 font-sans">
+                          <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse"></span>
+                          Google Analytics ID de Medición (Measurement ID)
+                        </label>
+                        <input
+                          type="text"
+                          value={editingSettings.googleAnalyticsId || ""}
+                          onChange={(e) => setEditingSettings({ ...editingSettings, googleAnalyticsId: e.target.value.trim() })}
+                          className="w-full px-4 py-3 bg-slate-50/50 dark:bg-zinc-900/30 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono placeholder-slate-400 dark:placeholder-zinc-600"
+                          placeholder="p.ej. G-XXXXXXXXXX"
+                        />
+                        <div className="bg-blue-500/5 dark:bg-blue-950/20 border border-blue-500/10 dark:border-blue-900/20 rounded-xl p-3.5 space-y-1.5">
+                          <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 block">⚡ Métricas de Comercio Electrónico Sincronizadas:</span>
+                          <ul className="text-[10px] text-slate-600 dark:text-zinc-400 space-y-1 list-disc list-inside">
+                            <li><strong className="text-slate-800 dark:text-zinc-200">page_view:</strong> Seguimiento automático de navegación en store, carrito, consola de administrador y más.</li>
+                            <li><strong className="text-slate-800 dark:text-zinc-200">view_item:</strong> Interacción directa con prendas o artículos (registra item_name, precio y categoría).</li>
+                            <li><strong className="text-slate-800 dark:text-zinc-200">add_to_cart:</strong> Registra la selección y adición de talles y variantes antes de iniciar el pedido.</li>
+                            <li><strong className="text-slate-800 dark:text-zinc-200">begin_checkout:</strong> Intención de pago iniciada al entrar al carrito final.</li>
+                            <li><strong className="text-slate-800 dark:text-zinc-200">purchase:</strong> Órdenes exitosas disparadas para Mercado Pago y compras en directo mediante WhatsApp.</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* PANEL B: GOOGLE REVIEWS */}
+                    <div className="p-6 bg-slate-50 dark:bg-zinc-950/40 rounded-3xl border border-slate-200 dark:border-zinc-800/50 space-y-4">
                       
                       {/* Banner Info */}
-                      <div className="flex gap-4 items-start pb-4 border-b border-slate-150 dark:border-zinc-850">
+                      <div className="flex gap-4 items-start pb-4 border-b border-slate-200 dark:border-zinc-800">
                         <div className="p-3 bg-amber-500/10 text-amber-500 rounded-2xl shrink-0">
                           <Star className="w-6 h-6 fill-amber-500 text-amber-500" />
                         </div>
@@ -9026,10 +9228,10 @@ export default function App() {
                             className={`p-4 rounded-2xl border text-left flex items-start gap-3 transition-all cursor-pointer ${
                               (editingSettings.googleReviewsSource || "custom") === "custom"
                                 ? "border-indigo-500 bg-indigo-500/5 ring-1 ring-indigo-500/10"
-                                : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-850"
+                                : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-800"
                             }`}
                           >
-                            <span className="w-5 h-5 rounded-full border-1.5 flex items-center justify-center border-slate-350 dark:border-zinc-650 mt-0.5">
+                            <span className="w-5 h-5 rounded-full border-1.5 flex items-center justify-center border-slate-300 dark:border-zinc-600 mt-0.5">
                               {(editingSettings.googleReviewsSource || "custom") === "custom" && (
                                 <span className="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
                               )}
@@ -9051,10 +9253,10 @@ export default function App() {
                             className={`p-4 rounded-2xl border text-left flex items-start gap-3 transition-all cursor-pointer ${
                               editingSettings.googleReviewsSource === "api"
                                 ? "border-indigo-500 bg-indigo-500/5 ring-1 ring-indigo-500/10"
-                                : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-850"
+                                : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-800"
                             }`}
                           >
-                            <span className="w-5 h-5 rounded-full border-1.5 flex items-center justify-center border-slate-350 dark:border-zinc-650 mt-0.5">
+                            <span className="w-5 h-5 rounded-full border-1.5 flex items-center justify-center border-slate-300 dark:border-zinc-600 mt-0.5">
                               {editingSettings.googleReviewsSource === "api" && (
                                 <span className="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
                               )}
@@ -9073,7 +9275,7 @@ export default function App() {
 
                       {/* Custom Mode Extra Settings */}
                       {(editingSettings.googleReviewsSource || "custom") === "custom" && (
-                        <div className="space-y-4 pt-4 border-t border-slate-150/50 dark:border-zinc-850/60">
+                        <div className="space-y-4 pt-4 border-t border-slate-200/50 dark:border-zinc-800/60">
                           <label className="block text-[11px] font-black uppercase tracking-widest text-indigo-500">
                             Estadísticas Sembradas de la Tienda
                           </label>
@@ -9112,7 +9314,7 @@ export default function App() {
 
                       {/* API Keys Configuration Mode */}
                       {editingSettings.googleReviewsSource === "api" && (
-                        <div className="space-y-4 pt-4 border-t border-slate-150/50 dark:border-zinc-850/60 animate-fade-in">
+                        <div className="space-y-4 pt-4 border-t border-slate-200/50 dark:border-zinc-800/60 animate-fade-in">
                           <label className="block text-[11px] font-black uppercase tracking-widest text-emerald-500 flex items-center gap-1">
                             <Sliders className="w-3.5 h-3.5" />
                             <span>Credenciales de API de Google Maps & Google Cloud</span>
@@ -9208,7 +9410,7 @@ export default function App() {
                                     className={`w-full p-3 rounded-xl border text-left flex flex-col gap-0.5 transition-all cursor-pointer ${
                                       editingSettings.googlePlaceId === candidate.place_id
                                         ? "border-emerald-500 bg-emerald-500/5 dark:bg-emerald-500/10 ring-1 ring-emerald-500/30"
-                                        : "border-slate-150 dark:border-zinc-800 bg-white dark:bg-zinc-950 hover:bg-slate-50 dark:hover:bg-zinc-900"
+                                        : "border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 hover:bg-slate-50 dark:hover:bg-zinc-900"
                                     }`}
                                   >
                                     <div className="flex items-center justify-between w-full gap-2 font-sans">
@@ -9338,7 +9540,7 @@ export default function App() {
                             )}
 
                             {/* URIs Instruction Alert */}
-                            <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-zinc-850 border border-slate-200 dark:border-zinc-800 text-[10px] leading-relaxed text-slate-500 dark:text-zinc-400 space-y-1 font-sans">
+                            <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-800 text-[10px] leading-relaxed text-slate-500 dark:text-zinc-400 space-y-1 font-sans">
                               <span className="font-extrabold text-slate-700 dark:text-zinc-300 block uppercase tracking-wide">
                                 📋 URI de Redirección Autorizada para Google Console:
                               </span>
@@ -9373,8 +9575,8 @@ export default function App() {
 
                     {/* CUSTOM REVIEWS LIST MANAGER */}
                     {(editingSettings.googleReviewsSource || "custom") === "custom" && (
-                      <div className="p-6 bg-slate-55 rounded-3xl border border-slate-150 dark:bg-zinc-950/40 dark:border-zinc-850/50 space-y-6">
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-4 border-b border-slate-150 dark:border-zinc-850">
+                      <div className="p-6 bg-slate-50 dark:bg-zinc-950/40 rounded-3xl border border-slate-200 dark:border-zinc-800/50 space-y-6">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-4 border-b border-slate-200 dark:border-zinc-800">
                           <div>
                             <h4 className="font-black text-xs text-slate-800 dark:text-zinc-100 uppercase tracking-widest">Opiniones Manuales Registradas</h4>
                             <p className="text-[11px] text-slate-500 dark:text-zinc-400">Agrega, edita o elimina testimonios realistas para el carrusel de opiniones.</p>
@@ -9470,7 +9672,7 @@ export default function App() {
                             {editingSettings.googleReviewsCustomList.map((item, idx) => (
                               <div 
                                 key={idx} 
-                                className="p-4 bg-white dark:bg-zinc-900 border border-slate-150 dark:border-zinc-850 rounded-2xl space-y-3 relative group"
+                                className="p-4 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl space-y-3 relative group"
                               >
                                 {/* Quick Delete Button */}
                                 <button
@@ -9501,7 +9703,7 @@ export default function App() {
                                         clone[idx] = { ...clone[idx], author_name: e.target.value };
                                         setEditingSettings({ ...editingSettings, googleReviewsCustomList: clone });
                                       }}
-                                      className="w-full px-2 py-1.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                                      className="w-full px-2 py-1.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
                                     />
                                   </div>
 
@@ -9515,7 +9717,7 @@ export default function App() {
                                         clone[idx] = { ...clone[idx], rating: parseInt(e.target.value) || 5 };
                                         setEditingSettings({ ...editingSettings, googleReviewsCustomList: clone });
                                       }}
-                                      className="w-full px-2 py-1.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-semibold"
+                                      className="w-full px-2 py-1.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-semibold"
                                     >
                                       <option value="5">⭐⭐⭐⭐⭐ (5 Estrellas)</option>
                                       <option value="4">⭐⭐⭐⭐ (4 Estrellas)</option>
@@ -9534,7 +9736,7 @@ export default function App() {
                                         clone[idx] = { ...clone[idx], relative_time_description: e.target.value };
                                         setEditingSettings({ ...editingSettings, googleReviewsCustomList: clone });
                                       }}
-                                      className="w-full px-2 py-1.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                                      className="w-full px-2 py-1.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
                                     />
                                   </div>
                                 </div>
@@ -9553,7 +9755,7 @@ export default function App() {
                                         clone[idx] = { ...clone[idx], profile_photo_url: e.target.value };
                                         setEditingSettings({ ...editingSettings, googleReviewsCustomList: clone });
                                       }}
-                                      className="w-full px-2 py-1.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                                      className="w-full px-2 py-1.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
                                     />
                                   </div>
 
@@ -9568,7 +9770,7 @@ export default function App() {
                                         clone[idx] = { ...clone[idx], text: e.target.value };
                                         setEditingSettings({ ...editingSettings, googleReviewsCustomList: clone });
                                       }}
-                                      className="w-full px-2 py-1.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white resize-none"
+                                      className="w-full px-2 py-1.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white resize-none"
                                     />
                                   </div>
                                 </div>
@@ -9582,7 +9784,7 @@ export default function App() {
                     )}
 
                     {/* Submit Saving command */}
-                    <div className="pt-4 flex justify-end border-t border-slate-150 dark:border-zinc-850">
+                    <div className="pt-4 flex justify-end border-t border-slate-200 dark:border-zinc-800">
                       <button
                         type="button"
                         onClick={handleSaveSettings}
@@ -9608,7 +9810,7 @@ export default function App() {
                 {/* 11. AUTOMATIC EMAILS PANEL */}
                 {adminSection === "emails" && (
                   <div className="space-y-6 animate-fade-in">
-                    <div className="p-5 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-805 space-y-4 shadow-sm">
+                    <div className="p-5 bg-white dark:bg-zinc-900 rounded-2xl border border-slate-100 dark:border-zinc-800 space-y-4 shadow-sm">
                       <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
                         <div>
                           <h3 className="text-sm font-extrabold text-slate-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
@@ -9652,7 +9854,7 @@ export default function App() {
                             placeholder="mail.tuservidor.com o smtp.gmail.com"
                             value={editingSettings.emailSenderSmtpHost || ""}
                             onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpHost: e.target.value })}
-                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
                           />
                         </div>
 
@@ -9664,7 +9866,7 @@ export default function App() {
                             placeholder="465 (Recomendado) o 587"
                             value={editingSettings.emailSenderSmtpPort !== undefined ? editingSettings.emailSenderSmtpPort : 465}
                             onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpPort: parseInt(e.target.value) || 465 })}
-                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
                           />
                         </div>
 
@@ -9676,7 +9878,7 @@ export default function App() {
                             placeholder="contacto@tuservidor.com"
                             value={editingSettings.emailSenderSmtpUser || ""}
                             onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpUser: e.target.value })}
-                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
                           />
                         </div>
 
@@ -9688,7 +9890,7 @@ export default function App() {
                             placeholder="La contraseña de tu cuenta de correo"
                             value={editingSettings.emailSenderSmtpPass || ""}
                             onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpPass: e.target.value })}
-                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
                           />
                         </div>
 
@@ -9700,7 +9902,7 @@ export default function App() {
                             placeholder="Ventas Juem <no-reply@tuservidor.com>"
                             value={editingSettings.emailSenderFromAddress || ""}
                             onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderFromAddress: e.target.value })}
-                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
                           />
                         </div>
                       </div>
@@ -9732,7 +9934,7 @@ export default function App() {
                               placeholder="ejemplo@correo.com"
                               value={testEmailAddress}
                               onChange={(e) => setTestEmailAddress(e.target.value)}
-                              className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                              className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
                             />
                           </div>
                           <button
@@ -9747,7 +9949,7 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="pt-4 flex justify-end border-t border-slate-150 dark:border-zinc-850">
+                      <div className="pt-4 flex justify-end border-t border-slate-200 dark:border-zinc-800">
                         <button
                           type="button"
                           onClick={handleSaveSettings}
@@ -9771,7 +9973,7 @@ export default function App() {
 
                       <div className="grid grid-cols-1 gap-4">
                         {/* Email Header Banner Uploader Section */}
-                        <div className="space-y-3 p-4 bg-slate-50 dark:bg-zinc-950/40 rounded-xl border border-slate-200/60 dark:border-zinc-850/60 animate-fade-in">
+                        <div className="space-y-3 p-4 bg-slate-50 dark:bg-zinc-950/40 rounded-xl border border-slate-200/60 dark:border-zinc-800/60 animate-fade-in">
                           <div className="flex items-center justify-between">
                             <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-zinc-400">
                               Imagen de Cabecera del Correo (Banner Widescreen)
@@ -9782,7 +9984,7 @@ export default function App() {
                             type="text"
                             value={editingSettings.emailHeaderImageUrl || ""}
                             onChange={(e) => setEditingSettings({ ...editingSettings, emailHeaderImageUrl: e.target.value })}
-                            className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                            className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
                             placeholder="URL del banner o sube una imagen abajo..."
                           />
                           
@@ -9803,7 +10005,7 @@ export default function App() {
 
                           <div className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-zinc-900/40 border border-slate-200 dark:border-zinc-800/40">
                             <div className="space-y-0.5">
-                              <p className="text-[9.5px] font-bold text-slate-700 dark:text-zinc-350">
+                              <p className="text-[9.5px] font-bold text-slate-700 dark:text-zinc-300">
                                 Sincronizar Banner con Cloudinary:
                               </p>
                               <p className="text-[8.5px] text-slate-400 dark:text-zinc-500">
@@ -9876,7 +10078,7 @@ export default function App() {
                             type="text"
                             value={editingSettings.emailTemplateOrderCreatedSubject || ""}
                             onChange={(e) => setEditingSettings({ ...editingSettings, emailTemplateOrderCreatedSubject: e.target.value })}
-                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
                           />
                         </div>
 
@@ -9886,7 +10088,7 @@ export default function App() {
                             rows={3}
                             value={editingSettings.emailTemplateOrderCreatedBody || ""}
                             onChange={(e) => setEditingSettings({ ...editingSettings, emailTemplateOrderCreatedBody: e.target.value })}
-                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
                             placeholder="Escribe el mensaje que recibirá el cliente..."
                           />
                         </div>
@@ -9898,7 +10100,7 @@ export default function App() {
                             type="text"
                             value={editingSettings.emailTemplateOrderStatusChangedSubject || ""}
                             onChange={(e) => setEditingSettings({ ...editingSettings, emailTemplateOrderStatusChangedSubject: e.target.value })}
-                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
                           />
                         </div>
 
@@ -9908,13 +10110,13 @@ export default function App() {
                             rows={3}
                             value={editingSettings.emailTemplateOrderStatusChangedBody || ""}
                             onChange={(e) => setEditingSettings({ ...editingSettings, emailTemplateOrderStatusChangedBody: e.target.value })}
-                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
                             placeholder="Escribe el mensaje que recibirá el cliente cuando su pedido cambie de estado..."
                           />
                         </div>
                       </div>
 
-                      <div className="pt-4 flex justify-end border-t border-slate-150 dark:border-zinc-850">
+                      <div className="pt-4 flex justify-end border-t border-slate-200 dark:border-zinc-800">
                         <button
                           type="button"
                           onClick={handleSaveSettings}
@@ -9938,7 +10140,7 @@ export default function App() {
                             Previsualiza en tiempo real cómo lucen tus notificaciones antes de mandar correos de prueba.
                           </p>
                         </div>
-                        <div className="flex bg-slate-100 dark:bg-zinc-950 p-1 rounded-xl border border-slate-200/50 dark:border-zinc-850 self-start sm:self-auto">
+                        <div className="flex bg-slate-100 dark:bg-zinc-950 p-1 rounded-xl border border-slate-200/50 dark:border-zinc-800 self-start sm:self-auto">
                           <button
                             type="button"
                             onClick={() => setEmailPreviewTab('created')}
@@ -9967,9 +10169,9 @@ export default function App() {
                       </div>
 
                       {/* Mockup Mailbox Frame */}
-                      <div className="border border-slate-150 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-xs">
+                      <div className="border border-slate-200 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-xs">
                         {/* Mock Email Header Controls */}
-                        <div className="bg-slate-50 dark:bg-zinc-950 px-4 py-3 border-b border-slate-150 dark:border-zinc-850 flex flex-col gap-2">
+                        <div className="bg-slate-50 dark:bg-zinc-950 px-4 py-3 border-b border-slate-200 dark:border-zinc-800 flex flex-col gap-2">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-1.5">
                               <span className="w-2.5 h-2.5 rounded-full bg-rose-500 block"></span>
@@ -9982,7 +10184,7 @@ export default function App() {
                           <div className="space-y-1.5 text-xs text-slate-600 dark:text-zinc-400 pt-1">
                             <div className="text-left">
                               <strong className="text-slate-400 dark:text-zinc-500 font-medium">De:</strong>{" "}
-                              <span className="font-semibold text-slate-700 dark:text-zinc-200 bg-slate-250/50 dark:bg-zinc-850 px-2 py-0.5 rounded-md text-[10px]">
+                              <span className="font-semibold text-slate-700 dark:text-zinc-200 bg-slate-300/50 dark:bg-zinc-800 px-2 py-0.5 rounded-md text-[10px]">
                                 {editingSettings.emailSenderFromAddress || `${editingSettings.siteTitle || "Ventas Juem"} <no-reply@tienda.com>`}
                               </span>
                             </div>
@@ -9990,7 +10192,7 @@ export default function App() {
                               <strong className="text-slate-400 dark:text-zinc-500 font-medium">Para:</strong>{" "}
                               <span className="font-semibold text-slate-700 dark:text-zinc-200 text-[11px]">Christian.olivera45@gmail.com</span>
                             </div>
-                            <div className="flex items-baseline gap-1 pt-1.5 border-t border-slate-200/40 dark:border-zinc-850/40 text-left">
+                            <div className="flex items-baseline gap-1 pt-1.5 border-t border-slate-200/40 dark:border-zinc-800/40 text-left">
                               <strong className="text-slate-400 dark:text-zinc-500 font-medium pr-1">Asunto:</strong>{" "}
                               <span className="font-extrabold text-indigo-600 dark:text-indigo-400 text-xs">
                                 {emailPreviewTab === 'created' ? (
@@ -10099,7 +10301,7 @@ export default function App() {
                               </p>
 
                               {/* Order Metadata Box Card */}
-                              <div className="bg-slate-50 border border-slate-150 rounded-xl p-4 space-y-2.5 text-xs text-slate-600">
+                              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5 text-xs text-slate-600">
                                 <div className="flex justify-between border-b border-slate-200 pb-2">
                                   <span className="text-slate-400 font-semibold">Número de Pedido:</span>
                                   <span className="font-mono font-bold text-indigo-600">#6C3AA2</span>
@@ -10126,14 +10328,14 @@ export default function App() {
                               )}
 
                               {/* Table Items Header */}
-                              <div className="border-b-2 border-slate-150 pb-2 pt-1">
+                              <div className="border-b-2 border-slate-200 pb-2 pt-1">
                                 <span className="text-[9px] uppercase tracking-widest font-extrabold text-slate-400">Detalle de Productos</span>
                               </div>
 
                               {/* Table Items */}
                               <table className="w-full text-xs text-left text-slate-600 border-collapse">
                                 <thead>
-                                  <tr className="bg-slate-50 border-b border-slate-150 text-[9px] font-bold text-slate-400 uppercase">
+                                  <tr className="bg-slate-50 border-b border-slate-200 text-[9px] font-bold text-slate-400 uppercase">
                                     <th className="p-2">Artículo</th>
                                     <th className="p-2 text-center w-12">Cant.</th>
                                     <th className="p-2 text-right w-16">Precio</th>
@@ -10157,7 +10359,7 @@ export default function App() {
                               </table>
 
                               {/* Pricing breakdown block */}
-                              <div className="w-56 ml-auto border-t border-slate-150 pt-3 space-y-1.5 text-xs text-slate-600 font-medium">
+                              <div className="w-56 ml-auto border-t border-slate-200 pt-3 space-y-1.5 text-xs text-slate-600 font-medium">
                                 <div className="flex justify-between">
                                   <span>Subtotal:</span>
                                   <span>UYU $2.490</span>
@@ -10200,7 +10402,7 @@ export default function App() {
                             type="button"
                             onClick={fetchEmailLogs}
                             disabled={emailLogsLoading}
-                            className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-850 dark:hover:bg-zinc-750 text-slate-600 dark:text-zinc-400 rounded-lg text-xs font-medium transition flex items-center gap-1 cursor-pointer h-8"
+                            className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-600 dark:text-zinc-400 rounded-lg text-xs font-medium transition flex items-center gap-1 cursor-pointer h-8"
                           >
                             <RefreshCw className={`h-3 w-3 ${emailLogsLoading ? "animate-spin" : ""}`} />
                             <span>Actualizar</span>
@@ -10231,7 +10433,7 @@ export default function App() {
                       ) : (
                         <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
                           {emailLogs.map((log: any) => (
-                            <div key={log.id} className="p-3.5 bg-slate-50 dark:bg-zinc-950 border border-slate-150 dark:border-zinc-850 rounded-xl space-y-2 text-left">
+                            <div key={log.id} className="p-3.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl space-y-2 text-left">
                               <div className="flex items-center justify-between text-[11px]">
                                 <div className="flex items-center gap-2">
                                   <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
@@ -10298,12 +10500,12 @@ export default function App() {
                   /* Simulated smartphone frame preview of emails */
                   <div className="w-full aspect-[4/5.5] bg-slate-50 dark:bg-zinc-950 rounded-3xl border-8 border-zinc-800 shadow-2xl relative overflow-hidden flex flex-col scale-100 origin-top">
                     {/* Mock Status Bar */}
-                    <div className="h-10 border-b border-slate-150 dark:border-zinc-850 bg-white dark:bg-zinc-900 flex items-center justify-between px-4 select-none">
+                    <div className="h-10 border-b border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-4 select-none">
                       <div className="flex items-center gap-1.5">
                         <Mail className="h-3.5 w-3.5 text-indigo-500" />
                         <span className="text-[10px] font-extrabold text-slate-700 dark:text-zinc-200 uppercase tracking-wider">Email del Cliente</span>
                       </div>
-                      <div className="flex bg-slate-100 dark:bg-zinc-805 p-0.5 rounded-lg border border-slate-200/40 dark:border-zinc-850 scale-90">
+                      <div className="flex bg-slate-100 dark:bg-zinc-800 p-0.5 rounded-lg border border-slate-200/40 dark:border-zinc-800 scale-90">
                         <button
                           type="button"
                           onClick={() => setEmailPreviewTab('created')}
@@ -10332,7 +10534,7 @@ export default function App() {
                     {/* Email content scrollable box */}
                     <div className="flex-1 overflow-y-auto p-3 bg-slate-100 dark:bg-zinc-950 text-left">
                       {/* Email Client Subject Header Card */}
-                      <div className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-slate-150 dark:border-zinc-850/80 shadow-xs space-y-1 text-slate-600 dark:text-zinc-400 mb-3">
+                      <div className="bg-white dark:bg-zinc-900 p-2.5 rounded-xl border border-slate-200 dark:border-zinc-800/80 shadow-xs space-y-1 text-slate-600 dark:text-zinc-400 mb-3">
                         <div className="flex justify-between items-center text-[9px] pb-1 border-b border-slate-100 dark:border-zinc-800/50">
                           <span className="text-slate-400 font-semibold uppercase">De:</span>
                           <span className="font-bold text-slate-700 dark:text-zinc-200 truncate max-w-[160px]">
@@ -10369,7 +10571,7 @@ export default function App() {
                       </div>
 
                       {/* Actual Client HTML Canvas */}
-                      <div className="bg-white border border-slate-150 rounded-2xl overflow-hidden shadow-sm text-slate-800 text-[11px] leading-relaxed">
+                      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm text-slate-800 text-[11px] leading-relaxed">
                         {/* Email Brand Header */}
                         {editingSettings.emailHeaderImageUrl ? (
                           <div className="border-b-2 border-amber-500 overflow-hidden bg-[#0c1221] relative animate-fade-in">
@@ -10446,7 +10648,7 @@ export default function App() {
                           </p>
 
                           {/* Order metadata tag box */}
-                          <div className="bg-slate-50 border border-slate-150 rounded-xl p-2.5 space-y-1.5 text-[9px] text-slate-600">
+                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 space-y-1.5 text-[9px] text-slate-600">
                             <div className="flex justify-between border-b border-slate-200/50 pb-1">
                               <span className="text-slate-400 font-semibold">Número de Pedido:</span>
                               <span className="font-mono font-bold text-indigo-600">#6C3AA2</span>
@@ -10473,14 +10675,14 @@ export default function App() {
                           )}
 
                           {/* Details headers */}
-                          <div className="border-b border-slate-150 pb-1">
+                          <div className="border-b border-slate-200 pb-1">
                             <span className="text-[8px] uppercase tracking-widest font-extrabold text-slate-400">Detalle de Productos</span>
                           </div>
 
                           {/* Table details */}
                           <table className="w-full text-[9px] text-left text-slate-600 border-collapse">
                             <thead>
-                              <tr className="bg-slate-50 border-b border-slate-150 text-[8px] font-bold text-slate-400 uppercase">
+                              <tr className="bg-slate-50 border-b border-slate-200 text-[8px] font-bold text-slate-400 uppercase">
                                 <th className="p-1">Artículo</th>
                                 <th className="p-1 text-center w-8">Cant.</th>
                                 <th className="p-1 text-right w-14">Subtotal</th>
@@ -10575,7 +10777,7 @@ export default function App() {
                             </div>
                           </div>
                         ) : (
-                          <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-850 space-y-2">
+                          <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2">
                             <img
                               src="https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80"
                               alt="editing preview item 1"
@@ -10891,7 +11093,7 @@ export default function App() {
       {/* Elegantes Alertas y Confirmaciones Personalizadas (Elimina bloqueos de iframe/sandboxing de alert/confirm) */}
       {customAlert && customAlert.show && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in animate-duration-150">
-          <div className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 p-6 rounded-2xl max-w-sm w-full shadow-2xl space-y-4">
+          <div className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl space-y-4">
             <div className="flex items-center gap-2.5 text-amber-500">
               <span className="p-2 bg-amber-500/10 rounded-lg">
                 <AlertCircle className="h-5 w-5" />
@@ -10911,7 +11113,7 @@ export default function App() {
 
       {customConfirm && customConfirm.show && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in animate-duration-150">
-          <div className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850 p-6 rounded-2xl max-w-sm w-full shadow-2xl space-y-4">
+          <div className="bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl space-y-4">
             <div className="flex items-center gap-2.5 text-zinc-800 dark:text-white">
               <span className="p-2 bg-neutral-500/10 rounded-lg">
                 <HelpCircle className="h-5 w-5 text-blue-500" />

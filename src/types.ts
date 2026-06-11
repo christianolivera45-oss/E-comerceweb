@@ -140,6 +140,7 @@ export interface SiteSettings {
   emailHeaderImageUrl?: string;
   bannerOpacity?: number;
   featuredSliderSpeed?: number;
+  googleAnalyticsId?: string;
 }
 
 export interface Category {

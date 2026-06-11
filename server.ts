@@ -1,5 +1,9 @@
 import dotenv from "dotenv";
 dotenv.config({ override: true });
+import dns from "dns";
+if (dns && typeof dns.setDefaultResultOrder === "function") {
+  dns.setDefaultResultOrder("ipv4first");
+}
 import express from "express";
 import path from "path";
 import fs from "fs";

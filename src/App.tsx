@@ -2354,6 +2354,7 @@ export default function App() {
   const handleSaveSettings = () => {
     const updatedState = { ...store, settings: editingSettings };
     saveStateToServer(updatedState);
+    showAdminToast("¡Todos los ajustes se han guardado con éxito! 💾", "success");
   };
 
   // Google OAuth popup flow initiator

@@ -456,6 +456,7 @@ export default function Checkout({
   const [promoStatus, setPromoStatus] = useState<"none" | "success" | "invalid">("none");
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [successOrder, setSuccessOrder] = useState<{ id: string; num: string; waUrl: string; paymentMethod: string; customerEmail: string; totalPrice: number } | null>(null);
 
   // Calculate prices
   const getItemPrice = (item: CartItem): number => {
@@ -958,21 +959,17 @@ export default function Checkout({
           }
         }
 
-        // Safe anchor fallback to solve pop-up blockages inside iframes and sandboxes
-        try {
-          const opened = window.open(waUrl, "_blank", "noopener,noreferrer");
-          if (!opened || opened.closed || typeof opened.closed === "undefined") {
-            // Fallback for sandboxed iframe environments: redirect top frame or local frame
-            window.location.href = waUrl;
-          }
-        } catch (e) {
-          // Absolute fallback redirection
-          window.location.href = waUrl;
-        }
+        setSuccessOrder({
+          id: serverOrderId,
+          num: shortServerOrderId,
+          waUrl: waUrl,
+          paymentMethod: paymentMethod,
+          customerEmail: email.trim().toLowerCase(),
+          totalPrice: totalUYU
+        });
 
         setIsProcessing(false);
         onClearCart();
-        onBackToCatalog();
       }
     } catch (err: any) {
       setErrorMessage(err.message || "Hubo un problema de conexión con el servidor de la tienda.");
@@ -996,6 +993,100 @@ export default function Checkout({
         >
           Volver a la Tienda
         </button>
+      </div>
+    );
+  }
+
+  if (successOrder) {
+    const isTransfer = successOrder.paymentMethod === "transfer";
+    const paymentLabel = successOrder.paymentMethod === "transfer" 
+      ? "Transferencia Bancaria Directa (BROU / Itaú / Santander)" 
+      : successOrder.paymentMethod === "cash"
+        ? "Efectivo Contraentrega"
+        : "Coordinar método especial";
+
+    const defaultTransferDetails = "Realiza tu transferencia bancaria directa de forma rápida y segura desde BROU, Itaú, Santander, BBVA o cualquier banco de Uruguay. También aceptamos giros por Abitab y Redpagos. Al enviar tu pedido, indícanos por WhatsApp para facilitarte los datos de cuenta específicos o de giros.";
+    const transferDetailsText = settings.transferDetails && settings.transferDetails.trim() 
+      ? settings.transferDetails 
+      : defaultTransferDetails;
+
+    return (
+      <div className="min-h-screen py-16 flex flex-col items-center justify-center px-4 font-sans text-[#F4EAD7] bg-[#050B1A]">
+        <div className="max-w-xl w-full bg-[#0B1730] border border-[#D4A55A]/25 rounded-2xl p-8 shadow-2xl relative overflow-hidden">
+          {/* Decorative glow */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-[#D4A55A]/5 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="flex flex-col items-center text-center font-sans">
+            <div className="h-20 w-20 bg-emerald-500/10 rounded-full flex items-center justify-center text-emerald-400 mb-6 border border-emerald-500/30 shadow-lg shadow-emerald-500/5 animate-pulse">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+
+            <h2 className="text-2xl font-black text-zinc-100 tracking-tight leading-tight mb-2">
+              ¡Pedido Registrado con Éxito! 🎉
+            </h2>
+            <p className="text-sm text-zinc-400 max-w-md mb-6 leading-relaxed">
+              Hemos registrado tu pedido en nuestro sistema y está listo para ser coordinado.
+            </p>
+
+            {/* Order status card info */}
+            <div className="w-full bg-[#050B1A]/80 border border-[#D4A55A]/10 rounded-xl p-5 mb-6 text-left space-y-3.5">
+              <div className="flex justify-between items-center pb-2 border-b border-zinc-800/50">
+                <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">ID del Pedido:</span>
+                <span className="text-sm font-black text-[#E6BF76] font-mono select-all">#{successOrder.num}</span>
+              </div>
+              <div className="flex justify-between items-center pb-2 border-b border-zinc-800/50">
+                <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Total del Pedido:</span>
+                <span className="text-sm font-bold text-zinc-200">UYU ${successOrder.totalPrice}</span>
+              </div>
+              <div className="flex justify-between items-center pb-2 border-b border-zinc-800/50">
+                <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Forma de Pago:</span>
+                <span className="text-xs font-bold text-[#E6BF76] bg-[#D4A55A]/5 px-2 py-0.5 rounded border border-[#D4A55A]/15">{paymentLabel}</span>
+              </div>
+              <div className="flex flex-col gap-1 pt-1">
+                <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Email de Confirmación:</span>
+                <span className="text-xs text-zinc-300 font-medium break-all">{successOrder.customerEmail}</span>
+                <p className="text-[10px] text-zinc-400 leading-normal mt-1 italic">
+                  💡 Te hemos enviado un correo de confirmación de tu compra. Si no lo ves en tu bandeja de entrada en unos minutos, revisa tu casilla de Spam.
+                </p>
+              </div>
+            </div>
+
+            {/* Bank Transfer Box */}
+            {isTransfer && (
+              <div className="w-full bg-violet-950/15 border border-violet-800/20 rounded-xl p-5 mb-8 text-left">
+                <div className="flex items-center gap-2 mb-2 text-violet-400 font-bold text-sm">
+                  <span>🏦</span>
+                  <span>Datos de Transferencia Bancaria:</span>
+                </div>
+                <p className="text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap font-medium">
+                  {transferDetailsText}
+                </p>
+                <div className="mt-3 text-[10px] text-violet-300/80 leading-relaxed border-t border-violet-800/20 pt-2.5 italic">
+                  👉 Recuerda realizar la transferencia por el total de <strong>UYU ${successOrder.totalPrice}</strong> y enviar el comprobante por WhatsApp.
+                </div>
+              </div>
+            )}
+
+            {/* Primary Action Button: Send WhatsApp */}
+            <div className="w-full flex flex-col gap-3">
+              <button
+                onClick={() => window.open(successOrder.waUrl, "_blank", "noopener,noreferrer")}
+                className="w-full py-4 rounded-xl text-sm font-bold uppercase tracking-wider bg-[#25D366] hover:bg-[#20ba5a] text-white transition-all cursor-pointer active:scale-98 shadow-lg shadow-[#25D366]/10 flex items-center justify-center gap-2"
+              >
+                <span>Enviar Pedido por WhatsApp 📱</span>
+              </button>
+              
+              <button
+                onClick={onBackToCatalog}
+                className="w-full py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-zinc-800 hover:bg-zinc-700 hover:text-white text-zinc-300 transition-all cursor-pointer active:scale-98 border border-zinc-700/50"
+              >
+                Volver a la Tienda 🛍️
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

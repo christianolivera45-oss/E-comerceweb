@@ -458,6 +458,22 @@ export default function Checkout({
   const [errorMessage, setErrorMessage] = useState("");
   const [successOrder, setSuccessOrder] = useState<{ id: string; num: string; waUrl: string; paymentMethod: string; customerEmail: string; totalPrice: number } | null>(null);
 
+  // Auto-open WhatsApp on successful order
+  useEffect(() => {
+    if (successOrder && successOrder.waUrl) {
+      console.log("[Checkout] Pedido completado. Redirigiendo a WhatsApp de manera automatizada...");
+      try {
+        const opened = window.open(successOrder.waUrl, "_blank", "noopener,noreferrer");
+        if (!opened || opened.closed || typeof opened.closed === "undefined") {
+          // If popup is blocked by the browser, redirect current window or print a warning
+          console.warn("[Checkout] Ventana emergente bloqueada por el navegador. El usuario puede hacer clic en el botón principal para proceder.");
+        }
+      } catch (err) {
+        console.error("[Checkout] Error al redirigir automáticamente:", err);
+      }
+    }
+  }, [successOrder]);
+
   // Calculate prices
   const getItemPrice = (item: CartItem): number => {
     const p = item.product;
@@ -977,26 +993,6 @@ export default function Checkout({
     }
   };
 
-  if (cartItems.length === 0) {
-    return (
-      <div className="min-h-screen py-16 flex flex-col items-center justify-center text-center px-4 font-sans text-[#F4EAD7] bg-[#050B1A]">
-        <div className="h-16 w-16 bg-[#0B1730] rounded-full flex items-center justify-center text-[#E6BF76] mb-4 border border-[#D4A55A]/25 shadow-md shadow-[#D4A55A]/10">
-          🛒
-        </div>
-        <h2 className="text-xl font-bold text-zinc-100 mb-2">Su carrito está vacío</h2>
-        <p className="text-sm text-zinc-400 mb-6 max-w-sm">
-          No hay artículos listados para iniciar el checkout. Elige tus favoritos en nuestra tienda.
-        </p>
-        <button
-          onClick={onBackToCatalog}
-          className="px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider bg-[#D4A55A] hover:bg-[#E6BF76] text-[#050B1A] transition cursor-pointer active:scale-95 shadow-md shadow-[#D4A55A]/10"
-        >
-          Volver a la Tienda
-        </button>
-      </div>
-    );
-  }
-
   if (successOrder) {
     const isTransfer = successOrder.paymentMethod === "transfer";
     const paymentLabel = successOrder.paymentMethod === "transfer" 
@@ -1087,6 +1083,26 @@ export default function Checkout({
             </div>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (cartItems.length === 0) {
+    return (
+      <div className="min-h-screen py-16 flex flex-col items-center justify-center text-center px-4 font-sans text-[#F4EAD7] bg-[#050B1A]">
+        <div className="h-16 w-16 bg-[#0B1730] rounded-full flex items-center justify-center text-[#E6BF76] mb-4 border border-[#D4A55A]/25 shadow-md shadow-[#D4A55A]/10">
+          🛒
+        </div>
+        <h2 className="text-xl font-bold text-zinc-100 mb-2">Su carrito está vacío</h2>
+        <p className="text-sm text-zinc-400 mb-6 max-w-sm">
+          No hay artículos listados para iniciar el checkout. Elige tus favoritos en nuestra tienda.
+        </p>
+        <button
+          onClick={onBackToCatalog}
+          className="px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider bg-[#D4A55A] hover:bg-[#E6BF76] text-[#050B1A] transition cursor-pointer active:scale-95 shadow-md shadow-[#D4A55A]/10"
+        >
+          Volver a la Tienda
+        </button>
       </div>
     );
   }

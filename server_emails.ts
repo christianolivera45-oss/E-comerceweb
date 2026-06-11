@@ -173,6 +173,69 @@ function replacePlaceholders(template: string, data: Record<string, string>): st
 }
 
 /**
+ * Resolves a hostname to an IP address using multiple robust strategies.
+ * It is highly resilient against container DNS lookup glitches (e.g., inside Docker/Railway).
+ */
+async function resolveHostToIp(host: string): Promise<string> {
+  if (!host) return "";
+  const trimmed = host.trim();
+  // If host is already an IP address, return it
+  if (/^[0-9.]+$/.test(trimmed) || trimmed.includes(":")) {
+    return trimmed;
+  }
+
+  // Strategy 1: Standard dns.lookup (uses local OS resolving, which may fail on Railway)
+  try {
+    const ip = await new Promise<string>((resolve, reject) => {
+      dns.lookup(trimmed, { family: 4 }, (err, address) => {
+        if (err || !address) reject(err || new Error("No address returned"));
+        else resolve(address);
+      });
+    });
+    return ip;
+  } catch (err: any) {
+    console.warn(`[DNS Helper] Standard dns.lookup failed for ${trimmed}, details: ${err?.message || err}. Trying next strategies...`);
+  }
+
+  // Strategy 2: System dns.resolve4
+  try {
+    const addresses = await new Promise<string[]>((resolve, reject) => {
+      dns.resolve4(trimmed, (err, addresses) => {
+        if (err) reject(err);
+        else resolve(addresses);
+      });
+    });
+    if (addresses && addresses.length > 0) {
+      console.log(`[DNS Helper] Resolved ${trimmed} to ${addresses[0]} via system dns.resolve4`);
+      return addresses[0];
+    }
+  } catch (err: any) {
+    console.warn(`[DNS Helper] System dns.resolve4 failed for ${trimmed}, details: ${err?.message || err}`);
+  }
+
+  // Strategy 3: Dedicated dns.Resolver querying Google/Cloudflare DNS directly
+  try {
+    const resolver = new dns.Resolver();
+    resolver.setServers(["8.8.8.8", "1.1.1.1", "8.8.4.4"]);
+    const addresses = await new Promise<string[]>((resolve, reject) => {
+      resolver.resolve4(trimmed, (err, addresses) => {
+        if (err) reject(err);
+        else resolve(addresses);
+      });
+    });
+    if (addresses && addresses.length > 0) {
+      console.log(`[DNS Helper] Successfully resolved ${trimmed} to ${addresses[0]} using public DNS (8.8.8.8)`);
+      return addresses[0];
+    }
+  } catch (err: any) {
+    console.error(`[DNS Helper] Public DNS query also failed for ${trimmed}, details: ${err?.message || err}`);
+  }
+
+  // Fallback if all resolve options failed: return original hostname
+  return trimmed;
+}
+
+/**
  * Core function to send or simulate sending an email.
  */
 export async function sendEmail(params: {
@@ -205,8 +268,12 @@ export async function sendEmail(params: {
   }
 
   try {
+    // Resolve the host to IP to bypass local node.js container DNS resolver bugs
+    const resolvedIp = await resolveHostToIp(host);
+    console.log(`[SMTP Mailbox] Connecting to host: ${host} (IP: ${resolvedIp}) on port: ${port}`);
+
     const transporter = nodemailer.createTransport({
-      host,
+      host: resolvedIp,
       port,
       secure: port === 465, 
       auth: {
@@ -214,7 +281,8 @@ export async function sendEmail(params: {
         pass
       },
       tls: {
-        rejectUnauthorized: false // avoids common self-signed certificate errors
+        rejectUnauthorized: false, // avoids common self-signed certificate errors
+        servername: host // Essential: keeps TLS certificate validation working for smtp.gmail.com on direct IP connections
       },
       lookup: (hostname, options, callback) => {
         const cb = typeof options === 'function' ? options : callback;
@@ -225,17 +293,11 @@ export async function sendEmail(params: {
             return cb(null, address, family || 4);
           }
           
-          console.warn(`[Custom DNS] dns.lookup falló para ${hostname}: ${err.message}. Intentando resolver vía dns.resolve4 fallback...`);
-          
-          try {
-            dns.setServers(["8.8.8.8", "1.1.1.1"]);
-          } catch (e) {
-            // ignore if setServers fails
-          }
+          console.warn(`[Custom DNS Inside Transporter] dns.lookup falló para ${hostname}: ${err.message}. Intentando resolver vía dns.resolve4...`);
           
           dns.resolve4(hostname, (resolveErr, addresses) => {
             if (!resolveErr && addresses && addresses.length > 0) {
-              console.log(`[Custom DNS] Resuelto con éxito: ${hostname} -> ${addresses[0]}`);
+              console.log(`[Custom DNS Inside Transporter] Resuelto: ${hostname} -> ${addresses[0]}`);
               return cb(null, addresses[0], 4);
             }
             return cb(err);

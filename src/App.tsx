@@ -9893,6 +9893,9 @@ const resText = await uploadRes.text();
                             onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpPass: e.target.value })}
                             className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
                           />
+                          <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold leading-relaxed mt-1">
+                            ⚠️ Tip de Seguridad: Si ya configuraste las variables EMAIL_SENDER_SMTP_* en tu consola de Railway, puedes dejar estos campos en blanco para evitar exponer credenciales en tu repositorio de GitHub.
+                          </p>
                         </div>
 
                         {/* From Address */}

@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import pg from "pg";
+import dns from "dns";
 
 export interface EmailLog {
   id: string;
@@ -214,8 +215,34 @@ export async function sendEmail(params: {
       },
       tls: {
         rejectUnauthorized: false // avoids common self-signed certificate errors
+      },
+      lookup: (hostname, options, callback) => {
+        const cb = typeof options === 'function' ? options : callback;
+        const opts = typeof options === 'object' ? options : {};
+        
+        dns.lookup(hostname, opts, (err, address, family) => {
+          if (!err) {
+            return cb(null, address, family || 4);
+          }
+          
+          console.warn(`[Custom DNS] dns.lookup falló para ${hostname}: ${err.message}. Intentando resolver vía dns.resolve4 fallback...`);
+          
+          try {
+            dns.setServers(["8.8.8.8", "1.1.1.1"]);
+          } catch (e) {
+            // ignore if setServers fails
+          }
+          
+          dns.resolve4(hostname, (resolveErr, addresses) => {
+            if (!resolveErr && addresses && addresses.length > 0) {
+              console.log(`[Custom DNS] Resuelto con éxito: ${hostname} -> ${addresses[0]}`);
+              return cb(null, addresses[0], 4);
+            }
+            return cb(err);
+          });
+        });
       }
-    });
+    } as any);
 
     await transporter.sendMail({
       from,

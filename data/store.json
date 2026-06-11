@@ -1,0 +1,803 @@
+{
+  "categories": [
+    "Ropa",
+    "Informática",
+    "Hogar",
+    "Gamer",
+    "Impresión 3d"
+  ],
+  "dbCategories": [
+    {
+      "id": "ropa",
+      "nombre": "Ropa",
+      "icono": "Shirt",
+      "orden": 1,
+      "active": true
+    },
+    {
+      "id": "electronica",
+      "nombre": "Informática",
+      "icono": "Laptop",
+      "orden": 2,
+      "active": true
+    },
+    {
+      "id": "hogar",
+      "nombre": "Hogar",
+      "icono": "Home",
+      "orden": 4,
+      "active": true
+    },
+    {
+      "id": "gamer",
+      "nombre": "Gamer",
+      "icono": "Gamepad2",
+      "orden": 5,
+      "active": false
+    },
+    {
+      "id": "impresion-3d",
+      "nombre": "Impresión 3d",
+      "icono": "Printer",
+      "orden": 5,
+      "active": true
+    }
+  ],
+  "dbSubcategories": [
+    {
+      "id": "hombre",
+      "nombre": "Hombre",
+      "categoria_id": "ropa",
+      "active": true
+    },
+    {
+      "id": "mujer",
+      "nombre": "Mujer",
+      "categoria_id": "ropa",
+      "active": true
+    },
+    {
+      "id": "invierno",
+      "nombre": "Invierno",
+      "categoria_id": "ropa",
+      "active": true
+    },
+    {
+      "id": "celulares",
+      "nombre": "Celulares",
+      "categoria_id": "electronica",
+      "active": true
+    },
+    {
+      "id": "audio",
+      "nombre": "Audio",
+      "categoria_id": "electronica",
+      "active": true
+    },
+    {
+      "id": "pc",
+      "nombre": "PC ",
+      "categoria_id": "electronica",
+      "active": true
+    },
+    {
+      "id": "organizacion",
+      "nombre": "Organización",
+      "categoria_id": "hogar",
+      "active": false
+    },
+    {
+      "id": "decoracion",
+      "nombre": "Baño",
+      "categoria_id": "hogar",
+      "active": true
+    },
+    {
+      "id": "cocina",
+      "nombre": "Cocina",
+      "categoria_id": "hogar",
+      "active": true
+    },
+    {
+      "id": "teclados",
+      "nombre": "Teclados",
+      "categoria_id": "gamer",
+      "active": true
+    },
+    {
+      "id": "mouse",
+      "nombre": "Mouse",
+      "categoria_id": "gamer",
+      "active": true
+    },
+    {
+      "id": "monitores",
+      "nombre": "Monitores",
+      "categoria_id": "gamer",
+      "active": true
+    },
+    {
+      "id": "accesorios",
+      "nombre": "Accesorios",
+      "categoria_id": "electronica",
+      "active": true
+    }
+  ],
+  "settings": {
+    "siteTitle": "Ventas Juem ",
+    "siteSubtitle": "Moda, tecnología y accesorios con envío a todo el país.",
+    "bannerTitle": "Colección Exclusiva de Primavera",
+    "bannerSubtitle": "Descubre las últimas tendencias con descuentos de hasta el 40%.",
+    "bannerImageUrl": "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80",
+    "whatsappNumber": "598098058775",
+    "primaryColor": "#003385",
+    "accentColor": "#EFBF04",
+    "themeMode": "dark",
+    "promotionBannerText": "Este Día del Abuelo, regalá cariño y ahorro con BUELO15 👴❤️🎁✨",
+    "promotionBannerText2": "🎁 ¡Envío GRATIS en compras mayores de $2000 para Pinamar, Salinas, Marindia, Neptunia! ",
+    "promotionBannerBgColor": "#09090b",
+    "promotionBannerTextColor": "#ffffff",
+    "promotionBannerTransition": "zoom",
+    "showPromotionBanner": true,
+    "lowStockThreshold": 4,
+    "mercadopagoActive": true,
+    "mercadopagoMessage": "Paga de manera 100% segura con cuotas sin recargo utilizando tus tarjetas favoritas: OCA, VISA, MasterCard, Lider y Diners, o en redes de cobranza Abitab y Redpagos. Te enviaremos el link de pago seguro al iniciar el chat de WhatsApp.",
+    "mercadopagoPublicKey": "APP_USR-e6d3cee3-1595-4050-a254-e44d2104aeef",
+    "mercadopagoAccessToken": "APP_USR-5703420117418329-060320-feecb712341ace1b22f0555c993c7a8f-1092985910",
+    "exchangeRate": 40,
+    "transferActive": true,
+    "transferDetails": "Realiza tu transferencia bancaria directa de forma rápida y segura desde BROU, Itaú, Santander, BBVA o cualquier banco de Uruguay. Al enviar tu pedido, te daremos los datos de cuenta para que nos envíes el comprobante.",
+    "cashActive": false,
+    "cashMessage": "Abona en efectivo al recibir tu pedido (válido para Montevideo y zonas metropolitanas coordinadas). Pagas cómodamente en mano a nuestro repartidor al momento de la entrega.",
+    "heroSlides": [
+      {
+        "id": "slide-1",
+        "title": "Colección Exclusiva de Primavera",
+        "imageUrl": "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=1600&q=80",
+        "subtitle": "Descubre las últimas tendencias con descuentos de hasta el 40%."
+      },
+      {
+        "id": "slide-2",
+        "title": "Tendencias de Temporada",
+        "imageUrl": "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=1600&q=80",
+        "subtitle": "Colecciones cuidadosamente seleccionadas para expresar tu estilo único."
+      },
+      {
+        "id": "slide-3",
+        "title": "Accesorios & Complementos",
+        "imageUrl": "https://images.unsplash.com/photo-1512436991641-6745cdb1723f?auto=format&fit=crop&w=1600&q=80",
+        "subtitle": "Lentes, mochilas, relojes y detalles que transforman cualquier outfit."
+      }
+    ],
+    "logoType": "image",
+    "logoText": "J",
+    "logoImageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780264210/ChatGPT_Image_31_may_2026_17_29_14_lpz7zu.png",
+    "emailHeaderImageUrl": "/src/assets/images/juem_email_banner_1781008874987.png",
+    "footerCol1Title": "🚀 Compra Personalizada",
+    "footerCol1Text": "Realiza tus pedidos seleccionando tus talles y colores favoritos. El carrito envía una lista formateada directo a nuestro WhatsApp de atención oficial para coordinar pago y entrega express.",
+    "footerCol2Title": "🌟 Calidad Asegurada",
+    "footerCol2Text": "Todos los productos que visualizas pasan por un control estricto de empaque y selección. Ofrecemos cambio de talle inmediato dentro de las 72 horas de recibida tu compra.",
+    "footerCol3Title": "📞 Soporte Directo",
+    "footerCol3Text": "¿Habiendo dudas con talles o stock rápido? Pícale al botón de consulta express en la ficha de cada producto y un asesor te responderá inmediatamente en WhatsApp.",
+    "footerCopyright": "Desarrollado con tecnología de punta responsive. Reservados todos los derechos.",
+    "pickupActive": true,
+    "pickupAddress": "Av. Italia 3824, Parque Batlle, Montevideo, Uruguay",
+    "pickupHours": "Lunes a Viernes de 10:00 a 18:00 hs y Sábados de 09:00 a 13:00 hs.",
+    "pickupSuccessMessage": "Listo para retirar el mismo día hábil",
+    "deliveryActive": true,
+    "deliveryMethods": [
+      {
+        "id": "express_mvd",
+        "title": "Envío Express en 3 horas dentro de Montevideo (ver zonas)",
+        "subtext": "*antes de 16h de L a V",
+        "iconType": "motorcycle"
+      },
+      {
+        "id": "mvd_normal",
+        "title": "Envío dentro de Montevideo (24 a 48 horas)",
+        "subtext": null,
+        "iconType": "truck_orange"
+      },
+      {
+        "id": "ues",
+        "title": "Envío a todo el país por UES",
+        "subtext": null,
+        "iconType": "ues"
+      },
+      {
+        "id": "dac",
+        "title": "Envío a todo el país por DAC (Agencia Central)",
+        "subtext": null,
+        "iconType": "dac"
+      },
+      {
+        "id": "depunta",
+        "title": "Envío a Maldonado por De Punta",
+        "subtext": null,
+        "iconType": "depunta"
+      }
+    ],
+    "invoiceOptionActive": true,
+    "freeShippingActive": true,
+    "freeShippingMinAmount": 2000,
+    "freeShippingRegions": "Pinamar, Salinas, Marindia, Neptunia",
+    "defaultFirstName": "Nombre ",
+    "defaultLastName": "Apellido",
+    "defaultPhone": "Telefono ",
+    "googleReviewsEnabled": false,
+    "googleReviewsSource": "custom",
+    "googleReviewsRating": 4.9,
+    "googleReviewsTotal": 184,
+    "googleReviewsCustomList": [],
+    "googleClientId": "",
+    "googleClientSecret": "",
+    "emailSenderEnabled": true,
+    "emailSenderSmtpHost": "smtp.gmail.com",
+    "emailSenderSmtpPort": 465,
+    "emailSenderSmtpUser": "Juem.mvd@gmail.com",
+    "emailSenderSmtpPass": "xihi njyb qsir pbvl",
+    "emailSenderFromAddress": "Ventas Juem <no-reply@tu-tienda.com>",
+    "emailTemplateOrderCreatedSubject": "¡Gracias por tu compra! Tu pedido #{{orderId}} ha sido recibido",
+    "emailTemplateOrderStatusChangedSubject": "Actualización de tu pedido #{{orderId}} - {{statusText}}",
+    "emailTemplateOrderCreatedBody": "Muchas gracias por realizar tu compra con nosotros. Tu pago ha sido aprobado correctamente y tu pedido ya está siendo preparado para entrega. Aquí tienes los detalles completos de tu compra:",
+    "emailTemplateOrderStatusChangedBody": "Te notificamos que el estado de tu pedido #{{orderId}} ha sido actualizado por nuestro equipo de logística."
+  },
+  "products": [
+    {
+      "id": "15",
+      "name": "Lámpara Uv Mata Anti Mosquitos Usb Silenciosa Sin Químico",
+      "price": 329,
+      "stock": 10,
+      "category": "Hogar",
+      "featured": true,
+      "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780264935/ChatGPT_Image_28_may_2026_09_41_06_rmda7w.png",
+      "createdAt": "2026-05-31T23:12:56.614Z",
+      "description": "Elimina mosquitos e insectos voladores de forma segura y silenciosa. Utiliza luz LED UV para atraerlos y un sistema de succión por ventilador que los atrapa en un recipiente recolector.\n\n• Sin químicos ni productos tóxicos\n• Funcionamiento silencioso\n• Luz LED UV de alta eficiencia\n• Recipiente desmontable para fácil limpieza\n• Ideal para dormitorios, oficinas y espacios interiores\n• Alimentación USB (5V)\n• Portátil y fácil de transportar\n\nIncluye:\n• 1 Lámpara UV mata mosquitos\n• 1 Cable USB",
+      "categoria_id": "hogar",
+      "originalPrice": 329,
+      "subcategoria_id": "all",
+      "active": true,
+      "paused": false,
+      "sizes": [],
+      "colors": [
+        "Blanco"
+      ],
+      "imagenes": [
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780264935/ChatGPT_Image_28_may_2026_09_41_23_hlqybx.png"
+      ],
+      "variants": [],
+      "is3D": false,
+      "sizeChartEnabled": true,
+      "sizeChartShowSuperior": true,
+      "sizeChartShowInferior": true,
+      "sizeChartShowCalzado": true,
+      "sizeChartShowRecommender": true
+    },
+    {
+      "id": "14",
+      "name": "Soporte Para Tablet De Pared Alto Ranurado Anti Robo",
+      "price": 999,
+      "stock": 5,
+      "category": "Impresión 3d",
+      "featured": true,
+      "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780267539/ChatGPT_Image_28_may_2026_08_53_28_gt92wn.png",
+      "createdAt": "2026-05-31T22:44:56.928Z",
+      "description": "Set de 4 soportes para montaje en pared, ideal para tablets y celulares.\n\n2 Soportes Superiores\n\nBase: 3 x 10 cm\nAlto: 10 cm\nAncho: 7 cm\nLargo: 1,5 cm\nApertura: 1,2 cm\n\n2 Soportes Inferiores\n\nAlto: 10 cm\nAncho: 4 cm\nLargo: 1,5 cm\nApertura: 1,2 cm\n\nEspesor máximo compatible: 1,2 cm.",
+      "categoria_id": "impresion-3d",
+      "originalPrice": 999,
+      "subcategoria_id": "all",
+      "active": true,
+      "paused": false,
+      "sizes": [
+        "PLA"
+      ],
+      "colors": [
+        "Negro"
+      ],
+      "imagenes": [
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780267538/ChatGPT_Image_28_may_2026_08_52_56_wj32uv.png",
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780267690/1666820879598_bw6au4.jpg",
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780267688/1666820879547_wytcgq.jpg",
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780267686/1666820879623_ekejil.jpg"
+      ],
+      "variants": [
+        {
+          "id": "d2c7e100-b317-49d0-871b-e03796627392",
+          "size": "PLA",
+          "color": "Negro",
+          "colorCode": "#000000",
+          "priceDelta": 0,
+          "stock": 5,
+          "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780267539/ChatGPT_Image_28_may_2026_08_53_28_gt92wn.png",
+          "price": 850
+        }
+      ],
+      "is3D": true,
+      "hoursPerUnit": 3,
+      "sizeChartEnabled": true,
+      "sizeChartShowSuperior": true,
+      "sizeChartShowInferior": true,
+      "sizeChartShowCalzado": true,
+      "sizeChartShowRecommender": true
+    },
+    {
+      "id": "13",
+      "name": "Funda Neopreno 11 Plan Ceibal Lisas",
+      "price": 480,
+      "stock": 50,
+      "category": "Informática",
+      "featured": true,
+      "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265675/1084_bkc6ar.jpg",
+      "createdAt": "2026-05-31T22:17:55.708Z",
+      "description": "Protege tu laptop o notebook con esta práctica funda de neopreno, ideal para equipos de 11 pulgadas. Su material resistente ayuda a proteger contra rayones, polvo y pequeños golpes durante el transporte.\n\n• Material: Neopreno\n• Compatible con equipos de hasta 11\"\n• Ideal para laptops y computadoras del Plan Ceibal\n• Liviana y fácil de transportar\n• Medidas: 33 cm x 23 cm",
+      "categoria_id": "electronica",
+      "originalPrice": 480,
+      "subcategoria_id": "pc",
+      "active": true,
+      "paused": false,
+      "sizes": [
+        "11\""
+      ],
+      "colors": [
+        "Rosa",
+        "Negro",
+        "Turquesa"
+      ],
+      "imagenes": [
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265680/108420c_oe3rxu.jpg",
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265674/108420a_1_fiveu6.jpg",
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265677/productos32_35602_y8dxnc.jpg",
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265675/productos34_29896_s7mkpo.jpg"
+      ],
+      "variants": [
+        {
+          "id": "0b66a634-9c68-4b03-ac07-de7e130a46ac",
+          "size": "11\"",
+          "color": "Rosa",
+          "colorCode": "#f472b6",
+          "priceDelta": 0,
+          "stock": 10,
+          "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265677/productos32_35602_y8dxnc.jpg"
+        },
+        {
+          "id": "7b12796b-c615-4e08-a3b6-f98ecac129cb",
+          "size": "11\"",
+          "color": "Negro",
+          "colorCode": "#000000",
+          "priceDelta": 0,
+          "stock": 10,
+          "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265675/1084_bkc6ar.jpg"
+        },
+        {
+          "id": "6d8bfe6a-2ea4-4302-a6a8-06799f2e239e",
+          "size": "11\"",
+          "color": "Turquesa",
+          "colorCode": "#9ca3af",
+          "priceDelta": 0,
+          "stock": 30,
+          "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265675/productos34_29896_s7mkpo.jpg"
+        }
+      ],
+      "is3D": false,
+      "sizeChartEnabled": true,
+      "sizeChartShowSuperior": true,
+      "sizeChartShowInferior": true,
+      "sizeChartShowCalzado": true,
+      "sizeChartShowRecommender": true
+    },
+    {
+      "id": "12",
+      "name": "Toalla Turbante Baño Pelo Gorro Algodón  dia de la ma",
+      "price": 399,
+      "stock": 10,
+      "category": "Ropa",
+      "featured": true,
+      "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265275/5_t600vh.png",
+      "createdAt": "2026-05-31T22:10:58.822Z",
+      "description": "Toalla ideal para el secado del cabello.\nMaterial 100% Algodón y detalles en cinta Bies.  \nDiseño en blanco con cinta Bies en color Rojo.\nProducto 100% artesanal.\nMedidas : 25cm x 60 cm.",
+      "categoria_id": "ropa",
+      "originalPrice": 399,
+      "subcategoria_id": "mujer",
+      "active": true,
+      "paused": false,
+      "sizes": [],
+      "colors": [],
+      "imagenes": [],
+      "variants": [],
+      "is3D": false,
+      "sizeChartEnabled": true,
+      "sizeChartShowSuperior": true,
+      "sizeChartShowInferior": true,
+      "sizeChartShowCalzado": true,
+      "sizeChartShowRecommender": true
+    },
+    {
+      "id": "11",
+      "name": "Media Panty Térmica Mujer Efecto Piel Con Corderito",
+      "price": 299,
+      "stock": 10,
+      "category": "Ropa",
+      "featured": true,
+      "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780264935/pGu_W25J0J.pictures.1_mw1UYpzo1B_h9kuot.png",
+      "createdAt": "2026-05-31T22:04:07.483Z",
+      "description": "Disfruta de la elegancia de unas medias translúcidas sin renunciar al abrigo. Su diseño efecto piel brinda una apariencia fina y delicada, mientras que su interior térmico afelpado ayuda a mantener el calor corporal durante los días más fríos.\n\n• Efecto piel translúcido\n• Interior térmico suave y abrigado\n• Excelente elasticidad y comodidad\n• Modelo con pie completo\n• Talle Único (se adapta aproximadamente de L a XL)\n• Color: Negro\n\nIdeales para usar con vestidos, polleras, shorts o debajo de pantalones en invierno.",
+      "categoria_id": "ropa",
+      "originalPrice": 299,
+      "subcategoria_id": "mujer",
+      "active": true,
+      "paused": false,
+      "sizes": [
+        "L/XL"
+      ],
+      "colors": [
+        "Negro"
+      ],
+      "imagenes": [
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780264935/pGu_W25J0J.pictures.0_uOxi0oau1G_hdel0v.png"
+      ],
+      "variants": [],
+      "is3D": false,
+      "sizeChartEnabled": true,
+      "sizeChartShowSuperior": true,
+      "sizeChartShowInferior": true,
+      "sizeChartShowCalzado": true,
+      "sizeChartShowRecommender": true
+    },
+    {
+      "id": "10",
+      "name": "Poncho Buzo Canguro Pijama Plush C/ Capucha Corderito",
+      "price": 850,
+      "stock": 10,
+      "category": "Ropa",
+      "featured": true,
+      "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780008436/polar_xkibhp.jpg",
+      "createdAt": "2026-05-31T22:00:48.725Z",
+      "description": "Mantente cómodo y abrigado durante el invierno con este poncho buzo térmico de gran tamaño.\n\n- Exterior de plush extra suave\n- Interior forrado en corderito térmico\n-Capucha forrada\n-Bolsillo frontal tipo canguro\n-Talle XL\n-Unisex",
+      "categoria_id": "ropa",
+      "originalPrice": 850,
+      "subcategoria_id": "invierno",
+      "active": true,
+      "paused": false,
+      "sizes": [
+        "XL"
+      ],
+      "colors": [
+        "Azul",
+        "Negro"
+      ],
+      "imagenes": [
+        "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780323391/ventas_juem_cloudinary/phwbzgu3g8grdw50lsyn.jpg"
+      ],
+      "variants": [
+        {
+          "id": "9307adcc-18ee-4458-a7c3-6274923a59fb",
+          "size": "XL",
+          "color": "Azul",
+          "colorCode": "#3b82f6",
+          "priceDelta": 0,
+          "stock": 5,
+          "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780323391/ventas_juem_cloudinary/phwbzgu3g8grdw50lsyn.jpg",
+          "price": 840
+        },
+        {
+          "id": "243a053e-05e7-42d2-a206-03aac3ccb240",
+          "size": "XL",
+          "color": "Negro",
+          "colorCode": "#000000",
+          "priceDelta": 0,
+          "stock": 5,
+          "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780008436/polar_xkibhp.jpg"
+        }
+      ],
+      "is3D": false,
+      "sizeChartEnabled": true,
+      "sizeChartShowSuperior": false,
+      "sizeChartShowInferior": false,
+      "sizeChartShowCalzado": false,
+      "sizeChartShowRecommender": true,
+      "sizeChartData": {
+        "rows": [
+          {
+            "Talle": "XL",
+            "Largo Total (cm)": "50",
+            "Sisa / Ancho (cm)": "50"
+          }
+        ],
+        "columns": [
+          "Talle",
+          "Sisa / Ancho (cm)",
+          "Largo Total (cm)"
+        ]
+      }
+    }
+  ],
+  "coupons": [
+    {
+      "code": "BUELO15",
+      "discount_percent": 10,
+      "expiration_date": "2026-06-30T00:00:00.000Z",
+      "active": true
+    }
+  ],
+  "adminCredentials": {
+    "username": "Juem",
+    "passwordHash": "7219fc1c5ecfc887aae98aa0338884186acac202b63924cb5a8bb8ea943c4fd1",
+    "sessionToken": "session-52847781b6e0b82e0cd17c0eca5945f0"
+  },
+  "orders": [
+    {
+      "id": "2714a7c2-0979-4f35-bc52-f9c11f4d3dd3",
+      "customerEmail": "christian.olivera45@gmail.com",
+      "customerName": "Christian olivera",
+      "customerPhone": "095085181",
+      "subtotal": 850,
+      "discountAmount": 85,
+      "shippingCost": 0,
+      "total": 765,
+      "couponCode": "BUELO15",
+      "status": "pedido_iniciado",
+      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-08T19:01:28.034Z",
+      "updatedAt": "2026-06-08T19:01:28.034Z",
+      "items": [
+        {
+          "id": "bbdf9c7b-e369-4ef5-ac1a-27e47df89cb9",
+          "productId": "14",
+          "productName": "Soporte Para Tablet De Pared Alto Ranurado Anti Robo",
+          "sizeSelected": "PLA",
+          "colorSelected": "Negro",
+          "unitPrice": 850,
+          "quantity": 1,
+          "totalPrice": 850
+        }
+      ]
+    },
+    {
+      "id": "1f9c0873-91e6-4725-a1bf-4fc10b7ba339",
+      "customerEmail": "christian.olivera45@gmail.com",
+      "customerName": "Christian Olivera",
+      "customerPhone": "09508181",
+      "subtotal": 850,
+      "discountAmount": 85,
+      "shippingCost": 0,
+      "total": 765,
+      "couponCode": "BUELO15",
+      "status": "pedido_iniciado",
+      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-08T19:00:14.987Z",
+      "updatedAt": "2026-06-08T19:00:14.987Z",
+      "items": [
+        {
+          "id": "b21f4c65-83e2-468b-87a4-1788d288beb7",
+          "productId": "14",
+          "productName": "Soporte Para Tablet De Pared Alto Ranurado Anti Robo",
+          "sizeSelected": "PLA",
+          "colorSelected": "Negro",
+          "unitPrice": 850,
+          "quantity": 1,
+          "totalPrice": 850
+        }
+      ]
+    },
+    {
+      "id": "a14fdaa3-5ae4-4a62-ab32-d6241ed71f19",
+      "customerEmail": "cliente@tienda.com",
+      "customerName": "christian Olivera",
+      "customerPhone": "095085181",
+      "subtotal": 999,
+      "discountAmount": 0,
+      "shippingCost": 0,
+      "total": 999,
+      "status": "pago_pendiente",
+      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-08T11:43:39.327Z",
+      "updatedAt": "2026-06-08T11:44:19.867Z",
+      "items": [
+        {
+          "id": "d12cd790-aa94-47f6-a243-6ec5b61eb795",
+          "productId": "14",
+          "productName": "Soporte Para Tablet De Pared Alto Ranurado Anti Robo",
+          "unitPrice": 999,
+          "quantity": 1,
+          "totalPrice": 999
+        }
+      ]
+    },
+    {
+      "id": "68c8fbcf-c2be-4a21-8333-8a37a3935401",
+      "customerEmail": "cliente@tienda.com",
+      "customerName": "Christian Olivera",
+      "customerPhone": "095085181",
+      "subtotal": 999,
+      "discountAmount": 0,
+      "shippingCost": 0,
+      "total": 999,
+      "status": "pedido_iniciado",
+      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-08T11:40:51.444Z",
+      "updatedAt": "2026-06-08T11:40:51.444Z",
+      "items": [
+        {
+          "id": "0689b949-bfd7-4b07-9218-5283983df0c4",
+          "productId": "14",
+          "productName": "Soporte Para Tablet De Pared Alto Ranurado Anti Robo",
+          "unitPrice": 999,
+          "quantity": 1,
+          "totalPrice": 999
+        }
+      ]
+    },
+    {
+      "id": "80fe2729-6bcf-454d-a474-536b80efd184",
+      "customerEmail": "cliente@tienda.com",
+      "customerName": "Christian Olivera",
+      "customerPhone": "095085181",
+      "subtotal": 1479,
+      "discountAmount": 0,
+      "shippingCost": 0,
+      "total": 1479,
+      "status": "pedido_iniciado",
+      "notes": "Envío a Domicilio: Calle: Calle 54, Manzana: 54, Solar: 107, Localidad: Canelones, Dpto: Canelones | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-08T11:39:12.661Z",
+      "updatedAt": "2026-06-08T11:39:12.661Z",
+      "items": [
+        {
+          "id": "5cae18c2-7e0b-4a2b-9d50-562e594c96c0",
+          "productId": "14",
+          "productName": "Soporte Para Tablet De Pared Alto Ranurado Anti Robo",
+          "unitPrice": 999,
+          "quantity": 1,
+          "totalPrice": 999
+        },
+        {
+          "id": "e13659eb-0309-4486-98fc-597fe17a2c62",
+          "productId": "13",
+          "productName": "Funda Neopreno 11 Plan Ceibal Lisas",
+          "sizeSelected": "11\"",
+          "colorSelected": "Rosa",
+          "unitPrice": 480,
+          "quantity": 1,
+          "totalPrice": 480
+        }
+      ]
+    },
+    {
+      "id": "580f5dc4-acf9-4378-b668-06cbff6a61b2",
+      "customerEmail": "cliente@tienda.com",
+      "customerName": "Chris olive",
+      "customerPhone": "09508515",
+      "subtotal": 399,
+      "discountAmount": 0,
+      "shippingCost": 0,
+      "total": 399,
+      "status": "pago_pendiente",
+      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-06T19:26:19.824Z",
+      "updatedAt": "2026-06-06T19:26:38.013Z",
+      "items": [
+        {
+          "id": "a750303a-6a0e-4a3b-b5c1-5a6c0e9832a1",
+          "productId": "12",
+          "productName": "Toalla Turbante Baño Pelo Gorro Algodón  dia de la ma",
+          "sizeSelected": "S",
+          "colorSelected": "Negro",
+          "unitPrice": 399,
+          "quantity": 1,
+          "totalPrice": 399
+        }
+      ]
+    },
+    {
+      "id": "3339929b-7cba-4bbf-bbb3-799652b1e62f",
+      "customerEmail": "cliente@tienda.com",
+      "customerName": "Chris Oli",
+      "customerPhone": "095085181",
+      "subtotal": 1479,
+      "discountAmount": 0,
+      "shippingCost": 0,
+      "total": 1479,
+      "status": "pedido_iniciado",
+      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-06T19:13:23.737Z",
+      "updatedAt": "2026-06-06T19:13:23.737Z",
+      "items": [
+        {
+          "id": "83640d90-3740-441f-982b-7fef141604e6",
+          "productId": "14",
+          "productName": "Soporte Para Tablet De Pared Alto Ranurado Anti Robo",
+          "unitPrice": 999,
+          "quantity": 1,
+          "totalPrice": 999
+        },
+        {
+          "id": "dcbc53d9-04a8-4a40-9998-206c5168586f",
+          "productId": "13",
+          "productName": "Funda Neopreno 11 Plan Ceibal Lisas",
+          "sizeSelected": "11\"",
+          "colorSelected": "Rosa",
+          "unitPrice": 480,
+          "quantity": 1,
+          "totalPrice": 480
+        }
+      ]
+    },
+    {
+      "id": "4db0530b-75ba-453e-99d9-762cc2bad922",
+      "customerEmail": "cliente@tienda.com",
+      "customerName": "Christian olivera",
+      "customerPhone": "095085181",
+      "subtotal": 480,
+      "discountAmount": 0,
+      "shippingCost": 0,
+      "total": 480,
+      "status": "pedido_iniciado",
+      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-06T14:23:35.594Z",
+      "updatedAt": "2026-06-06T14:23:35.594Z",
+      "items": [
+        {
+          "id": "4577ef36-f818-47c1-bd21-d350f05a3fce",
+          "productId": "13",
+          "productName": "Funda Neopreno 11 Plan Ceibal Lisas",
+          "sizeSelected": "11\"",
+          "colorSelected": "Rosa",
+          "unitPrice": 480,
+          "quantity": 1,
+          "totalPrice": 480
+        }
+      ]
+    },
+    {
+      "id": "809561ca-7d65-494f-9310-9d7b6f8f8ca0",
+      "customerEmail": "cliente@tienda.com",
+      "customerName": "Juem oliver",
+      "customerPhone": "095085181",
+      "subtotal": 399,
+      "discountAmount": 0,
+      "shippingCost": 0,
+      "total": 399,
+      "status": "pago_pendiente",
+      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-06T13:07:11.801Z",
+      "updatedAt": "2026-06-06T13:07:19.707Z",
+      "items": [
+        {
+          "id": "8649cc33-070f-443d-9fb3-11c6397a03e0",
+          "productId": "12",
+          "productName": "Toalla Turbante Baño Pelo Gorro Algodón  dia de la ma",
+          "sizeSelected": "XL",
+          "colorSelected": "Gris",
+          "unitPrice": 399,
+          "quantity": 1,
+          "totalPrice": 399
+        }
+      ]
+    },
+    {
+      "id": "dd7cf91a-27b4-47aa-8452-abd736507739",
+      "customerEmail": "cliente@tienda.com",
+      "customerName": "Christian olivera",
+      "customerPhone": "095085181",
+      "subtotal": 850,
+      "discountAmount": 0,
+      "shippingCost": 0,
+      "total": 850,
+      "status": "pedido_iniciado",
+      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
+      "createdAt": "2026-06-06T13:01:57.799Z",
+      "updatedAt": "2026-06-06T13:01:57.799Z",
+      "items": [
+        {
+          "id": "e8158d52-5feb-449b-9f74-20f5dc7af4af",
+          "productId": "14",
+          "productName": "Soporte Para Tablet De Pared Alto Ranurado Anti Robo",
+          "sizeSelected": "PLA",
+          "colorSelected": "Negro",
+          "unitPrice": 850,
+          "quantity": 1,
+          "totalPrice": 850
+        }
+      ]
+    }
+  ]
+}

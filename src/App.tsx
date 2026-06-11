@@ -323,6 +323,11 @@ const DEFAULT_SETTINGS: SiteSettings = {
   googleClientId: "",
   googleClientSecret: "",
   emailSenderEnabled: false,
+  emailSenderProvider: "smtp",
+  resendApiKey: "",
+  mailgunApiKey: "",
+  mailgunDomain: "",
+  mailgunRegion: "us",
   emailSenderSmtpHost: "",
   emailSenderSmtpPort: 465,
   emailSenderSmtpUser: "",
@@ -1103,6 +1108,11 @@ export default function App() {
           toEmail: testEmailAddress.trim(),
           smtpConfig: {
             emailSenderEnabled: editingSettings.emailSenderEnabled,
+            emailSenderProvider: editingSettings.emailSenderProvider || "smtp",
+            resendApiKey: editingSettings.resendApiKey,
+            mailgunApiKey: editingSettings.mailgunApiKey,
+            mailgunDomain: editingSettings.mailgunDomain,
+            mailgunRegion: editingSettings.mailgunRegion,
             emailSenderSmtpHost: editingSettings.emailSenderSmtpHost,
             emailSenderSmtpPort: editingSettings.emailSenderSmtpPort,
             emailSenderSmtpUser: editingSettings.emailSenderSmtpUser,
@@ -9847,60 +9857,159 @@ const resText = await uploadRes.text();
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* SMTP Host */}
-                        <div className="space-y-1">
-                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Servidor SMTP (Host)</label>
-                          <input
-                            type="text"
-                            placeholder="mail.tuservidor.com o smtp.gmail.com"
-                            value={editingSettings.emailSenderSmtpHost || ""}
-                            onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpHost: e.target.value })}
-                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
-                          />
-                        </div>
-
-                        {/* SMTP Port */}
-                        <div className="space-y-1">
-                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Puerto SMTP (SSL/TLS)</label>
-                          <input
-                            type="number"
-                            placeholder="465 (Recomendado) o 587"
-                            value={editingSettings.emailSenderSmtpPort !== undefined ? editingSettings.emailSenderSmtpPort : 465}
-                            onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpPort: parseInt(e.target.value) || 465 })}
-                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
-                          />
-                        </div>
-
-                        {/* SMTP Username */}
-                        <div className="space-y-1">
-                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Usuario SMTP (Email completo)</label>
-                          <input
-                            type="text"
-                            placeholder="contacto@tuservidor.com"
-                            value={editingSettings.emailSenderSmtpUser || ""}
-                            onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpUser: e.target.value })}
-                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
-                          />
-                        </div>
-
-                        {/* SMTP Password */}
-                        <div className="space-y-1">
-                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Contraseña SMTP (O contraseña de aplicación)</label>
-                          <input
-                            type="password"
-                            placeholder="La contraseña de tu cuenta de correo"
-                            value={editingSettings.emailSenderSmtpPass || ""}
-                            onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpPass: e.target.value })}
+                        {/* Selector de Proveedor */}
+                        <div className="space-y-1 md:col-span-2">
+                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Proveedor de Correo Electrónico</label>
+                          <select
+                            value={editingSettings.emailSenderProvider || "smtp"}
+                            onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderProvider: e.target.value as any })}
                             className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
-                          />
-                          <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold leading-relaxed mt-1">
-                            ⚠️ Tip de Seguridad: Si ya configuraste las variables EMAIL_SENDER_SMTP_* en tu consola de Railway, puedes dejar estos campos en blanco para evitar exponer credenciales en tu repositorio de GitHub.
-                          </p>
+                          >
+                            <option value="smtp">SMTP Servidor Tradicional (Gmail, Outlook, Hostinger, etc.)</option>
+                            <option value="resend">Resend API Directo (Un API key - Excelente para nubes 🚀)</option>
+                            <option value="mailgun">Mailgun API Directo (Evita puertos SMTP bloqueados en Railway 📨)</option>
+                          </select>
                         </div>
+
+                        {(!editingSettings.emailSenderProvider || editingSettings.emailSenderProvider === "smtp") && (
+                          <>
+                            {/* SMTP Host */}
+                            <div className="space-y-1">
+                              <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Servidor SMTP (Host)</label>
+                              <input
+                                type="text"
+                                placeholder="mail.tuservidor.com o smtp.gmail.com"
+                                value={editingSettings.emailSenderSmtpHost || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpHost: e.target.value })}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                              />
+                            </div>
+
+                            {/* SMTP Port */}
+                            <div className="space-y-1">
+                              <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Puerto SMTP (SSL/TLS)</label>
+                              <input
+                                type="number"
+                                placeholder="465 (Recomendado) o 587"
+                                value={editingSettings.emailSenderSmtpPort !== undefined ? editingSettings.emailSenderSmtpPort : 465}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpPort: parseInt(e.target.value) || 465 })}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                              />
+                            </div>
+
+                            {/* SMTP Username */}
+                            <div className="space-y-1">
+                              <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Usuario SMTP (Email completo)</label>
+                              <input
+                                type="text"
+                                placeholder="contacto@tuservidor.com"
+                                value={editingSettings.emailSenderSmtpUser || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpUser: e.target.value })}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                              />
+                            </div>
+
+                            {/* SMTP Password */}
+                            <div className="space-y-1">
+                              <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Contraseña SMTP (O contraseña de aplicación)</label>
+                              <input
+                                type="password"
+                                placeholder="La contraseña de tu cuenta de correo"
+                                value={editingSettings.emailSenderSmtpPass || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpPass: e.target.value })}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                              />
+                              <p className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold leading-relaxed mt-1">
+                                ⚠️ Tip de Seguridad: Si ya configuraste las variables EMAIL_SENDER_SMTP_* en tu consola de Railway, puedes dejar estos campos en blanco para evitar exponer credenciales en tu repositorio de GitHub.
+                              </p>
+                            </div>
+                          </>
+                        )}
+
+                        {(editingSettings.emailSenderProvider === "resend") && (
+                          <>
+                            {/* Resend API Key */}
+                            <div className="space-y-1 md:col-span-2 animate-fade-in">
+                              <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">API Key de Resend (Ej: re_...)</label>
+                              <input
+                                type="password"
+                                placeholder="re_se6Y8m9x_..."
+                                value={editingSettings.resendApiKey || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, resendApiKey: e.target.value })}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                              />
+                              <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold leading-relaxed mt-1">
+                                💡 Tip de Producción: Puedes configurar la variable de entorno <code className="font-mono bg-indigo-500/10 px-1 py-0.5 rounded text-[9px]">RESEND_API_KEY</code> en tu consola de Railway para mayor seguridad o ingresar el API Key directamente aquí.
+                              </p>
+                              <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-[10px] text-indigo-700 dark:text-indigo-300 leading-relaxed mt-2 space-y-1">
+                                <div><strong>Instrucciones para configurar Resend:</strong></div>
+                                <ul className="list-disc pl-4 space-y-0.5">
+                                  <li>Regístrate gratis en <a href="https://resend.com" target="_blank" rel="noreferrer" className="underline font-bold text-indigo-600 dark:text-indigo-400">Resend.com</a>.</li>
+                                  <li>Genera un API Key con permisos de envío y colócala aquí.</li>
+                                  <li>En el "Remitente Personalizado" de abajo, asegúrate de ingresar una dirección compatible con tu panel de Resend (e.g. <code className="font-mono">no-reply@tudominio.com</code>) o <code className="font-mono">onboarding@resend.dev</code> si aún estás en Sandbox probando un único destinatario.</li>
+                                </ul>
+                              </div>
+                            </div>
+                          </>
+                        )}
+
+                        {(editingSettings.emailSenderProvider === "mailgun") && (
+                          <>
+                            {/* Mailgun API Key */}
+                            <div className="space-y-1 md:col-span-2 animate-fade-in">
+                              <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Mailgun API Key (Ej: key-...</label>
+                              <input
+                                type="password"
+                                placeholder="Tu API Key de Mailgun (Ej: key-8b6bc0a... o api_key ...)"
+                                value={editingSettings.mailgunApiKey || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, mailgunApiKey: e.target.value })}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                              />
+                            </div>
+
+                            {/* Mailgun Domain */}
+                            <div className="space-y-1">
+                              <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Dominio de Envío de Mailgun</label>
+                              <input
+                                type="text"
+                                placeholder="sandbox432ebc5c64c84856bb985204939f0411.mailgun.org"
+                                value={editingSettings.mailgunDomain || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, mailgunDomain: e.target.value })}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                              />
+                            </div>
+
+                            {/* Mailgun Region */}
+                            <div className="space-y-1">
+                              <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Endpoint / Región de Mailgun</label>
+                              <select
+                                value={editingSettings.mailgunRegion || "us"}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, mailgunRegion: e.target.value as 'us' | 'eu' })}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                              >
+                                <option value="us">Estados Unidos / Global (api.mailgun.net)</option>
+                                <option value="eu">Unión Europea (api.eu.mailgun.net)</option>
+                              </select>
+                            </div>
+
+                            <div className="md:col-span-2 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-[10px] text-indigo-700 dark:text-indigo-300 leading-relaxed space-y-1 font-semibold animate-fade-in">
+                              <div className="text-[11px] text-indigo-800 dark:text-indigo-200">✨ Pasos para configurar Mailgun (¡Directo como en tu captura!):</div>
+                              <ul className="list-disc pl-4 space-y-1">
+                                <li>Usa el <strong>API Key</strong> que se muestra en tu captura.</li>
+                                <li>Copia tu dominio Sandbox: <code className="font-mono text-indigo-600 dark:text-indigo-400">sandbox432ebc5c64c84856bb985204939f0411.mailgun.org</code> en el campo de arriba.</li>
+                                <li><strong>Muy Importante (Remitente):</strong> En el "Remitente Personalizado" de abajo, debes escribir la dirección del Sandbox de tu captura: <code className="font-mono text-indigo-600 dark:text-indigo-400">Mailgun Sandbox &lt;postmaster@sandbox432ebc5c64c84856bb985204939f0411.mailgun.org&gt;</code> para que no sea rechazado.</li>
+                                <li><strong>Autorizar Destinatario:</strong> Dado que estás en modo de prueba (Sandbox), debes registrar tu correo personal <code className="font-mono">Christian.olivera45@gmail.com</code> como <em>Authorized Recipient</em> en el panel de Mailgun y hacer clic en el enlace de confirmación que te llegará, ¡para que Mailgun te permita enviar correos de prueba a tu cuenta!</li>
+                              </ul>
+                              <p className="mt-2 text-rose-600 dark:text-rose-400 font-bold">
+                                💡 Tip de Producción: Puedes colocar <code className="font-mono bg-rose-500/10 px-1 py-0.5 rounded text-[9px]">MAILGUN_API_KEY</code> en las variables de entorno de tu Railway para conectar de forma 100% segura.
+                              </p>
+                            </div>
+                          </>
+                        )}
 
                         {/* From Address */}
                         <div className="space-y-1 md:col-span-2">
-                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Remitente Personalizado (Ejemplo: Tienda &lt;info@tienda.com&gt;)</label>
+                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400 font-semibold">Remitente Personalizado (Ejemplo: Tienda &lt;info@tienda.com&gt; o onboarding@resend.dev)</label>
                           <input
                             type="text"
                             placeholder="Ventas Juem <no-reply@tuservidor.com>"

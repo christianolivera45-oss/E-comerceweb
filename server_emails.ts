@@ -255,11 +255,105 @@ export async function sendEmail(params: {
   }
 
   // Pick up configurations from environment variables first, falling back to settings
+  const provider = (process.env.EMAIL_SENDER_PROVIDER || settings.emailSenderProvider || (process.env.RESEND_API_KEY || settings.resendApiKey ? "resend" : "smtp")).trim().toLowerCase();
+  const from = (process.env.EMAIL_SENDER_FROM_ADDRESS || settings.emailSenderFromAddress || "").trim() || "Ventas Juem <no-reply@tienda.com>";
+
+  if (provider === "resend") {
+    const apiKey = (process.env.RESEND_API_KEY || settings.resendApiKey || "").trim();
+    if (!apiKey) {
+      console.log(`[Email Simulator] Destinatario: ${to}. Asunto: "${subject}". Resend no configurado (falta API Key).`);
+      return { success: true, status: "simulated" };
+    }
+
+    try {
+      console.log(`[Resend Mailbox] Enviando correo a través de la API de Resend para: ${to}`);
+      
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          from,
+          to: [to],
+          subject,
+          html,
+          text: text || "Por favor, use un cliente de correo con soporte HTML para ver este mensaje."
+        })
+      });
+
+      const responseData = await response.json() as any;
+      if (response.ok && responseData && responseData.id) {
+        console.log(`[Resend Mailbox] Correo enviado exitosamente a: ${to} (ID: ${responseData.id})`);
+        return { success: true, status: "success" };
+      } else {
+        const errMsg = responseData?.message || JSON.stringify(responseData) || `Status ${response.status}`;
+        console.error(`[Resend Mailbox Error] Error al despachar a ${to}:`, responseData);
+        return { success: false, status: "failure", error: errMsg };
+      }
+    } catch (err: any) {
+      const errMsg = String(err.message || err);
+      console.error(`[Resend Mailbox Error] Excepción al despachar a ${to}:`, err);
+      return { success: false, status: "failure", error: errMsg };
+    }
+  }
+
+  if (provider === "mailgun") {
+    const apiKey = (process.env.MAILGUN_API_KEY || settings.mailgunApiKey || "").trim();
+    const domain = (process.env.MAILGUN_DOMAIN || settings.mailgunDomain || "sandbox432ebc5c64c84856bb985204939f0411.mailgun.org").trim();
+    const region = (process.env.MAILGUN_REGION || settings.mailgunRegion || "us").trim().toLowerCase();
+
+    if (!apiKey) {
+      console.log(`[Email Simulator] Destinatario: ${to}. Asunto: "${subject}". Mailgun no configurado (falta API Key).`);
+      return { success: true, status: "simulated" };
+    }
+
+    try {
+      console.log(`[Mailgun Mailbox] Enviando correo a través de la API de Mailgun para: ${to} en dominio: ${domain}`);
+      
+      const baseUrl = region === "eu" ? "https://api.eu.mailgun.net" : "https://api.mailgun.net";
+      const mgUrl = `${baseUrl}/v3/${domain}/messages`;
+
+      const basicAuth = Buffer.from(`api:${apiKey}`).toString('base64');
+      
+      const formParams = new URLSearchParams();
+      formParams.append("from", from);
+      formParams.append("to", to);
+      formParams.append("subject", subject);
+      formParams.append("html", html);
+      formParams.append("text", text || "Por favor, use un cliente de correo con soporte HTML para ver este mensaje.");
+
+      const response = await fetch(mgUrl, {
+        method: "POST",
+        headers: {
+          "Authorization": `Basic ${basicAuth}`,
+          "Content-Memory": "application/x-www-form-urlencoded", // backup
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: formParams.toString()
+      });
+
+      const responseData = await response.json() as any;
+      if (response.ok && responseData && (responseData.id || responseData.message?.includes("Queued"))) {
+        console.log(`[Mailgun Mailbox] Correo enviado exitosamente a: ${to} (ID: ${responseData.id || "Queued"})`);
+        return { success: true, status: "success" };
+      } else {
+        const errMsg = responseData?.message || JSON.stringify(responseData) || `Status ${response.status}`;
+        console.error(`[Mailgun Mailbox Error] Error al despachar a ${to}:`, responseData);
+        return { success: false, status: "failure", error: errMsg };
+      }
+    } catch (err: any) {
+      const errMsg = String(err.message || err);
+      console.error(`[Mailgun Mailbox Error] Excepción al despachar a ${to}:`, err);
+      return { success: false, status: "failure", error: errMsg };
+    }
+  }
+
   const host = (process.env.EMAIL_SENDER_SMTP_HOST || settings.emailSenderSmtpHost || "").trim().replace(/[\s\t\r\n]/g, "");
   const port = Number(process.env.EMAIL_SENDER_SMTP_PORT) || Number(settings.emailSenderSmtpPort) || 465;
   const user = (process.env.EMAIL_SENDER_SMTP_USER || settings.emailSenderSmtpUser || "").trim();
   const pass = (process.env.EMAIL_SENDER_SMTP_PASS || settings.emailSenderSmtpPass || "").trim();
-  const from = (process.env.EMAIL_SENDER_FROM_ADDRESS || settings.emailSenderFromAddress || "").trim() || "Ventas Juem <no-reply@tienda.com>";
 
   // If SMTP configurations are missing, operate as a simulator log
   if (!host || !user || !pass) {

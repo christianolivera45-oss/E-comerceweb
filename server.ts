@@ -1407,14 +1407,36 @@ async function startServer() {
       // Force enabled true for the connection test purpose
       liveSettings.emailSenderEnabled = true;
 
+      const activeProvider = (liveSettings.emailSenderProvider || "smtp").toLowerCase();
+      let diagnosticDetails = "";
+
+      if (activeProvider === "smtp") {
+        diagnosticDetails = `
+          <strong>Proveedor:</strong> SMTP Tradicional <br />
+          <strong>Servidor SMTP:</strong> ${liveSettings.emailSenderSmtpHost || "No Configurado"} <br />
+          <strong>Usuario SMTP:</strong> ${liveSettings.emailSenderSmtpUser || "No Configurado"} <br />
+        `;
+      } else if (activeProvider === "resend") {
+        diagnosticDetails = `
+          <strong>Proveedor:</strong> Resend API <br />
+          <strong>Remitente:</strong> ${liveSettings.emailSenderFromAddress || "Default"} <br />
+        `;
+      } else if (activeProvider === "mailgun") {
+        diagnosticDetails = `
+          <strong>Proveedor:</strong> Mailgun API <br />
+          <strong>Dominio Mailgun:</strong> ${liveSettings.mailgunDomain || "No Configurado"} <br />
+          <strong>Región:</strong> ${String(liveSettings.mailgunRegion).toUpperCase()} <br />
+          <strong>Remitente:</strong> ${liveSettings.emailSenderFromAddress || "Default"} <br />
+        `;
+      }
+
       const testEmailHtml = `
         <div style="font-family: Arial, sans-serif; padding: 30px; background-color: #f8fafc; color: #0f172a; max-width: 500px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px;">
           <h2 style="color: #4f46e5; margin-top: 0;">🧪 Correo electrónico de Prueba exitoso</h2>
-          <p>Este es un correo electrónico enviado para comprobar los ajustes de conexión de tu servidor de correos.</p>
+          <p>Este es un correo electrónico de diagnóstico de la tienda para confirmar tu conexión.</p>
           <hr style="border: none; border-top: 1px solid #cbd5e1; margin: 20px 0;" />
-          <div style="font-size: 11px; color: #64748b;">
-            <strong>Servidor SMTP:</strong> ${liveSettings.emailSenderSmtpHost || "No Configurado (Simulación)"} <br />
-            <strong>Usuario SMTP:</strong> ${liveSettings.emailSenderSmtpUser || "No Configurado"} <br />
+          <div style="font-size: 11px; color: #64748b; line-height: 1.6;">
+            ${diagnosticDetails}
             <strong>Fecha/Hora de Prueba:</strong> ${new Date().toLocaleString()}
           </div>
         </div>

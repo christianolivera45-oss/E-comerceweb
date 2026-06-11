@@ -128,6 +128,11 @@ export interface SiteSettings {
   googleClientId?: string;
   googleClientSecret?: string;
   emailSenderEnabled?: boolean;
+  emailSenderProvider?: 'smtp' | 'resend' | 'mailgun';
+  resendApiKey?: string;
+  mailgunApiKey?: string;
+  mailgunDomain?: string;
+  mailgunRegion?: 'us' | 'eu';
   emailSenderSmtpHost?: string;
   emailSenderSmtpPort?: number;
   emailSenderSmtpUser?: string;

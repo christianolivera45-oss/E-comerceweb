@@ -362,10 +362,22 @@ export async function sendEmail(params: {
   }
 
   try {
-    console.log(`[SMTP Mailbox] Connecting to host: ${host} on port: ${port}`);
+    // Resolve host up-front to force an IPv4 address and completely bypass IPv6 ENETUNREACH errors inside the container
+    let resolvedHost = host;
+    try {
+      const ipv4 = await resolveHostToIp(host);
+      if (ipv4) {
+        console.log(`[SMTP Mailbox] Up-front DNS resolved ${host} to IPv4: ${ipv4} to avoid IPv6 UNREACHABLE issues.`);
+        resolvedHost = ipv4;
+      }
+    } catch (dnsErr: any) {
+      console.warn(`[SMTP Mailbox] Up-front IPv4 resolution failed for ${host}:`, dnsErr.message || dnsErr);
+    }
+
+    console.log(`[SMTP Mailbox] Connecting to host: ${resolvedHost} (original: ${host}) on port: ${port}`);
 
     const transporter = nodemailer.createTransport({
-      host, // Pass the clean hostname to nodemailer so TLS/handshake headers remain fully compliant
+      host: resolvedHost,
       port,
       secure: port === 465, 
       auth: {
@@ -373,11 +385,12 @@ export async function sendEmail(params: {
         pass
       },
       // Avoid hanging indefinitely if the network/firewall drops/blocks packets
-      connectionTimeout: 10000, 
-      greetingTimeout: 10000,   
-      socketTimeout: 15000,    
+      connectionTimeout: 15000, 
+      greetingTimeout: 15000,   
+      socketTimeout: 20000,    
       tls: {
-        rejectUnauthorized: false
+        rejectUnauthorized: false,
+        servername: host // Ensure SSL certificate matches the original hostname (e.g., smtp.gmail.com)
       },
       // Override DNS resolving inside Node's socket connection using our robust fallback logic
       lookup: (hostname, options, callback) => {

@@ -1,4 +1,5 @@
 import pg from "pg";
+import nodemailer from "nodemailer";
 
 export interface EmailLog {
   id: string;
@@ -171,7 +172,7 @@ function replacePlaceholders(template: string, data: Record<string, string>): st
 }
 
 /**
- * Core function to send or simulate sending an email via Resend API.
+ * Core function to send or simulate sending an email via Resend API or SMTP (Nodemailer).
  */
 export async function sendEmail(params: {
   settings: any;
@@ -187,8 +188,60 @@ export async function sendEmail(params: {
     return { success: true, status: "disabled" };
   }
 
-  // Force Resend API provider exclusively
+  const provider = (settings.emailSenderProvider || "resend").toLowerCase();
   const from = (settings.emailSenderFromAddress || process.env.EMAIL_SENDER_FROM_ADDRESS || "").trim() || "Ventas Juem <onboarding@resend.dev>";
+
+  // --- SMTP PROVIDER (Nodemailer) ---
+  if (provider === "smtp") {
+    const smtpHost = (settings.emailSenderSmtpHost || "").trim() || "smtp.gmail.com";
+    const smtpPort = parseInt(settings.emailSenderSmtpPort, 10) || 465;
+    const smtpUser = (settings.emailSenderSmtpUser || "").trim();
+    const smtpPass = (settings.emailSenderSmtpPass || "").trim();
+
+    if (!smtpUser || !smtpPass) {
+      console.log(`[Email Simulator] Destinatario: ${to}. Asunto: "${subject}". SMTP no configurado completamente (falta usuario/contraseña).`);
+      return { success: true, status: "simulated" };
+    }
+
+    console.log(`[SMTP Mailbox] Iniciando despacho vía SMTP (${smtpHost}:${smtpPort}) para: ${to}`);
+    try {
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465, // true para puerto 465, false para otros como 587 / 25
+        auth: {
+          user: smtpUser,
+          pass: smtpPass
+        },
+        tls: {
+          rejectUnauthorized: false // Evita problemas raros de verificación de certificados locales auto-firmados
+        }
+      });
+
+      // Asegurar que el remitente (from) tenga formato correcto. En SMTP, de preferencia, debe ser el usuario o tener su alias.
+      let smtpFrom = from;
+      if (!from.includes("@") || from.includes("onboarding@resend.dev") || from.includes("tienda.com")) {
+        smtpFrom = `Ventas Juem <${smtpUser}>`;
+      }
+
+      await transporter.sendMail({
+        from: smtpFrom,
+        to,
+        subject,
+        html,
+        text: text || "Por favor, use un cliente de correo con soporte HTML para ver este mensaje."
+      });
+
+      console.log(`[SMTP Mailbox] Correo enviado exitosamente vía SMTP a: ${to}`);
+      return { success: true, status: "success" };
+    } catch (err: any) {
+      const errMsg = String(err.message || err);
+      console.error(`[SMTP Mailbox Error] Error al despachar vía SMTP a ${to}: ${errMsg}`);
+      return { success: false, status: "failure", error: `Error SMTP: ${errMsg}` };
+    }
+  }
+
+  // --- RESEND PROVIDER (API) ---
   const apiKey = (settings.resendApiKey || process.env.RESEND_API_KEY || "").trim();
 
   if (!apiKey) {
@@ -197,7 +250,7 @@ export async function sendEmail(params: {
   }
 
   const maskedKey = apiKey.substring(0, 7) + "..." + apiKey.substring(apiKey.length - 4);
-  console.log(`[Resend Mailbox] Iniciando despacho. Usando API Key: ${maskedKey} (Largo: ${apiKey.length})`);
+  console.log(`[Resend Mailbox] dispatching. Usando API Key: ${maskedKey} (Largo: ${apiKey.length})`);
 
   try {
     console.log(`[Resend Mailbox] Enviando correo a través de la API de Resend para: ${to}`);

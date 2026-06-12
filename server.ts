@@ -1407,7 +1407,7 @@ async function startServer() {
       // Force enabled true for the connection test purpose
       liveSettings.emailSenderEnabled = true;
 
-      const activeProvider = (liveSettings.emailSenderProvider || "smtp").toLowerCase();
+      const activeProvider = (liveSettings.emailSenderProvider || "mailgun").toLowerCase();
       let diagnosticDetails = "";
 
       if (activeProvider === "smtp") {

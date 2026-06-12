@@ -245,7 +245,7 @@
     "emailSenderSmtpPort": 465,
     "emailSenderSmtpUser": "Juem.mvd@gmail.com",
     "emailSenderSmtpPass": "ctzdqzrtitmnmvqy",
-    "emailSenderFromAddress": "Ventas Juem <no-reply@juem.com.uy>",
+    "emailSenderFromAddress": "Ventas Juem <no-reply@notificaciones.juem.com.uy>",
     "emailTemplateOrderCreatedSubject": "¡Gracias por tu compra! Tu pedido #{{orderId}} ha sido recibido",
     "emailTemplateOrderStatusChangedSubject": "Actualización de tu pedido #{{orderId}} - {{statusText}}",
     "emailTemplateOrderCreatedBody": "Muchas gracias por realizar tu compra con nosotros. Tu pago ha sido aprobado correctamente y tu pedido ya está siendo preparado para entrega. Aquí tienes los detalles completos de tu compra:",

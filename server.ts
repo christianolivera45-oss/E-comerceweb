@@ -1288,10 +1288,40 @@ async function startServer() {
   // Cargar estado de Postgres si DATABASE_URL está definido
   if (process.env.DATABASE_URL) {
     try {
+      const localState = { ...currentStoreState }; // Guardar estado de archivo local para sincronización
       const pgState = await initPostgresStore();
       if (pgState) {
         currentStoreState = pgState;
         console.log("🟢 Estado sincronizado con la base de datos de Supabase exitosamente.");
+
+        // Sincronizar configuraciones locales actualizadas hacia la base de datos
+        const localSettings: any = localState.settings || {};
+        const dbSettings: any = currentStoreState.settings || {};
+        let needsDbUpdate = false;
+        const keysToSync = [
+          "resendApiKey", 
+          "emailSenderFromAddress", 
+          "emailSenderProvider", 
+          "emailSenderEnabled",
+          "emailSenderSmtpHost",
+          "emailSenderSmtpPort",
+          "emailSenderSmtpUser",
+          "emailSenderSmtpPass"
+        ];
+
+        for (const key of keysToSync) {
+          if (localSettings[key] !== undefined && localSettings[key] !== dbSettings[key]) {
+            console.log(`[Startup Sync] Sincronizando para '${key}'. Local: '${localSettings[key]}', DB: '${dbSettings[key]}'. Actualizando base de datos...`);
+            dbSettings[key] = localSettings[key];
+            needsDbUpdate = true;
+          }
+        }
+
+        if (needsDbUpdate) {
+          currentStoreState.settings = dbSettings;
+          await saveDbState(currentStoreState);
+          console.log("🟢 Configuración de correo sincronizada y guardada exitosamente en la base de datos.");
+        }
       }
     } catch (pgError) {
       console.error("🔴 Error: No se pudo cargar de Postgres en el inicio, usando cache local:", pgError);

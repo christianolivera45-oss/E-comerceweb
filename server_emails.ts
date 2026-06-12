@@ -1,6 +1,4 @@
-import nodemailer from "nodemailer";
 import pg from "pg";
-import dns from "dns";
 
 export interface EmailLog {
   id: string;
@@ -173,70 +171,7 @@ function replacePlaceholders(template: string, data: Record<string, string>): st
 }
 
 /**
- * Resolves a hostname to an IP address using multiple robust strategies.
- * It is highly resilient against container DNS lookup glitches (e.g., inside Docker/Railway).
- */
-async function resolveHostToIp(host: string): Promise<string> {
-  if (!host) return "";
-  const trimmed = host.trim();
-  // If host is already an IP address, return it
-  if (/^[0-9.]+$/.test(trimmed) || trimmed.includes(":")) {
-    return trimmed;
-  }
-
-  // Strategy 1: Standard dns.lookup (uses local OS resolving, which may fail on Railway)
-  try {
-    const ip = await new Promise<string>((resolve, reject) => {
-      dns.lookup(trimmed, { family: 4 }, (err, address) => {
-        if (err || !address) reject(err || new Error("No address returned"));
-        else resolve(address);
-      });
-    });
-    return ip;
-  } catch (err: any) {
-    console.warn(`[DNS Helper] Standard dns.lookup failed for ${trimmed}, details: ${err?.message || err}. Trying next strategies...`);
-  }
-
-  // Strategy 2: System dns.resolve4
-  try {
-    const addresses = await new Promise<string[]>((resolve, reject) => {
-      dns.resolve4(trimmed, (err, addresses) => {
-        if (err) reject(err);
-        else resolve(addresses);
-      });
-    });
-    if (addresses && addresses.length > 0) {
-      console.log(`[DNS Helper] Resolved ${trimmed} to ${addresses[0]} via system dns.resolve4`);
-      return addresses[0];
-    }
-  } catch (err: any) {
-    console.warn(`[DNS Helper] System dns.resolve4 failed for ${trimmed}, details: ${err?.message || err}`);
-  }
-
-  // Strategy 3: Dedicated dns.Resolver querying Google/Cloudflare DNS directly
-  try {
-    const resolver = new dns.Resolver();
-    resolver.setServers(["8.8.8.8", "1.1.1.1", "8.8.4.4"]);
-    const addresses = await new Promise<string[]>((resolve, reject) => {
-      resolver.resolve4(trimmed, (err, addresses) => {
-        if (err) reject(err);
-        else resolve(addresses);
-      });
-    });
-    if (addresses && addresses.length > 0) {
-      console.log(`[DNS Helper] Successfully resolved ${trimmed} to ${addresses[0]} using public DNS (8.8.8.8)`);
-      return addresses[0];
-    }
-  } catch (err: any) {
-    console.error(`[DNS Helper] Public DNS query also failed for ${trimmed}, details: ${err?.message || err}`);
-  }
-
-  // Fallback if all resolve options failed: return original hostname
-  return trimmed;
-}
-
-/**
- * Core function to send or simulate sending an email.
+ * Core function to send or simulate sending an email via Resend API.
  */
 export async function sendEmail(params: {
   settings: any;
@@ -246,181 +181,54 @@ export async function sendEmail(params: {
   text?: string;
 }): Promise<{ success: boolean; status: "success" | "failure" | "simulated" | "disabled"; error?: string }> {
   const { settings, to, subject, html, text } = params;
-  const logId = "email-log-" + Math.random().toString(36).substring(2, 10);
-  const timestamp = new Date().toISOString();
 
   // Guard: If email sender feature is explicitly disabled
   if (!settings.emailSenderEnabled) {
     return { success: true, status: "disabled" };
   }
 
-  // Pick up configurations from environment variables first, falling back to settings
-  const provider = (process.env.EMAIL_SENDER_PROVIDER || settings.emailSenderProvider || (process.env.RESEND_API_KEY || settings.resendApiKey ? "resend" : "smtp")).trim().toLowerCase();
-  const from = (process.env.EMAIL_SENDER_FROM_ADDRESS || settings.emailSenderFromAddress || "").trim() || "Ventas Juem <no-reply@tienda.com>";
+  // Force Resend API provider exclusively
+  const from = (settings.emailSenderFromAddress || process.env.EMAIL_SENDER_FROM_ADDRESS || "").trim() || "Ventas Juem <onboarding@resend.dev>";
+  const apiKey = (settings.resendApiKey || process.env.RESEND_API_KEY || "").trim();
 
-  if (provider === "resend") {
-    const apiKey = (process.env.RESEND_API_KEY || settings.resendApiKey || "").trim();
-    if (!apiKey) {
-      console.log(`[Email Simulator] Destinatario: ${to}. Asunto: "${subject}". Resend no configurado (falta API Key).`);
-      return { success: true, status: "simulated" };
-    }
-
-    try {
-      console.log(`[Resend Mailbox] Enviando correo a través de la API de Resend para: ${to}`);
-      
-      const response = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          from,
-          to: [to],
-          subject,
-          html,
-          text: text || "Por favor, use un cliente de correo con soporte HTML para ver este mensaje."
-        })
-      });
-
-      const responseData = await response.json() as any;
-      if (response.ok && responseData && responseData.id) {
-        console.log(`[Resend Mailbox] Correo enviado exitosamente a: ${to} (ID: ${responseData.id})`);
-        return { success: true, status: "success" };
-      } else {
-        const errMsg = responseData?.message || JSON.stringify(responseData) || `Status ${response.status}`;
-        console.error(`[Resend Mailbox Error] Error al despachar a ${to}:`, responseData);
-        return { success: false, status: "failure", error: errMsg };
-      }
-    } catch (err: any) {
-      const errMsg = String(err.message || err);
-      console.error(`[Resend Mailbox Error] Excepción al despachar a ${to}:`, err);
-      return { success: false, status: "failure", error: errMsg };
-    }
-  }
-
-  if (provider === "mailgun") {
-    const apiKey = (process.env.MAILGUN_API_KEY || settings.mailgunApiKey || "").trim();
-    const domain = (process.env.MAILGUN_DOMAIN || settings.mailgunDomain || "sandbox432ebc5c64c84856bb985204939f0411.mailgun.org").trim();
-    const region = (process.env.MAILGUN_REGION || settings.mailgunRegion || "us").trim().toLowerCase();
-
-    if (!apiKey) {
-      console.log(`[Email Simulator] Destinatario: ${to}. Asunto: "${subject}". Mailgun no configurado (falta API Key).`);
-      return { success: true, status: "simulated" };
-    }
-
-    try {
-      console.log(`[Mailgun Mailbox] Enviando correo a través de la API de Mailgun para: ${to} en dominio: ${domain}`);
-      
-      const baseUrl = region === "eu" ? "https://api.eu.mailgun.net" : "https://api.mailgun.net";
-      const mgUrl = `${baseUrl}/v3/${domain}/messages`;
-
-      const basicAuth = Buffer.from(`api:${apiKey}`).toString('base64');
-      
-      const formParams = new URLSearchParams();
-      formParams.append("from", from);
-      formParams.append("to", to);
-      formParams.append("subject", subject);
-      formParams.append("html", html);
-      formParams.append("text", text || "Por favor, use un cliente de correo con soporte HTML para ver este mensaje.");
-
-      const response = await fetch(mgUrl, {
-        method: "POST",
-        headers: {
-          "Authorization": `Basic ${basicAuth}`,
-          "Content-Memory": "application/x-www-form-urlencoded", // backup
-          "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body: formParams.toString()
-      });
-
-      const responseData = await response.json() as any;
-      if (response.ok && responseData && (responseData.id || responseData.message?.includes("Queued"))) {
-        console.log(`[Mailgun Mailbox] Correo enviado exitosamente a: ${to} (ID: ${responseData.id || "Queued"})`);
-        return { success: true, status: "success" };
-      } else {
-        const errMsg = responseData?.message || JSON.stringify(responseData) || `Status ${response.status}`;
-        console.error(`[Mailgun Mailbox Error] Error al despachar a ${to}:`, responseData);
-        return { success: false, status: "failure", error: errMsg };
-      }
-    } catch (err: any) {
-      const errMsg = String(err.message || err);
-      console.error(`[Mailgun Mailbox Error] Excepción al despachar a ${to}:`, err);
-      return { success: false, status: "failure", error: errMsg };
-    }
-  }
-
-  const host = (process.env.EMAIL_SENDER_SMTP_HOST || settings.emailSenderSmtpHost || "").trim().replace(/[\s\t\r\n]/g, "");
-  const port = Number(process.env.EMAIL_SENDER_SMTP_PORT) || Number(settings.emailSenderSmtpPort) || 465;
-  const user = (process.env.EMAIL_SENDER_SMTP_USER || settings.emailSenderSmtpUser || "").trim();
-  // Automatically strip all spaces from the Gmail App Password (Google displays them as 4 blocks of 4 separated by spaces, but SMTP servers require them without spaces)
-  const pass = (process.env.EMAIL_SENDER_SMTP_PASS || settings.emailSenderSmtpPass || "").trim().replace(/\s+/g, "");
-
-  // If SMTP configurations are missing, operate as a simulator log
-  if (!host || !user || !pass) {
-    console.log(`[Email Simulator] Destinatario: ${to}. Asunto: "${subject}". SMTP no configurado completamente.`);
+  if (!apiKey) {
+    console.log(`[Email Simulator] Destinatario: ${to}. Asunto: "${subject}". Resend no configurado (falta API Key).`);
     return { success: true, status: "simulated" };
   }
 
+  const maskedKey = apiKey.substring(0, 7) + "..." + apiKey.substring(apiKey.length - 4);
+  console.log(`[Resend Mailbox] Iniciando despacho. Usando API Key: ${maskedKey} (Largo: ${apiKey.length})`);
+
   try {
-    // Resolve host up-front to force an IPv4 address and completely bypass IPv6 ENETUNREACH errors inside the container
-    let resolvedHost = host;
-    try {
-      const ipv4 = await resolveHostToIp(host);
-      if (ipv4) {
-        console.log(`[SMTP Mailbox] Up-front DNS resolved ${host} to IPv4: ${ipv4} to avoid IPv6 UNREACHABLE issues.`);
-        resolvedHost = ipv4;
-      }
-    } catch (dnsErr: any) {
-      console.warn(`[SMTP Mailbox] Up-front IPv4 resolution failed for ${host}:`, dnsErr.message || dnsErr);
-    }
-
-    console.log(`[SMTP Mailbox] Connecting to host: ${resolvedHost} (original: ${host}) on port: ${port}`);
-
-    const transporter = nodemailer.createTransport({
-      host: resolvedHost,
-      port,
-      secure: port === 465, 
-      auth: {
-        user,
-        pass
+    console.log(`[Resend Mailbox] Enviando correo a través de la API de Resend para: ${to}`);
+    
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
       },
-      // Avoid hanging indefinitely if the network/firewall drops/blocks packets
-      connectionTimeout: 15000, 
-      greetingTimeout: 15000,   
-      socketTimeout: 20000,    
-      tls: {
-        rejectUnauthorized: false,
-        servername: host // Ensure SSL certificate matches the original hostname (e.g., smtp.gmail.com)
-      },
-      // Override DNS resolving inside Node's socket connection using our robust fallback logic
-      lookup: (hostname, options, callback) => {
-        const cb = typeof options === 'function' ? options : callback;
-        const cleanHostname = hostname.replace(/[\s\t\r\n]/g, "");
-        
-        resolveHostToIp(cleanHostname).then(ip => {
-          console.log(`[Custom DNS Inside Transporter] Resolved ${cleanHostname} to IP: ${ip}`);
-          cb(null, ip, 4);
-        }).catch(err => {
-          console.warn(`[Custom DNS Inside Transporter] Standard resolving failed for ${cleanHostname}, trying direct dns.lookup fallback...`);
-          dns.lookup(cleanHostname, typeof options === 'object' ? options : {}, cb);
-        });
-      }
-    } as any);
-
-    await transporter.sendMail({
-      from,
-      to,
-      subject,
-      html,
-      text: text || "Por favor, use un cliente de correo con soporte HTML para ver este mensaje."
+      body: JSON.stringify({
+        from,
+        to: [to],
+        subject,
+        html,
+        text: text || "Por favor, use un cliente de correo con soporte HTML para ver este mensaje."
+      })
     });
 
-    console.log(`[SMTP Mailbox] Email despachado exitosamente a: ${to} para "${subject}"`);
-    return { success: true, status: "success" };
+    const responseData = await response.json() as any;
+    if (response.ok && responseData && responseData.id) {
+      console.log(`[Resend Mailbox] Correo enviado exitosamente a: ${to} (ID: ${responseData.id})`);
+      return { success: true, status: "success" };
+    } else {
+      const errMsg = responseData?.message || JSON.stringify(responseData) || `Status ${response.status}`;
+      console.error(`[Resend Mailbox Error] Error al despachar a ${to}: ${errMsg}`);
+      return { success: false, status: "failure", error: errMsg };
+    }
   } catch (err: any) {
     const errMsg = String(err.message || err);
-    console.error(`[SMTP Mailbox Error] Imposible despachar a ${to}:`, err);
+    console.error(`[Resend Mailbox Error] Excepción al despachar a ${to}: ${errMsg}`);
     return { success: false, status: "failure", error: errMsg };
   }
 }

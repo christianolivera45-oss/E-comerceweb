@@ -1407,28 +1407,10 @@ async function startServer() {
       // Force enabled true for the connection test purpose
       liveSettings.emailSenderEnabled = true;
 
-      const activeProvider = (liveSettings.emailSenderProvider || "mailgun").toLowerCase();
-      let diagnosticDetails = "";
-
-      if (activeProvider === "smtp") {
-        diagnosticDetails = `
-          <strong>Proveedor:</strong> SMTP Tradicional <br />
-          <strong>Servidor SMTP:</strong> ${liveSettings.emailSenderSmtpHost || "No Configurado"} <br />
-          <strong>Usuario SMTP:</strong> ${liveSettings.emailSenderSmtpUser || "No Configurado"} <br />
-        `;
-      } else if (activeProvider === "resend") {
-        diagnosticDetails = `
-          <strong>Proveedor:</strong> Resend API <br />
-          <strong>Remitente:</strong> ${liveSettings.emailSenderFromAddress || "Default"} <br />
-        `;
-      } else if (activeProvider === "mailgun") {
-        diagnosticDetails = `
-          <strong>Proveedor:</strong> Mailgun API <br />
-          <strong>Dominio Mailgun:</strong> ${liveSettings.mailgunDomain || "No Configurado"} <br />
-          <strong>Región:</strong> ${String(liveSettings.mailgunRegion).toUpperCase()} <br />
-          <strong>Remitente:</strong> ${liveSettings.emailSenderFromAddress || "Default"} <br />
-        `;
-      }
+      const diagnosticDetails = `
+        <strong>Proveedor:</strong> Resend API <br />
+        <strong>Remitente:</strong> ${liveSettings.emailSenderFromAddress || "Default"} <br />
+      `;
 
       const testEmailHtml = `
         <div style="font-family: Arial, sans-serif; padding: 30px; background-color: #f8fafc; color: #0f172a; max-width: 500px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px;">

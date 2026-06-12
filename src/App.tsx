@@ -9856,75 +9856,41 @@ const resText = await uploadRes.text();
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Proveedor exclusivo: Mailgun API Directo */}
-                        <div className="space-y-1 md:col-span-2">
-                          <label className="block text-[8px] font-bold uppercase tracking-widest text-indigo-400 font-bold">Proveedor de Correo Electrónico</label>
-                          <div className="px-3 py-2.5 bg-indigo-500/5 border border-indigo-500/10 rounded-xl text-xs text-indigo-700 dark:text-indigo-400 font-semibold flex items-center justify-between">
-                            <span>📧 Mailgun API Directo (Recomendado para Render/Railway)</span>
-                            <span className="text-[9px] bg-indigo-500 text-white px-2 py-0.5 rounded-full uppercase">Activo</span>
-                          </div>
-                        </div>
-
-                        {/* Mailgun API Key */}
-                        <div className="space-y-1 md:col-span-2 animate-fade-in">
-                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Mailgun API Key (Ej: API Key creada en tu cuenta)</label>
+                      <div className="grid grid-cols-1 gap-4 animate-fade-in">
+                        {/* Resend API Key */}
+                        <div className="space-y-1">
+                          <label className="block text-[8px] font-bold uppercase tracking-widest text-indigo-400 font-bold">Resend API Key (Ej: re_...)</label>
                           <input
                             type="password"
-                            placeholder="Tu API Key de Mailgun (Ej: api_key... o key-...)"
-                            value={editingSettings.mailgunApiKey || ""}
-                            onChange={(e) => setEditingSettings({ ...editingSettings, mailgunApiKey: e.target.value, emailSenderProvider: "mailgun" })}
+                            placeholder="Tu API Key de Resend (Ej: re_eY9... o dejas en blanco para usar la Variable de Entorno de AI Studio)"
+                            value={editingSettings.resendApiKey || ""}
+                            onChange={(e) => setEditingSettings({ ...editingSettings, resendApiKey: e.target.value, emailSenderProvider: 'resend' })}
                             className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
                           />
-                        </div>
-
-                        {/* Mailgun Domain */}
-                        <div className="space-y-1">
-                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Dominio de Envío de Mailgun</label>
-                          <input
-                            type="text"
-                            placeholder="sandbox432ebc5c64c84856bb985204939f0411.mailgun.org"
-                            value={editingSettings.mailgunDomain || ""}
-                            onChange={(e) => setEditingSettings({ ...editingSettings, mailgunDomain: e.target.value, emailSenderProvider: "mailgun" })}
-                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
-                          />
-                        </div>
-
-                        {/* Mailgun Region */}
-                        <div className="space-y-1">
-                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Endpoint / Región de Mailgun</label>
-                          <select
-                            value={editingSettings.mailgunRegion || "us"}
-                            onChange={(e) => setEditingSettings({ ...editingSettings, mailgunRegion: e.target.value as 'us' | 'eu', emailSenderProvider: "mailgun" })}
-                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
-                          >
-                            <option value="us">Estados Unidos / Global (api.mailgun.net)</option>
-                            <option value="eu">Unión Europea (api.eu.mailgun.net)</option>
-                          </select>
-                        </div>
-
-                        <div className="md:col-span-2 p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-[10.5px] text-indigo-700 dark:text-indigo-300 leading-relaxed space-y-2 font-semibold animate-fade-in">
-                          <div className="text-[12px] text-indigo-800 dark:text-indigo-200 font-bold flex items-center gap-1">
-                            <span>✨</span> Cómo Configurar tu Mailgun según tu captura de pantalla:
-                          </div>
-                          <ul className="list-decimal pl-4 space-y-1 text-slate-600 dark:text-zinc-300 font-medium">
-                            <li>Copia tu <strong>API Key</strong> generada.</li>
-                            <li>Ingresa tu dominio Sandbox exacto: <code className="font-mono text-indigo-600 dark:text-indigo-400 bg-indigo-500/5 px-1 py-0.5 rounded">sandbox432ebc5c64c84856bb985204939f0411.mailgun.org</code> en el campo superior.</li>
-                            <li><strong>Remitente Obligatorio:</strong> En el campo "Remitente Personalizado" de abajo, debes escribir exactamente el correo del Sandbox: <code className="font-mono text-indigo-600 dark:text-indigo-400 bg-indigo-500/5 px-1 py-0.5 rounded">Mailgun Sandbox &lt;postmaster@sandbox432ebc5c64c84856bb985204939f0411.mailgun.org&gt;</code> para evitar rechazos.</li>
-                            <li><strong>Autorizar Correo de Pruebas:</strong> Dado que estás en el modo de prueba (Sandbox), Mailgun bloquea los envíos a cualquier dirección que no esté autorizada. Ve a tu panel de Mailgun y agrega <code className="font-mono text-indigo-600 dark:text-indigo-400 bg-indigo-500/5 px-1 py-0.5 rounded">juem.mvd@gmail.com</code> (o tu email destinatario de pruebas) en la sección <em>Authorized Recipients</em> de la derecha. Luego, <strong>revisa su bandeja de entrada y confirma la invitación</strong> enviada por Mailgun. ¡Sin este paso, los correos darán error!</li>
-                          </ul>
                         </div>
 
                         {/* From Address */}
-                        <div className="space-y-1 md:col-span-2">
-                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400 font-semibold">Remitente Personalizado (Ejemplo: Tienda &lt;info@tienda.com&gt; o postmaster@sandbox...)</label>
+                        <div className="space-y-1">
+                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400 font-bold">Remitente Personalizado (Ejemplo: Tienda &lt;onboarding@resend.dev&gt; o no-reply@tuservidor.com)</label>
                           <input
                             type="text"
-                            placeholder="Ventas Juem <no-reply@tuservidor.com>"
+                            placeholder="Ventas Juem <onboarding@resend.dev>"
                             value={editingSettings.emailSenderFromAddress || ""}
-                            onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderFromAddress: e.target.value })}
+                            onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderFromAddress: e.target.value, emailSenderProvider: 'resend' })}
                             className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
                           />
+                        </div>
+
+                        {/* Guide / Help Card */}
+                        <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-[10.5px] text-indigo-700 dark:text-indigo-300 leading-relaxed space-y-2 font-semibold">
+                          <div className="text-[12px] text-indigo-800 dark:text-indigo-200 font-bold flex items-center gap-1">
+                            <span>✨</span> Guía rápida de Configuración de Resend:
+                          </div>
+                          <ul className="list-decimal pl-4 space-y-1 text-slate-650 dark:text-zinc-300 font-medium">
+                            <li><strong>API Key:</strong> Consigue tu clave de API gratis en <a href="https://resend.com" target="_blank" rel="noreferrer" className="underline text-indigo-600 dark:text-indigo-450">resend.com</a> e ingrésala arriba. También puedes definir la variable de entorno <code className="font-mono text-indigo-600 dark:text-indigo-400 bg-indigo-500/5 px-1 py-0.5">RESEND_API_KEY</code> en los Secrets de la app en AI Studio.</li>
+                            <li><strong>Remitente (From):</strong> Con una cuenta gratuita de Resend, el remitente debe ser <code className="font-mono text-indigo-600 dark:text-indigo-400 bg-indigo-500/5 px-1 py-0.5">onboarding@resend.dev</code> (Ej: <code className="font-mono">Ventas Juem &lt;onboarding@resend.dev&gt;</code>).</li>
+                            <li><strong>Destinatario de Pruebas:</strong> Resend gratuito solo permite enviar a tu propio correo registrado en tu cuenta de Resend. Asegúrate de probar el envío a ese correo personal exacto.</li>
+                          </ul>
                         </div>
                       </div>
 

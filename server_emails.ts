@@ -353,7 +353,8 @@ export async function sendEmail(params: {
   const host = (process.env.EMAIL_SENDER_SMTP_HOST || settings.emailSenderSmtpHost || "").trim().replace(/[\s\t\r\n]/g, "");
   const port = Number(process.env.EMAIL_SENDER_SMTP_PORT) || Number(settings.emailSenderSmtpPort) || 465;
   const user = (process.env.EMAIL_SENDER_SMTP_USER || settings.emailSenderSmtpUser || "").trim();
-  const pass = (process.env.EMAIL_SENDER_SMTP_PASS || settings.emailSenderSmtpPass || "").trim();
+  // Automatically strip all spaces from the Gmail App Password (Google displays them as 4 blocks of 4 separated by spaces, but SMTP servers require them without spaces)
+  const pass = (process.env.EMAIL_SENDER_SMTP_PASS || settings.emailSenderSmtpPass || "").trim().replace(/\s+/g, "");
 
   // If SMTP configurations are missing, operate as a simulator log
   if (!host || !user || !pass) {

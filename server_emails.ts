@@ -255,6 +255,56 @@ export async function sendEmail(params: {
     }
   }
 
+  // --- MAILGUN PROVIDER (API) ---
+  if (provider === "mailgun") {
+    const mgApiKey = (settings.mailgunApiKey || process.env.MAILGUN_API_KEY || "").trim();
+    const mgDomain = (settings.mailgunDomain || process.env.MAILGUN_DOMAIN || "").trim();
+    const mgRegion = (settings.mailgunRegion || process.env.MAILGUN_REGION || "us").toLowerCase().trim();
+
+    if (!mgApiKey || !mgDomain) {
+      console.log(`[Email Simulator] Destinatario: ${to}. Asunto: "${subject}". Mailgun no configurado completamente (falta API Key o Dominio).`);
+      return { success: true, status: "simulated" };
+    }
+
+    const host = mgRegion === "eu" ? "api.eu.mailgun.net" : "api.mailgun.net";
+    const url = `https://${host}/v3/${mgDomain}/messages`;
+    const authHeader = `Basic ${Buffer.from(`api:${mgApiKey}`).toString("base64")}`;
+
+    console.log(`[Mailgun Mailbox] Despachando correo con dominio: ${mgDomain}, región: ${mgRegion}`);
+
+    try {
+      const params = new URLSearchParams();
+      params.append("from", from);
+      params.append("to", to);
+      params.append("subject", subject);
+      params.append("html", html);
+      params.append("text", text || "Por favor, use un cliente de correo con soporte HTML para ver este mensaje.");
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Authorization": authHeader,
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: params
+      });
+
+      const responseData = await response.json() as any;
+      if (response.ok && responseData && (responseData.id || responseData.message)) {
+        console.log(`[Mailgun Mailbox] Correo enviado exitosamente a: ${to} (${responseData.message || "ID: " + responseData.id})`);
+        return { success: true, status: "success" };
+      } else {
+        const errMsg = responseData?.message || JSON.stringify(responseData) || `Status ${response.status}`;
+        console.error(`[Mailgun Mailbox Error] Error al despachar a ${to}: ${errMsg}`);
+        return { success: false, status: "failure", error: errMsg };
+      }
+    } catch (err: any) {
+      const errMsg = String(err.message || err);
+      console.error(`[Mailgun Mailbox Error] Excepción al despachar a ${to}: ${errMsg}`);
+      return { success: false, status: "failure", error: errMsg };
+    }
+  }
+
   // --- RESEND PROVIDER (API) ---
   const apiKey = (settings.resendApiKey || process.env.RESEND_API_KEY || "").trim();
 

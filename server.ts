@@ -1437,8 +1437,9 @@ async function startServer() {
       // Force enabled true for the connection test purpose
       liveSettings.emailSenderEnabled = true;
 
+      const providerLabel = String(liveSettings.emailSenderProvider || "resend").toUpperCase();
       const diagnosticDetails = `
-        <strong>Proveedor:</strong> Resend API <br />
+        <strong>Proveedor:</strong> ${providerLabel} <br />
         <strong>Remitente:</strong> ${liveSettings.emailSenderFromAddress || "Default"} <br />
       `;
 

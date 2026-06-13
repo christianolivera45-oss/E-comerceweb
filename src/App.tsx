@@ -9856,41 +9856,175 @@ const resText = await uploadRes.text();
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 gap-4 animate-fade-in">
-                        {/* Resend API Key */}
+                      <div className="space-y-4 animate-fade-in">
+                        {/* Selector de Proveedor de Email */}
                         <div className="space-y-1">
-                          <label className="block text-[8px] font-bold uppercase tracking-widest text-indigo-400 font-bold">Resend API Key (Ej: re_...)</label>
-                          <input
-                            type="password"
-                            placeholder="Tu API Key de Resend (Ej: re_eY9... o dejas en blanco para usar la Variable de Entorno de AI Studio)"
-                            value={editingSettings.resendApiKey || ""}
-                            onChange={(e) => setEditingSettings({ ...editingSettings, resendApiKey: e.target.value, emailSenderProvider: 'resend' })}
-                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
-                          />
+                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400 dark:text-zinc-500">Proveedor de Email</label>
+                          <div className="grid grid-cols-3 gap-2">
+                            {[
+                              { id: 'resend', label: 'Resend API' },
+                              { id: 'smtp', label: 'Servidor SMTP' },
+                              { id: 'mailgun', label: 'Mailgun API' }
+                            ].map((prov) => (
+                              <button
+                                key={prov.id}
+                                type="button"
+                                onClick={() => setEditingSettings({ ...editingSettings, emailSenderProvider: prov.id })}
+                                className={`px-2 py-2.5 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                                  (editingSettings.emailSenderProvider || 'resend') === prov.id
+                                    ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500 text-indigo-600 dark:text-indigo-450 font-extrabold shadow-sm'
+                                    : 'bg-slate-50 dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-900'
+                                }`}
+                              >
+                                {prov.label}
+                              </button>
+                            ))}
+                          </div>
                         </div>
 
-                        {/* From Address */}
+                        {/* Campos dinámicos según el proveedor */}
+                        {(editingSettings.emailSenderProvider || 'resend') === 'resend' && (
+                          <div className="space-y-4 animate-fade-in">
+                            {/* Resend API Key */}
+                            <div className="space-y-1">
+                              <label className="block text-[8px] font-bold uppercase tracking-widest text-indigo-400">Resend API Key</label>
+                              <input
+                                type="password"
+                                placeholder="Tu API Key de Resend (Ej: re_eY9... o dejas en blanco para usar la Variable de Entorno)"
+                                value={editingSettings.resendApiKey || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, resendApiKey: e.target.value })}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                              />
+                            </div>
+
+                            {/* Guide / Help Card */}
+                            <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-[10.5px] text-indigo-700 dark:text-indigo-300 leading-relaxed space-y-2 font-semibold">
+                              <div className="text-[12px] text-indigo-800 dark:text-indigo-200 font-bold flex items-center gap-1">
+                                <span>✨</span> Guía de Configuración de Resend:
+                              </div>
+                              <ul className="list-decimal pl-4 space-y-1 text-slate-600 dark:text-zinc-300 font-medium">
+                                <li>Consigue tu clave en <a href="https://resend.com" target="_blank" rel="noreferrer" className="underline text-indigo-600">resend.com</a> e ingrésala arriba.</li>
+                                <li>Con una cuenta gratuita, el remitente debe estar registrado o ser <code className="font-mono text-indigo-600 dark:text-indigo-400 bg-indigo-500/5 px-1 py-0.5">onboarding@resend.dev</code>.</li>
+                                <li>Sólo se permite enviar correos a tu correo personal de registro si no tienes un dominio propio verificado.</li>
+                              </ul>
+                            </div>
+                          </div>
+                        )}
+
+                        {editingSettings.emailSenderProvider === 'smtp' && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in">
+                            {/* SMTP Host */}
+                            <div className="space-y-1 col-span-1 sm:col-span-2">
+                              <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Servidor SMTP Host</label>
+                              <input
+                                type="text"
+                                placeholder="smtp.gmail.com u otro"
+                                value={editingSettings.emailSenderSmtpHost || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpHost: e.target.value })}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                              />
+                            </div>
+                            {/* SMTP Port */}
+                            <div className="space-y-1">
+                              <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Puerto SMTP</label>
+                              <input
+                                type="number"
+                                placeholder="465"
+                                value={editingSettings.emailSenderSmtpPort || 465}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpPort: parseInt(e.target.value, 10) || 465 })}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                              />
+                            </div>
+                            {/* SMTP User */}
+                            <div className="space-y-1">
+                              <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Usuario / Correo SMTP</label>
+                              <input
+                                type="text"
+                                placeholder="tuusuario@gmail.com"
+                                value={editingSettings.emailSenderSmtpUser || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpUser: e.target.value })}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                              />
+                            </div>
+                            {/* SMTP Pass */}
+                            <div className="space-y-1 col-span-1 sm:col-span-2">
+                              <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Contraseña SMTP / Clave de Aplicante</label>
+                              <input
+                                type="password"
+                                placeholder="••••••••••••••••"
+                                value={editingSettings.emailSenderSmtpPass || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderSmtpPass: e.target.value })}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                              />
+                            </div>
+
+                            {/* SMTP Guide */}
+                            <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-[10.5px] text-indigo-700 dark:text-indigo-300 leading-relaxed space-y-1 font-semibold col-span-1 sm:col-span-2">
+                              <div className="text-[12px] text-indigo-800 dark:text-indigo-200 font-bold">💡 Tip para Gmail SMTP:</div>
+                              <p className="text-slate-600 dark:text-zinc-300 font-medium">
+                                Para usar Gmail, debes tener activada la verificación en dos pasos en tu cuenta de Google y generar una "Contraseña de Aplicación" dedicada desde la seguridad de tu cuenta. No uses tu contraseña habitual. El puerto recomendado es 465 (Secure SSL).
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {editingSettings.emailSenderProvider === 'mailgun' && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in">
+                            {/* Mailgun Domain */}
+                            <div className="space-y-1">
+                              <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Dominio de Mailgun</label>
+                              <input
+                                type="text"
+                                placeholder="mg.tusitio.com o sandbox..."
+                                value={editingSettings.mailgunDomain || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, mailgunDomain: e.target.value })}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                              />
+                            </div>
+                            {/* Mailgun Region */}
+                            <div className="space-y-1">
+                              <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Región de Mailgun</label>
+                              <select
+                                value={editingSettings.mailgunRegion || "us"}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, mailgunRegion: e.target.value as 'us' | 'eu' })}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-bold"
+                              >
+                                <option value="us">US - Estados Unidos (Default)</option>
+                                <option value="eu">EU - Europa (api.eu.mailgun.net)</option>
+                              </select>
+                            </div>
+                            {/* Mailgun API Key */}
+                            <div className="space-y-1 col-span-1 sm:col-span-2">
+                              <label className="block text-[8px] font-bold uppercase tracking-widest text-indigo-400">Mailgun Private API Key</label>
+                              <input
+                                type="password"
+                                placeholder="api_key... o key-..."
+                                value={editingSettings.mailgunApiKey || ""}
+                                onChange={(e) => setEditingSettings({ ...editingSettings, mailgunApiKey: e.target.value })}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono"
+                              />
+                            </div>
+
+                            {/* Mailgun Guide */}
+                            <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-[10.5px] text-indigo-700 dark:text-indigo-300 leading-relaxed space-y-1 font-semibold col-span-1 sm:col-span-2">
+                              <div className="text-[12px] text-indigo-800 dark:text-indigo-200 font-bold">⚡ Configuración de Mailgun:</div>
+                              <p className="text-slate-600 dark:text-zinc-300 font-medium">
+                                Mailgun utiliza su API basada en HTTPS. Asegúrate de configurar correctamente tu dominio en <a href="https://mailgun.com" target="_blank" rel="noreferrer" className="underline text-indigo-600">mailgun.com</a>, seleccionar la región correcta, e introducir tu API Key privada y dominio verificado.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* From Address (Muestra para cualquier proveedor ya que todos comparten este remitente) */}
                         <div className="space-y-1">
-                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400 font-bold">Remitente Personalizado (Ejemplo: Tienda &lt;onboarding@resend.dev&gt; o no-reply@tuservidor.com)</label>
+                          <label className="block text-[8px] font-bold uppercase tracking-widest text-slate-400">Remitente Personalizado (FROM - Nombre &lt;email@tudominio.com&gt;)</label>
                           <input
                             type="text"
-                            placeholder="Ventas Juem <onboarding@resend.dev>"
+                            placeholder="Ventas Juem <no-reply@notificaciones.juem.com.uy>"
                             value={editingSettings.emailSenderFromAddress || ""}
-                            onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderFromAddress: e.target.value, emailSenderProvider: 'resend' })}
+                            onChange={(e) => setEditingSettings({ ...editingSettings, emailSenderFromAddress: e.target.value })}
                             className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
                           />
-                        </div>
-
-                        {/* Guide / Help Card */}
-                        <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-[10.5px] text-indigo-700 dark:text-indigo-300 leading-relaxed space-y-2 font-semibold">
-                          <div className="text-[12px] text-indigo-800 dark:text-indigo-200 font-bold flex items-center gap-1">
-                            <span>✨</span> Guía rápida de Configuración de Resend:
-                          </div>
-                          <ul className="list-decimal pl-4 space-y-1 text-slate-650 dark:text-zinc-300 font-medium">
-                            <li><strong>API Key:</strong> Consigue tu clave de API gratis en <a href="https://resend.com" target="_blank" rel="noreferrer" className="underline text-indigo-600 dark:text-indigo-450">resend.com</a> e ingrésala arriba. También puedes definir la variable de entorno <code className="font-mono text-indigo-600 dark:text-indigo-400 bg-indigo-500/5 px-1 py-0.5">RESEND_API_KEY</code> en los Secrets de la app en AI Studio.</li>
-                            <li><strong>Remitente (From):</strong> Con una cuenta gratuita de Resend, el remitente debe ser <code className="font-mono text-indigo-600 dark:text-indigo-400 bg-indigo-500/5 px-1 py-0.5">onboarding@resend.dev</code> (Ej: <code className="font-mono">Ventas Juem &lt;onboarding@resend.dev&gt;</code>).</li>
-                            <li><strong>Destinatario de Pruebas:</strong> Resend gratuito solo permite enviar a tu propio correo registrado en tu cuenta de Resend. Asegúrate de probar el envío a ese correo personal exacto.</li>
-                          </ul>
                         </div>
                       </div>
 

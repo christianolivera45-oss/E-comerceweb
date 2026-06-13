@@ -545,13 +545,7 @@ export function generateOrderCreatedEmailHtml(order: any, settings: any): { subj
             `;
           })()}
 
-          <!-- CTA to Support WhatsApp -->
-          <div style="text-align: center; margin-top: 35px; border-top: 1px solid #f1f5f9; padding-top: 25px;">
-            <p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">¿Tienes alguna consulta rápida o deseas apurar tu paquete por WhatsApp?</p>
-            <a href="https://wa.me/${(settings.whatsappNumber || "").replace(/\D/g, "")}" style="display: inline-block; background-color: #25d366; color: #ffffff; padding: 11px 22px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 13px; box-shadow: 0 4px 6px -1px rgba(37, 211, 102, 0.2); text-transform: uppercase; letter-spacing: 0.05em;">
-              Conectar vía WhatsApp 📱
-            </a>
-          </div>
+
         </div>
 
         <!-- Footer -->
@@ -714,13 +708,7 @@ export function generateOrderShippedEmailHtml(order: any, settings: any): { subj
             </a>
           </div>
 
-          <!-- Contact WhatsApp Support -->
-          <div style="text-align: center; margin-top: 35px; border-top: 1px solid #f1f5f9; padding-top: 25px;">
-            <p style="font-size: 12px; color: #64748b; margin-bottom: 12px;">¿Tienes alguna consulta o inconveniente con el envío?</p>
-            <a href="https://wa.me/${(settings.whatsappNumber || "").replace(/\D/g, "")}" style="display: inline-block; background-color: #25d366; color: #ffffff; padding: 10px 20px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 13px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-transform: uppercase;">
-              Soporte vía WhatsApp
-            </a>
-          </div>
+
         </div>
 
         <!-- Footer -->
@@ -828,13 +816,7 @@ export function generateOrderStatusChangedEmailHtml(params: {
             </div>
           </div>
 
-          <!-- Support Box -->
-          <div style="text-align: center; margin-top: 35px; border-top: 1px solid #f1f5f9; padding-top: 25px;">
-            <p style="font-size: 12px; color: #64748b; margin-bottom: 15px;">¿Tienes alguna duda de tu método de entrega?</p>
-            <a href="https://wa.me/${(settings.whatsappNumber || "").replace(/\D/g, "")}" style="display: inline-block; background-color: #25d366; color: #ffffff; padding: 10px 20px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 13px; text-transform: uppercase;">
-              Soporte por WhatsApp
-            </a>
-          </div>
+
         </div>
 
         <!-- Footer -->

@@ -184,19 +184,33 @@ export async function sendEmail(params: {
   const { settings, to, subject, html, text } = params;
 
   // Guard: If email sender feature is explicitly disabled
-  if (!settings.emailSenderEnabled) {
+  let isEnabled = settings.emailSenderEnabled;
+  if (isEnabled === undefined || isEnabled === null) {
+    isEnabled = process.env.EMAIL_SENDER_ENABLED === "true" || !!process.env.RESEND_API_KEY || !!process.env.EMAIL_SENDER_SMTP_USER;
+  }
+
+  if (!isEnabled) {
     return { success: true, status: "disabled" };
   }
 
-  const provider = (settings.emailSenderProvider || "resend").toLowerCase();
-  const from = (settings.emailSenderFromAddress || process.env.EMAIL_SENDER_FROM_ADDRESS || "").trim() || "Ventas Juem <onboarding@resend.dev>";
+  const provider = (settings.emailSenderProvider || process.env.EMAIL_SENDER_PROVIDER || "resend").toLowerCase();
+  let from = (settings.emailSenderFromAddress || process.env.EMAIL_SENDER_FROM_ADDRESS || "").trim();
+  if (!from) {
+    from = "Ventas Juem <onboarding@resend.dev>";
+  } else if (!from.includes("@")) {
+    if (from.includes(".")) {
+      from = `Ventas Juem <no-reply@${from}>`;
+    } else {
+      from = `Ventas Juem <no-reply@notificaciones.juem.com.uy>`;
+    }
+  }
 
   // --- SMTP PROVIDER (Nodemailer) ---
   if (provider === "smtp") {
-    const smtpHost = (settings.emailSenderSmtpHost || "").trim() || "smtp.gmail.com";
-    const smtpPort = parseInt(settings.emailSenderSmtpPort, 10) || 465;
-    const smtpUser = (settings.emailSenderSmtpUser || "").trim();
-    const smtpPass = (settings.emailSenderSmtpPass || "").trim();
+    const smtpHost = (settings.emailSenderSmtpHost || process.env.EMAIL_SENDER_SMTP_HOST || "").trim() || "smtp.gmail.com";
+    const smtpPort = parseInt(settings.emailSenderSmtpPort || process.env.EMAIL_SENDER_SMTP_PORT, 10) || 465;
+    const smtpUser = (settings.emailSenderSmtpUser || process.env.EMAIL_SENDER_SMTP_USER || "").trim();
+    const smtpPass = (settings.emailSenderSmtpPass || process.env.EMAIL_SENDER_SMTP_PASS || "").trim();
 
     if (!smtpUser || !smtpPass) {
       console.log(`[Email Simulator] Destinatario: ${to}. Asunto: "${subject}". SMTP no configurado completamente (falta usuario/contraseña).`);

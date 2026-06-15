@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight, Sparkles, MessageCircle, Play, Pause } from "lucide-react";
 import { SiteSettings, HeroSlide } from "../types";
 import { motion, AnimatePresence } from "motion/react";
@@ -38,6 +38,10 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
   const [isPlaying, setIsPlaying] = useState(true);
   const [direction, setDirection] = useState(1); // 1 = right, -1 = left
 
+  // Touch gesture support states for mobile swiping
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+
   useEffect(() => {
     if (!isPlaying) return;
     const interval = setInterval(() => {
@@ -56,6 +60,30 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
     setCurrentIndex((prev) => (prev - 1 + slides.length) % slides.length);
   };
 
+  // Touch handlers for mobile swipe
+  const onTouchStart = (e: React.TouchEvent) => {
+    setIsPlaying(false);
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    setIsPlaying(true);
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > 50;
+    const isRightSwipe = distance < -50;
+    if (isLeftSwipe) {
+      handleNext();
+    } else if (isRightSwipe) {
+      handlePrev();
+    }
+  };
+
   const handleWhatsAppContact = (slideTitle: string) => {
     const text = `Hola! Vi el banner "${slideTitle}" en la tienda ${settings.siteTitle} y me gustaría recibir más información sobre el catálogo y ofertas actuales.`;
     const cleanPhone = settings.whatsappNumber.replace(/[^0-9]/g, "");
@@ -65,7 +93,7 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
   // Variance configuration for motion slider transition
   const slideVariants = {
     enter: (dir: number) => ({
-      x: dir > 0 ? 1000 : -1000,
+      x: dir > 0 ? "100%" : "-100%",
       opacity: 0
     }),
     center: {
@@ -75,16 +103,19 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
     },
     exit: (dir: number) => ({
       zIndex: 0,
-      x: dir < 0 ? 1000 : -1000,
+      x: dir < 0 ? "100%" : "-100%",
       opacity: 0
     })
   };
 
   return (
     <div 
-      className="relative h-[440px] md:h-[560px] w-full overflow-hidden bg-[#050B1A] text-white select-none group"
+      className="relative h-[280px] sm:h-[380px] md:h-[480px] lg:h-[560px] w-full overflow-hidden bg-[#050B1A] text-white select-none group"
       onMouseEnter={() => setIsPlaying(false)}
       onMouseLeave={() => setIsPlaying(true)}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
     >
       {/* Slides Viewport */}
       <div className="absolute inset-0 w-full h-full">
@@ -106,52 +137,49 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
             <img
               src={slides[currentIndex].imageUrl}
               alt={slides[currentIndex].title}
-              className="w-full h-full object-cover object-center transition-opacity duration-500 filter brightness-135 contrast-105 saturate-[1.05]"
+              className="w-full h-full object-cover object-center transition-opacity duration-500 filter brightness-110 contrast-105 saturate-[1.05]"
               style={{ opacity: (settings.bannerOpacity !== undefined ? Math.max(settings.bannerOpacity, 85) : 95) / 100 }}
               referrerPolicy="no-referrer"
             />
             
-            {/* Premium Soft Ambient Gradient Overlays:
-                - Left-to-right gradient is softened from solid navy/black to transparent much earlier.
-                - Bottom-up is made very subtle to avoid darkening the bottom half of the image.
-            */}
-            <div className="absolute inset-0 bg-gradient-to-r from-[#050B1A]/80 via-[#050B1A]/40 to-transparent md:block hidden animate-fade-in"></div>
-            <div className="absolute inset-0 bg-gradient-to-t from-[#050B1A]/80 via-[#050B1A]/25 to-transparent md:hidden block"></div>
-            <div className="absolute inset-0 bg-gradient-to-t from-[#050B1A]/40 via-transparent to-transparent"></div>
+            {/* Premium Soft Ambient Gradient Overlays */}
+            <div className="absolute inset-0 bg-gradient-to-r from-[#050B1A]/85 via-[#050B1A]/50 to-transparent md:block hidden animate-fade-in"></div>
+            <div className="absolute inset-0 bg-gradient-to-t from-[#050B1A]/90 via-[#050B1A]/40 to-transparent md:hidden block"></div>
+            <div className="absolute inset-0 bg-gradient-to-t from-[#050B1A]/50 via-transparent to-transparent"></div>
 
             {/* Slide Content */}
             <div className="absolute inset-0 flex items-center uppercase-none">
-              <div className="max-w-7xl mx-auto px-6 w-full text-center md:text-left relative z-10">
+              <div className="max-w-7xl mx-auto px-5 sm:px-8 w-full text-center md:text-left relative z-10">
                 <div className="max-w-2xl">
 
                   <motion.h1 
-                    initial={{ opacity: 0, y: 20 }}
+                    initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.25, duration: 0.4 }}
-                    className="text-3xl sm:text-5xl md:text-7.5xl font-serif font-light text-[#F4EAD7] tracking-wide leading-tight drop-shadow-md mb-4"
+                    transition={{ delay: 0.2, duration: 0.4 }}
+                    className="text-xl sm:text-3xl md:text-5xl lg:text-7.5xl font-serif font-light text-[#F4EAD7] tracking-wide leading-tight drop-shadow-md mb-2 md:mb-4"
                   >
                     {slides[currentIndex].title}
                   </motion.h1>
                   
                   <motion.p 
-                    initial={{ opacity: 0, y: 20 }}
+                    initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.35, duration: 0.4 }}
-                    className="text-sm sm:text-base text-slate-350 font-sans tracking-wide leading-relaxed max-w-xl font-light"
+                    transition={{ delay: 0.3, duration: 0.4 }}
+                    className="text-[11px] sm:text-sm md:text-base text-zinc-350 font-sans tracking-wide leading-normal md:leading-relaxed max-w-xl font-light line-clamp-2 md:line-clamp-none"
                     style={{ color: "#D3CCD8" }}
                   >
                     {slides[currentIndex].subtitle}
                   </motion.p>
 
                   <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
+                    initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.45, duration: 0.4 }}
-                    className="mt-8 flex flex-wrap items-center justify-center md:justify-start gap-4"
+                    transition={{ delay: 0.4, duration: 0.4 }}
+                    className="mt-3.5 sm:mt-6 md:mt-8 flex flex-wrap items-center justify-center md:justify-start gap-4"
                   >
                     <button
                       onClick={() => onExploreCatalog(slides[currentIndex].buttonLink)}
-                      className="py-3 px-8 rounded-full font-sans font-bold text-xs uppercase tracking-widest bg-[#D4A55A] text-[#050B1A] hover:bg-[#E6BF76] shadow-xl hover:shadow-[#D4A55A]/10 cursor-pointer transform hover:-translate-y-0.5 transition duration-300"
+                      className="py-2 px-5 sm:py-3 sm:px-8 rounded-full font-sans font-bold text-[9px] sm:text-xs uppercase tracking-widest bg-[#D4A55A] text-[#050B1A] hover:bg-[#E6BF76] shadow-xl hover:shadow-[#D4A55A]/10 cursor-pointer transform active:scale-95 transition duration-300"
                     >
                       {slides[currentIndex].buttonText || "Explorar Colección"}
                     </button>
@@ -163,25 +191,41 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
         </AnimatePresence>
       </div>
 
-      {/* Slide Navigation Left/Right Arrows */}
+      {/* Slide Navigation Left/Right Arrows - hidden on touch screens for clean experience, visible on hover desktop */}
       <button
         onClick={handlePrev}
         aria-label="Anterior"
-        className="absolute left-6 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full bg-[#0B1730]/65 hover:bg-[#D4A55A] border border-[#D4A55A]/25 hover:border-[#D4A55A] flex items-center justify-center text-[#F4EAD7] hover:text-[#050B1A] transition duration-300 opacity-0 group-hover:opacity-100 cursor-pointer active:scale-95"
+        className="absolute left-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-[#0B1730]/65 hover:bg-[#D4A55A] border border-[#D4A55A]/25 hover:border-[#D4A55A] md:flex hidden items-center justify-center text-[#F4EAD7] hover:text-[#050B1A] transition duration-300 opacity-0 group-hover:opacity-100 cursor-pointer active:scale-95"
       >
-        <ChevronLeft className="h-5 w-5" />
+        <ChevronLeft className="h-4.5 w-4.5" />
       </button>
 
       <button
         onClick={handleNext}
         aria-label="Siguiente"
-        className="absolute right-6 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full bg-[#0B1730]/65 hover:bg-[#D4A55A] border border-[#D4A55A]/25 hover:border-[#D4A55A] flex items-center justify-center text-[#F4EAD7] hover:text-[#050B1A] transition duration-300 opacity-0 group-hover:opacity-100 cursor-pointer active:scale-95"
+        className="absolute right-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-[#0B1730]/65 hover:bg-[#D4A55A] border border-[#D4A55A]/25 hover:border-[#D4A55A] md:flex hidden items-center justify-center text-[#F4EAD7] hover:text-[#050B1A] transition duration-300 opacity-0 group-hover:opacity-100 cursor-pointer active:scale-95"
       >
-        <ChevronRight className="h-5 w-5" />
+        <ChevronRight className="h-4.5 w-4.5" />
       </button>
 
-
-
+      {/* Slide Indicators / Pagos Dots */}
+      <div className="absolute bottom-3 left-0 right-0 z-20 hidden md:flex justify-center gap-1.5">
+        {slides.map((_, index) => (
+          <button
+            key={index}
+            onClick={() => {
+              setDirection(index > currentIndex ? 1 : -1);
+              setCurrentIndex(index);
+            }}
+            className={`w-1.5 h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
+              index === currentIndex 
+                ? "bg-[#D4A55A] w-5" 
+                : "bg-white/30 hover:bg-white/60"
+            }`}
+            aria-label={`Ir a diapositiva ${index + 1}`}
+          />
+        ))}
+      </div>
     </div>
   );
 }

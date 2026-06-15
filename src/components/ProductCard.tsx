@@ -16,6 +16,8 @@ export default function ProductCard({
   onViewProduct,
   settings
 }: ProductCardProps) {
+  const [isHovered, setIsHovered] = useState<boolean>(false);
+
   const isDiscounted = product.originalPrice && product.originalPrice > product.price;
   const discountPercent = isDiscounted
     ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100)
@@ -149,16 +151,29 @@ export default function ProductCard({
       </div>
 
       {/* Product Content Details */}
-      <div className="flex flex-col flex-1 p-4 bg-[#0B1730]">
+      <div className="flex flex-col flex-1 p-4 bg-[#0B1730] min-w-0">
         {/* Category */}
         <span className="text-[9px] sm:text-[10px] font-bold tracking-widest uppercase text-[#D4A55A]/85 mb-1 bg-[#D4A55A]/5 border border-[#D4A55A]/10 px-2 py-0.5 rounded-md self-start">
           {product.category}
         </span>
 
         {/* Product Title */}
-        <h3 className="text-xs sm:text-sm font-semibold text-[#F4EAD7] tracking-wide leading-snug truncate group-hover:text-[#E6BF76] transition-colors mt-1.5">
-          {product.name}
-        </h3>
+        <div 
+          className="relative mt-1.5 flex flex-col justify-start w-full min-w-0"
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+          onTouchStart={() => setIsHovered(true)}
+          onTouchEnd={() => setIsHovered(false)}
+        >
+          <h3 
+            className={`text-xs sm:text-sm font-semibold text-[#F4EAD7] tracking-wide leading-snug group-hover:text-[#E6BF76] transition-colors cursor-pointer select-none block w-full ${
+              isHovered ? "whitespace-normal break-words" : "truncate"
+            }`}
+            title={product.name}
+          >
+            {product.name}
+          </h3>
+        </div>
 
         {/* Pricing info directly below - no description block to assure uniform card columns */}
         <div className="flex items-baseline gap-2 mt-2">

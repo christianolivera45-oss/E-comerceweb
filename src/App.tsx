@@ -2593,24 +2593,16 @@ export default function App() {
         {/* Main Layout Header based on design HTML & Professional Polish theme */}
         <header className="min-h-[3.5rem] h-14 md:h-16 flex items-center justify-between px-4 md:px-6 shrink-0 relative z-40 gap-3 md:gap-4 transition-all duration-300 bg-transparent">
         
-        {/* Logo and hamburger container */}
+        {/* Logo and container */}
         <div className="flex items-center gap-2 md:gap-4 select-none">
-          {/* Mobile hamburger toggle */}
-          {activeTab === "storefront" && (
-            <button
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="p-2 rounded-xl lg:hidden transition cursor-pointer hover:bg-[#0B1730] text-[#E6BF76] hover:text-white"
-              title="Abrir menú"
-              aria-label="Menú"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
-          )}
-
           <div 
             onClick={() => {
+              setSelectedProduct(null);
+              setActiveTab("storefront");
               navigateToProductRoute("todos", "all");
-              setIsMobileMenuOpen(false);
+              setSearchQuery("");
+              setIsHeaderSearchOpen(false);
+              window.scrollTo({ top: 0, behavior: "smooth" });
             }}
             className="flex items-center gap-2 md:gap-4 shrink-0 cursor-pointer"
           >
@@ -2736,10 +2728,23 @@ export default function App() {
 
         {/* Dynamic Nav link / controls */}
         <div className="flex items-center gap-3 md:gap-4 font-sans text-sm shrink-0">
-          {activeTab === "storefront" ? (
+          {activeTab === "storefront" || activeTab === "checkout" ? (
             <>
-              {/* Expandable Search Input on Header */}
-              <div id="header-search-container" className="relative flex items-center">
+              {activeTab === "checkout" ? (
+                <button
+                  onClick={() => {
+                    setActiveTab("storefront");
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-bold py-1.5 px-3 rounded-lg transition border border-[#D4A55A]/25 bg-[#0B1730]/65 text-[#F4EAD7] hover:border-[#D4A55A]/60 hover:bg-[#D4A55A]/10 hover:text-[#E6BF76] cursor-pointer"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5 text-[#E6BF76]" />
+                  <span>Volver a la Tienda</span>
+                </button>
+              ) : (
+                <>
+                  {/* Expandable Search Input on Header */}
+                  <div id="header-search-container" className={`relative items-center ${isHeaderSearchOpen ? 'flex' : 'hidden lg:flex'}`}>
                 <motion.div
                   initial={false}
                   animate={{
@@ -2980,7 +2985,7 @@ export default function App() {
               {/* Shopping Cart Trigger */}
               <button
                 onClick={() => setIsCartOpen(true)}
-                className="relative p-2 rounded-xl transition flex items-center gap-1.5 hover:bg-[#0B1730] text-[#E6BF76] hover:text-[#F4EAD7] cursor-pointer"
+                className="relative p-2 rounded-xl transition hidden lg:flex items-center gap-1.5 hover:bg-[#0B1730] text-[#E6BF76] hover:text-[#F4EAD7] cursor-pointer"
               >
                 <CartIcon className="h-5 w-5" />
                 <span className="text-xs font-sans font-bold bg-[#D4A55A] text-[#050B1A] rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
@@ -3000,6 +3005,8 @@ export default function App() {
                   <Settings className="h-3.5 w-3.5" />
                   <span>Panel Admin</span>
                 </button>
+              )}
+                </>
               )}
             </>
           ) : (
@@ -3055,7 +3062,7 @@ export default function App() {
 
       {/* RENDER STOREFRONT OPTION */}
       {activeTab === "storefront" && (
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col pb-16 lg:pb-0">
           {selectedProduct ? (
             <ProductDetails
               product={store.products.find(p => p.id === selectedProduct.id) || selectedProduct}
@@ -3263,7 +3270,7 @@ export default function App() {
               <div className="mb-12">
                 <div className="flex items-center gap-2 mb-6">
                   <div className="w-1.5 h-6 theme-btn-primary rounded-full"></div>
-                  <h3 className="text-xl font-bold tracking-tight">Especiales Destacados</h3>
+                  <h3 className="text-xl font-bold tracking-tight">Destacados</h3>
                   <span className="text-[10px] uppercase font-bold text-yellow-400 animate-pulse">¡Los más buscados!</span>
                 </div>
                 <ProductSlider
@@ -4016,7 +4023,7 @@ export default function App() {
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Velocidad de Giro (Especiales Destacados)</label>
+                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Velocidad de Giro (Destacados)</label>
                       <select
                         value={editingSettings.featuredSliderSpeed !== undefined ? editingSettings.featuredSliderSpeed : 2500}
                         onChange={(e) => setEditingSettings({ ...editingSettings, featuredSliderSpeed: Number(e.target.value) })}
@@ -11029,14 +11036,19 @@ const resText = await uploadRes.text();
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 left-0 z-50 w-4/5 max-w-sm h-full flex flex-col p-6 shadow-2xl border-r border-[#D4A55A]/15 md:hidden overflow-y-auto bg-[#050B1A] text-[#F4EAD7]"
+              className="fixed inset-y-0 left-0 z-50 w-4/5 max-w-sm h-full flex flex-col p-6 shadow-2xl border-r border-[#D4A55A]/15 md:hidden overflow-y-auto scrollbar-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden bg-[#050B1A] text-[#F4EAD7]"
             >
               {/* Drawer Header */}
               <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#D4A55A]/15">
                 <div 
                   onClick={() => {
+                    setSelectedProduct(null);
+                    setActiveTab("storefront");
                     navigateToProductRoute("todos", "all");
+                    setSearchQuery("");
+                    setIsHeaderSearchOpen(false);
                     setIsMobileMenuOpen(false);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
                   }}
                   className="flex items-center gap-2 cursor-pointer select-none"
                 >
@@ -11316,6 +11328,85 @@ const resText = await uploadRes.text();
         allProducts={store.products}
         onAddCrossSell={handleAddToCart}
       />
+
+      {/* Barra de Navegación Inferior Flotante - Ultra Optimizada para Celulares */}
+      {activeTab === "storefront" && (
+        <div id="mobile-bottom-nav" className="fixed bottom-0 left-0 right-0 z-40 bg-[#050B1A]/95 border-t border-[#D4A55A]/30 backdrop-blur-md py-2 px-3 flex items-center justify-between lg:hidden shadow-[0_-8px_30px_rgba(0,0,0,0.6)]">
+          {/* Volver a la Web Principal */}
+          <button
+            onClick={() => {
+              setSelectedProduct(null);
+              setActiveTab("storefront");
+              navigateToProductRoute("todos", "all");
+              setSearchQuery("");
+              setIsHeaderSearchOpen(false);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            className="flex flex-col items-center justify-center gap-0.5 text-center transition text-zinc-400 active:text-[#E6BF76] active:scale-95 cursor-pointer flex-grow basis-0"
+            title="Volver a la Web Principal"
+          >
+            <Home className="h-4.5 w-4.5 text-[#E6BF76]/90" />
+            <span className="text-[9px] font-extrabold uppercase tracking-widest text-[#F4EAD7]/75">Inicio</span>
+          </button>
+
+          {/* Buscador Rápido de Productos */}
+          <button
+            onClick={() => {
+              setIsHeaderSearchOpen(true);
+              setTimeout(() => {
+                document.getElementById("header-search-input")?.focus();
+              }, 150);
+              const el = document.getElementById("catalog-view");
+              if (el) el.scrollIntoView({ behavior: "smooth" });
+            }}
+            className="flex flex-col items-center justify-center gap-0.5 text-center transition text-zinc-400 active:text-[#E6BF76] active:scale-95 cursor-pointer flex-grow basis-0"
+            title="Buscar"
+          >
+            <Search className="h-4.5 w-4.5 text-zinc-305" />
+            <span className="text-[9px] font-extrabold uppercase tracking-widest text-zinc-400">Buscar</span>
+          </button>
+
+          {/* Selector de Categorías (Abre el Menú Lateral) */}
+          <button
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="flex flex-col items-center justify-center gap-0.5 text-center transition text-zinc-400 active:text-[#E6BF76] active:scale-95 cursor-pointer flex-grow basis-0"
+            title="Abrir Menú"
+          >
+            <Menu className="h-4.5 w-4.5 text-[#E6BF76]" />
+            <span className="text-[9px] font-extrabold uppercase tracking-widest text-zinc-400">Menú</span>
+          </button>
+
+          {/* Consulta Directa por WhatsApp */}
+          <button
+            onClick={() => {
+              const cleanPhone = store.settings.whatsappNumber.replace(/[^0-9]/g, "");
+              window.open(`https://wa.me/${cleanPhone}?text=¡Hola!%20Vengo%20desde%20la%20tienda%20online%20de%20Juem%20y%2520quería%2520hacer%2520una%2520consulta.`, "_blank", "noopener,noreferrer");
+            }}
+            className="flex flex-col items-center justify-center gap-0.5 text-center transition text-zinc-400 active:text-[#E6BF76] active:scale-95 cursor-pointer flex-grow basis-0"
+            title="Soporte WhatsApp"
+          >
+            <MessageCircle className="h-4.5 w-4.5 text-emerald-400" />
+            <span className="text-[9px] font-extrabold uppercase tracking-widest text-zinc-400">Consulta</span>
+          </button>
+
+          {/* Mi Carrito de Compras */}
+          <button
+            onClick={() => setIsCartOpen(true)}
+            className="flex flex-col items-center justify-center gap-0.5 text-center transition text-zinc-400 active:text-[#E6BF76] active:scale-95 cursor-pointer flex-grow basis-0 relative"
+            title="Mi Carrito"
+          >
+            <div className="relative">
+              <ShoppingBag className="h-4.5 w-4.5 text-[#E6BF76]" />
+              {cart.reduce((sum, item) => sum + item.quantity, 0) > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-[8px] text-white font-black px-1 rounded-full leading-none flex items-center justify-center animate-bounce min-w-[13px] h-[13px]">
+                  {cart.reduce((sum, item) => sum + item.quantity, 0)}
+                </span>
+              )}
+            </div>
+            <span className="text-[9px] font-extrabold uppercase tracking-widest text-zinc-400">Carrito</span>
+          </button>
+        </div>
+      )}
 
     </div>
   );

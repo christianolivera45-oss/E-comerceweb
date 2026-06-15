@@ -113,7 +113,7 @@ export default function WhatsAppWidget({ whatsappNumber, siteTitle = "Ventas Jue
   ];
 
   return (
-    <div className="fixed bottom-6 right-6 z-[999] font-sans select-none">
+    <div className="hidden lg:block fixed bottom-6 right-6 z-[999] font-sans select-none">
       
       {/* 1. Expandable Full Widget Popup Panel */}
       {isOpen && (

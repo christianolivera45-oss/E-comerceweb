@@ -507,7 +507,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
 
           {/* Thumbnail selector strips - crisp borders and scale transitions */}
           {allImages.length > 1 && (
-            <div className="flex flex-wrap gap-2.5 sm:gap-3 py-1 select-none w-full justify-center max-w-full overflow-x-auto no-scrollbar shrink-0">
+            <div className="hidden sm:flex flex-wrap gap-2.5 sm:gap-3 py-1 select-none w-full justify-center max-w-full overflow-x-auto no-scrollbar shrink-0">
               {allImages.map((imgUrl, idx) => (
                 <button
                   key={idx}

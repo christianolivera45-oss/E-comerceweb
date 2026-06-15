@@ -20,7 +20,10 @@ import {
   X, 
   FileText,
   Home,
-  Mail
+  Mail,
+  ChevronDown,
+  ChevronUp,
+  ShoppingBag
 } from "lucide-react";
 import { CartItem, SiteSettings, Coupon, is3DProduct } from "../types";
 import { motion } from "motion/react";
@@ -156,6 +159,7 @@ export default function Checkout({
   coupons
 }: CheckoutProps) {
   // Client details states (Clean/empty on start as requested)
+  const [isSummaryExpanded, setIsSummaryExpanded] = useState<boolean>(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -390,6 +394,7 @@ export default function Checkout({
   // Stored Addresses (empty by default as requested by the user)
   const [addresses, setAddresses] = useState<AddressItem[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>("");
+  const [shakeStep, setShakeStep] = useState(false);
 
   // Address Modal editing state
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
@@ -458,21 +463,21 @@ export default function Checkout({
   const [errorMessage, setErrorMessage] = useState("");
   const [successOrder, setSuccessOrder] = useState<{ id: string; num: string; waUrl: string; paymentMethod: string; customerEmail: string; totalPrice: number } | null>(null);
 
-  // Auto-open WhatsApp on successful order
-  useEffect(() => {
-    if (successOrder && successOrder.waUrl) {
-      console.log("[Checkout] Pedido completado. Redirigiendo a WhatsApp de manera automatizada...");
-      try {
-        const opened = window.open(successOrder.waUrl, "_blank", "noopener,noreferrer");
-        if (!opened || opened.closed || typeof opened.closed === "undefined") {
-          // If popup is blocked by the browser, redirect current window or print a warning
-          console.warn("[Checkout] Ventana emergente bloqueada por el navegador. El usuario puede hacer clic en el botón principal para proceder.");
-        }
-      } catch (err) {
-        console.error("[Checkout] Error al redirigir automáticamente:", err);
-      }
-    }
-  }, [successOrder]);
+  // Auto-open WhatsApp on successful order disabled to allow customers to view the purchase confirmation screen first
+  // useEffect(() => {
+  //   if (successOrder && successOrder.waUrl) {
+  //     console.log("[Checkout] Pedido completado. Redirigiendo a WhatsApp de manera automatizada...");
+  //     try {
+  //       const opened = window.open(successOrder.waUrl, "_blank", "noopener,noreferrer");
+  //       if (!opened || opened.closed || typeof opened.closed === "undefined") {
+  //         // If popup is blocked by the browser, redirect current window or print a warning
+  //         console.warn("[Checkout] Ventana emergente bloqueada por el navegador. El usuario puede hacer clic en el botón principal para proceder.");
+  //       }
+  //     } catch (err) {
+  //       console.error("[Checkout] Error al redirigir automáticamente:", err);
+  //     }
+  //   }
+  // }, [successOrder]);
 
   // Calculate prices
   const getItemPrice = (item: CartItem): number => {
@@ -589,6 +594,10 @@ export default function Checkout({
 
     if (hasValidationError) {
       setErrorMessage("Por favor corrige los campos inválidos marcados en rojo en el formulario.");
+      setShakeStep(true);
+      if (typeof window !== "undefined") {
+        window.navigator?.vibrate?.([60, 40, 60]);
+      }
       
       // Auto-scroller to the first field that fails validation
       setTimeout(() => {
@@ -609,54 +618,51 @@ export default function Checkout({
 
   const validateStep2 = (): boolean => {
     setErrorMessage("");
+    let errorMsg = "";
 
     if (shippingType === "delivery") {
       const activeAddress = addresses.find((a) => a.id === selectedAddressId);
       if (!activeAddress) {
-        setErrorMessage("Por favor agrega y selecciona una dirección de envío obligatoria.");
-        return false;
-      }
-
-      if (!selectedDeliveryMethod) {
-        setErrorMessage("Por favor selecciona una forma de envío a domicilio.");
-        return false;
-      }
-
-      const isMontevideo = dept === "Montevideo";
-
-      if (isMontevideo) {
-        if (!street.trim()) {
-          setErrorMessage("Por favor ingresa la calle de entrega.");
-          return false;
-        }
-        if (deliveryPreference === "home" && !doorNumber.trim()) {
-          setErrorMessage("Por favor ingresa el número de puerta.");
-          return false;
-        }
-        if (!neighborhood.trim()) {
-          setErrorMessage("Por favor ingresa tu barrio de Montevideo.");
-          return false;
-        }
+        errorMsg = "Por favor agrega y selecciona una dirección de envío obligatoria.";
+      } else if (!selectedDeliveryMethod) {
+        errorMsg = "Por favor selecciona una forma de envío a domicilio.";
       } else {
-        // Outside Montevideo: either street (and optional door/solar/manzana) OR solar & manzana
-        const hasStreet = !!street.trim();
-        const hasDoor = !!doorNumber.trim();
-        const hasSolarManzana = !!solar.trim() && !!manzana.trim();
+        const isMontevideo = dept === "Montevideo";
 
-        if (!hasStreet && !hasSolarManzana) {
-          setErrorMessage("Por favor ingresa la calle o, en su defecto, la Manzana y Solar de entrega.");
-          return false;
+        if (isMontevideo) {
+          if (!street.trim()) {
+            errorMsg = "Por favor ingresa la calle de entrega.";
+          } else if (deliveryPreference === "home" && !doorNumber.trim()) {
+            errorMsg = "Por favor ingresa el número de puerta.";
+          } else if (!neighborhood.trim()) {
+            errorMsg = "Por favor ingresa tu barrio de Montevideo.";
+          }
+        } else {
+          // Outside Montevideo: either street (and optional door/solar/manzana) OR solar & manzana
+          const hasStreet = !!street.trim();
+          const hasDoor = !!doorNumber.trim();
+          const hasSolarManzana = !!solar.trim() && !!manzana.trim();
+
+          if (!hasStreet && !hasSolarManzana) {
+            errorMsg = "Por favor ingresa la calle o, en su defecto, la Manzana y Solar de entrega.";
+          } else if (deliveryPreference === "home" && !hasDoor && !hasSolarManzana) {
+            errorMsg = "Por favor ingresa el número de puerta, o la Manzana y el Solar de entrega.";
+          }
         }
-        if (deliveryPreference === "home" && !hasDoor && !hasSolarManzana) {
-          setErrorMessage("Por favor ingresa el número de puerta, o la Manzana y el Solar de entrega.");
-          return false;
+
+        if (!errorMsg && !city.trim()) {
+          errorMsg = "Por favor ingresa la localidad o ciudad.";
         }
       }
+    }
 
-      if (!city.trim()) {
-        setErrorMessage("Por favor ingresa la localidad o ciudad.");
-        return false;
+    if (errorMsg) {
+      setErrorMessage(errorMsg);
+      setShakeStep(true);
+      if (typeof window !== "undefined") {
+        window.navigator?.vibrate?.([60, 40, 60]);
       }
+      return false;
     }
     return true;
   };
@@ -1066,19 +1072,19 @@ export default function Checkout({
             )}
 
             {/* Primary Action Button: Send WhatsApp */}
-            <div className="w-full flex flex-col gap-3">
+            <div className="w-full flex flex-row gap-3 items-stretch">
               <button
                 onClick={() => window.open(successOrder.waUrl, "_blank", "noopener,noreferrer")}
-                className="w-full py-4 rounded-xl text-sm font-bold uppercase tracking-wider bg-[#25D366] hover:bg-[#20ba5a] text-white transition-all cursor-pointer active:scale-98 shadow-lg shadow-[#25D366]/10 flex items-center justify-center gap-2"
+                className="flex-1 py-3.5 rounded-xl text-xs md:text-sm font-bold uppercase tracking-wider bg-[#25D366] hover:bg-[#20ba5a] text-white transition-all cursor-pointer active:scale-98 shadow-lg shadow-[#25D366]/10 flex items-center justify-center gap-2 px-3"
               >
-                <span>Enviar Pedido por WhatsApp 📱</span>
+                <span>Enviar por WhatsApp 📱</span>
               </button>
               
               <button
-                onClick={onBackToCatalog}
-                className="w-full py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-zinc-800 hover:bg-zinc-700 hover:text-white text-zinc-300 transition-all cursor-pointer active:scale-98 border border-zinc-700/50"
+                onClick={() => window.location.href = "https://juem.com.uy"}
+                className="flex-1 py-3.5 rounded-xl text-xs md:text-sm font-bold uppercase tracking-wider bg-[#D4A55A]/10 hover:bg-[#D4A55A]/20 hover:text-[#E6BF76] text-zinc-350 transition-all cursor-pointer active:scale-98 border border-[#D4A55A]/25 flex items-center justify-center px-3 text-center"
               >
-                Volver a la Tienda 🛍️
+                <span>Volver Principal 🛍️</span>
               </button>
             </div>
           </div>
@@ -1098,27 +1104,37 @@ export default function Checkout({
           No hay artículos listados para iniciar el checkout. Elige tus favoritos en nuestra tienda.
         </p>
         <button
-          onClick={onBackToCatalog}
+          onClick={() => window.location.href = "https://juem.com.uy"}
           className="px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider bg-[#D4A55A] hover:bg-[#E6BF76] text-[#050B1A] transition cursor-pointer active:scale-95 shadow-md shadow-[#D4A55A]/10"
         >
-          Volver a la Tienda
+          Volver a la Web Principal
         </button>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen py-10 px-4 sm:px-6 lg:px-8 font-sans bg-[#050B1A] text-[#F4EAD7]">
+    <div className="min-h-screen pt-10 pb-28 sm:pb-10 px-4 sm:px-6 lg:px-8 font-sans bg-[#050B1A] text-[#F4EAD7]">
       <div className="max-w-6xl mx-auto">
         
 
 
         {/* Stepper Wizard Indicator */}
-        <div className="mb-8 grid grid-cols-3 gap-2 sm:gap-4">
+        <div className="mb-8 flex items-center justify-between relative bg-[#0B1730]/40 p-3 sm:p-4 rounded-2xl border border-[#D4A55A]/10">
+          {/* Background Connection Line */}
+          <div className="absolute left-[10%] right-[10%] top-[40%] sm:top-[50%] -translate-y-1/2 h-[2px] bg-[#D4A55A]/10 z-0" />
+          {/* Active Connection Line Fill */}
+          <div 
+            className="absolute left-[10%] top-[40%] sm:top-[50%] -translate-y-1/2 h-[2px] bg-[#D4A55A] transition-all duration-300 z-0"
+            style={{ 
+              width: checkoutStep === 1 ? "0%" : checkoutStep === 2 ? "40%" : "80%" 
+            }}
+          />
+
           {[
-            { step: 1, label: "Mis Datos", desc: "Comprador" },
-            { step: 2, label: "Forma de Envío", desc: "Entrega" },
-            { step: 3, label: "Método de Pago", desc: "Finalizar" }
+            { step: 1, label: "Mis Datos", shortLabel: "Datos", desc: "Comprador" },
+            { step: 2, label: "Forma de Envío", shortLabel: "Envío", desc: "Entrega" },
+            { step: 3, label: "Método de Pago", shortLabel: "Pago", desc: "Finalizar" }
           ].map((s) => {
             const isActive = checkoutStep === s.step;
             const isCompleted = checkoutStep > s.step;
@@ -1136,26 +1152,29 @@ export default function Checkout({
                     }
                   }
                 }}
-                className={`py-2.5 px-3 rounded-2xl border transition-all flex flex-col sm:flex-row items-center justify-center gap-2 text-center sm:text-left ${
+                className={`relative z-10 flex flex-col sm:flex-row items-center gap-1.5 sm:gap-2 px-1 py-1 sm:px-3 sm:py-2 rounded-xl transition-all ${
                   isActive
-                    ? "border-[#D4A55A] bg-[#0B1730] text-[#E6BF76] font-extrabold shadow-md shadow-[#D4A55A]/20"
+                    ? "text-[#E6BF76] font-extrabold"
                     : isCompleted
-                      ? "border-emerald-500 bg-emerald-500/5 text-emerald-400 font-bold cursor-pointer hover:bg-emerald-500/10"
-                      : "border-[#D4A55A]/15 bg-[#0B1730]/60 text-zinc-400 cursor-not-allowed"
+                      ? "text-emerald-400 font-bold cursor-pointer"
+                      : "text-zinc-550 cursor-not-allowed"
                 }`}
               >
-                <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-black shrink-0 transition ${
+                <div className={`h-7 w-7 sm:h-8 sm:w-8 rounded-full flex items-center justify-center text-xs font-black shrink-0 transition-all duration-300 ${
                   isActive
-                    ? "bg-[#D4A55A] text-[#050B1A]"
+                    ? "bg-[#D4A55A] text-[#050B1A] shadow-md shadow-[#D4A55A]/25 scale-110"
                     : isCompleted
                       ? "bg-emerald-500 text-white"
                       : "bg-[#050B1A] text-zinc-500 border border-[#D4A55A]/20"
                 }`}>
                   {isCompleted ? "✓" : s.step}
                 </div>
-                <div className="block">
-                  <p className="text-[10px] font-extrabold uppercase tracking-widest leading-none mb-0.5">{s.label}</p>
-                  <p className="text-[9px] text-zinc-500 font-medium leading-none font-mono">{s.desc}</p>
+                <div className="text-center sm:text-left">
+                  <p className="text-[9px] sm:text-[11px] font-black uppercase tracking-wider leading-none mb-0.5">
+                    <span className="hidden sm:inline">{s.label}</span>
+                    <span className="inline sm:hidden">{s.shortLabel}</span>
+                  </p>
+                  <p className="text-[9px] text-zinc-500 font-medium leading-none font-mono hidden sm:block">{s.desc}</p>
                 </div>
               </button>
             );
@@ -1167,7 +1186,12 @@ export default function Checkout({
           {/* LEFT COLUMN: Main step form wizard */}
           <div className="lg:col-span-7 space-y-6">
             {checkoutStep === 1 && (
-              <div className="space-y-6 animate-fade-in">
+              <motion.div
+                animate={shakeStep ? { x: [-8, 8, -6, 6, -4, 4, -2, 2, 0] } : {}}
+                transition={{ duration: 0.4 }}
+                onAnimationComplete={() => setShakeStep(false)}
+                className="space-y-6"
+              >
                 {/* Box 1: DATOS DEL COMPRADOR */}
                 <div className="p-6 rounded-2xl border bg-[#0B1730] border-[#D4A55A]/20 text-[#F4EAD7] shadow-xl shadow-black/35">
               <h2 className="text-base font-extrabold tracking-tight mb-4 uppercase flex items-center gap-2.5">
@@ -1186,6 +1210,7 @@ export default function Checkout({
                       required
                       id="firstName"
                       type="text"
+                      autoComplete="given-name"
                       placeholder="Ej: Juan"
                       value={firstName}
                       onChange={(e) => handleFieldChange("firstName", e.target.value)}
@@ -1215,6 +1240,7 @@ export default function Checkout({
                       required
                       id="lastName"
                       type="text"
+                      autoComplete="family-name"
                       placeholder="Ej: Pérez"
                       value={lastName}
                       onChange={(e) => handleFieldChange("lastName", e.target.value)}
@@ -1244,6 +1270,8 @@ export default function Checkout({
                       required
                       id="phone"
                       type="tel"
+                      inputMode="tel"
+                      autoComplete="tel"
                       maxLength={15}
                       placeholder="Ej: 099123456"
                       value={phone}
@@ -1277,6 +1305,8 @@ export default function Checkout({
                       required
                       id="email"
                       type="email"
+                      inputMode="email"
+                      autoComplete="email"
                       placeholder="Ej: nombre@correo.com"
                       value={email}
                       onChange={(e) => handleFieldChange("email", e.target.value)}
@@ -1439,29 +1469,33 @@ export default function Checkout({
             </div>
 
             {/* Step 1 Inline Action Button */}
-            <div className="pt-4 flex items-center justify-between gap-4">
-              <button
-                type="button"
-                onClick={onBackToCatalog}
-                className="flex items-center gap-2 py-3 px-5 rounded-xl text-xs font-extrabold uppercase tracking-widest border border-[#D4A55A]/25 bg-[#050B1A]/60 text-zinc-350 hover:bg-[#050B1A]/90 hover:border-[#D4A55A]/50 hover:text-white transition active:scale-95 cursor-pointer"
-              >
-                <ArrowLeft className="h-4 w-4 text-[#E6BF76]" />
-                <span>Volver a la Tienda</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleContinueToPayment}
-                className="flex items-center gap-2 py-3.5 px-6 rounded-xl text-xs font-extrabold uppercase tracking-widest bg-[#D4A55A] hover:bg-[#E6BF76] text-[#050B1A] shadow-md active:scale-95 transition cursor-pointer"
-              >
-                <span>Continuar al Envío</span>
-                <ArrowRight className="h-4 w-4" />
-              </button>
+            <div className="pt-4 space-y-3">
+              {errorMessage && (
+                <div className="p-3 bg-red-950/35 border border-red-900/30 text-rose-400 text-xs rounded-xl text-center font-bold">
+                  ⚠️ {errorMessage}
+                </div>
+              )}
+              <div className="hidden sm:flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleContinueToPayment}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 py-3.5 px-8 rounded-xl text-xs font-extrabold uppercase tracking-widest bg-[#D4A55A] hover:bg-[#E6BF76] text-[#050B1A] shadow-md active:scale-95 transition cursor-pointer"
+                >
+                  <span>Continuar</span>
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
             </div>
-          </div>
+          </motion.div>
         )}
 
         {checkoutStep === 2 && (
-          <div className="space-y-6 animate-fade-in">
+              <motion.div
+                animate={shakeStep ? { x: [-8, 8, -6, 6, -4, 4, -2, 2, 0] } : {}}
+                transition={{ duration: 0.4 }}
+                onAnimationComplete={() => setShakeStep(false)}
+                className="space-y-6"
+              >
 
             {/* Box 2: FORMA DE ENVÍO */}
             {(settings.pickupActive !== false || settings.deliveryActive !== false) && (
@@ -1476,7 +1510,10 @@ export default function Checkout({
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
-                      onClick={() => setShippingType("pickup")}
+                      onClick={() => {
+                        setShippingType("pickup");
+                        setErrorMessage("");
+                      }}
                       className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 font-bold font-sans transition cursor-pointer text-xs uppercase tracking-wider ${
                         shippingType === "pickup"
                           ? "border-[#D4A55A] bg-[#050B1A]/85 text-[#E6BF76]"
@@ -1489,7 +1526,10 @@ export default function Checkout({
 
                     <button
                       type="button"
-                      onClick={() => setShippingType("delivery")}
+                      onClick={() => {
+                        setShippingType("delivery");
+                        setErrorMessage("");
+                      }}
                       className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 font-bold font-sans transition cursor-pointer text-xs uppercase tracking-wider ${
                         shippingType === "delivery"
                           ? "border-[#D4A55A] bg-[#050B1A]/85 text-[#E6BF76]"
@@ -1562,9 +1602,9 @@ export default function Checkout({
                 </div>
 
                 {/* Stored Address List */}
-                <div className="space-y-2 mb-6">
+                <div className="flex flex-col gap-2 mb-4 w-full">
                   {addresses.length === 0 ? (
-                    <div className="text-center py-6 border border-dashed border-[#D4A55A]/20 rounded-xl bg-[#050B1A]/30 text-xs text-zinc-400">
+                    <div className="w-full text-center py-5 border border-dashed border-[#D4A55A]/20 rounded-xl bg-[#050B1A]/30 text-xs text-zinc-400">
                       No tienes direcciones guardadas. Pulsa en agregar para registrar una.
                     </div>
                   ) : (
@@ -1578,37 +1618,37 @@ export default function Checkout({
                         <div
                           key={addr.id}
                           onClick={() => setSelectedAddressId(addr.id)}
-                          className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-4 ${
+                          className={`p-2.5 px-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 w-full ${
                             isSelected
-                              ? "border-[#D4A55A] bg-[#050B1A]/85"
-                              : "bg-[#050B1A]/40 border-[#D4A55A]/10 hover:border-[#D4A55A]/25"
+                              ? "border-[#D4A55A] bg-[#050B1A]/80 shadow-md shadow-black/20"
+                              : "bg-[#050B1A]/30 border-[#D4A55A]/10 hover:border-[#D4A55A]/25"
                           }`}
                         >
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
                             <div className="flex items-center justify-center flex-shrink-0">
-                              <div className={`h-4.5 w-4.5 rounded-full border-2 flex items-center justify-center ${
+                              <div className={`h-4 w-4 rounded-full border flex items-center justify-center ${
                                 isSelected ? "border-[#D4A55A]" : "border-zinc-700"
                               }`}>
-                                {isSelected && <div className="h-2 w-2 rounded-full bg-[#D4A55A]" />}
+                                {isSelected && <div className="h-1.8 w-1.8 rounded-full bg-[#D4A55A]" />}
                               </div>
                             </div>
-                            <div>
-                              <span className="text-xs block font-bold uppercase tracking-wide text-[#F4EAD7]">
+                            <div className="min-w-0 flex-1">
+                              <span className="text-xs sm:text-xs block font-bold uppercase tracking-wide text-[#F4EAD7] leading-snug">
                                 {[
                                   hasStreet ? addr.street : "",
                                   hasDoor ? addr.doorNumber : "",
                                   addr.apartment ? `Apto ${addr.apartment}` : "",
-                                  hasMz ? `Manzana ${addr.manzana}` : "",
-                                  hasSl ? `Solar ${addr.solar}` : ""
+                                  hasMz ? `Mz ${addr.manzana}` : "",
+                                  hasSl ? `Sol ${addr.solar}` : ""
                                 ].filter(Boolean).join(" ")}
                               </span>
-                              <span className="text-[10px] text-zinc-500 block font-mono">
+                              <span className="text-[10px] text-zinc-400 block font-mono leading-none mt-1">
                                 {addr.zone}, {addr.dept}
                               </span>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
                             <button
                                type="button"
                                onClick={() => {
@@ -1624,39 +1664,42 @@ export default function Checkout({
                                  setModalError("");
                                  setIsAddressModalOpen(true);
                                }}
-                              className="p-1 px-2 rounded-md hover:bg-zinc-800/60 text-zinc-400 hover:text-white transition"
+                              className="p-1 rounded hover:bg-zinc-800/60 text-zinc-450 hover:text-white transition"
                               title="Editar dirección"
                             >
-                              <Edit className="h-3.5 w-3.5" />
+                              <Edit className="h-3 w-3" />
                             </button>
                             <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const filtered = addresses.filter(a => a.id !== addr.id);
-                                setAddresses(filtered);
-                                if (selectedAddressId === addr.id && filtered.length > 0) {
-                                  setSelectedAddressId(filtered[0].id);
-                                } else if (filtered.length === 0) {
-                                  setSelectedAddressId("");
-                                }
-                              }}
-                              className="p-1 px-2 rounded-md hover:bg-red-950/20 text-zinc-400 hover:text-red-400 transition"
+                               type="button"
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 const filtered = addresses.filter(a => a.id !== addr.id);
+                                 setAddresses(filtered);
+                                 if (selectedAddressId === addr.id && filtered.length > 0) {
+                                   setSelectedAddressId(filtered[0].id);
+                                 } else if (filtered.length === 0) {
+                                   setSelectedAddressId("");
+                                 }
+                               }}
+                              className="p-1 rounded hover:bg-red-950/20 text-zinc-450 hover:text-red-400 transition"
                               title="Eliminar dirección"
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <Trash2 className="h-3 w-3" />
                             </button>
                           </div>
                         </div>
                       );
                     })
                   )}
-                                {deliveryMethods.map((method) => {
-                    const isSelected = selectedDeliveryMethod === method.id;
-                    const isAgency = method.id === "ues" || method.id === "dac" || method.id === "depunta";
-                    return (
-                      <div key={method.id} className="space-y-2">
+
+                  {/* Delivery Carrier Selection */}
+                  <div className="space-y-4 pt-1">
+                    {/* Normal Local routes */}
+                    {deliveryMethods.filter(m => m.id === "express_mvd" || m.id === "mvd_normal").map((method) => {
+                      const isSelected = selectedDeliveryMethod === method.id;
+                      return (
                         <div
+                          key={method.id}
                           onClick={() => setSelectedDeliveryMethod(method.id)}
                           className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-4 ${
                             isSelected
@@ -1666,10 +1709,10 @@ export default function Checkout({
                         >
                           <div className="flex items-center gap-3">
                             <div className="flex items-center justify-center flex-shrink-0">
-                              <div className={`h-4.5 w-4.5 rounded-full border-2 flex items-center justify-center ${
+                              <div className={`h-4 w-4 rounded-full border flex items-center justify-center ${
                                 isSelected ? "border-[#D4A55A]" : "border-zinc-700"
                               }`}>
-                                {isSelected && <div className="h-2 w-2 rounded-full bg-[#D4A55A]" />}
+                                {isSelected && <div className="h-1.8 w-1.8 rounded-full bg-[#D4A55A]" />}
                               </div>
                             </div>
                             
@@ -1712,50 +1755,6 @@ export default function Checkout({
                                   </svg>
                                 </div>
                               )}
-                              {method.iconType === "ues" && (
-                                <div className="flex-shrink-0 shadow-xs rounded-lg overflow-hidden border border-gray-205 bg-white">
-                                  <svg className="w-14 h-9" viewBox="0 0 54 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <rect width="54" height="32" rx="6" fill="#FFFFFF" />
-                                    <g transform="translate(5, 5)">
-                                      <path d="M 2 11 C 2 6.5 5.5 5 10 5 L 34 5 C 38.5 5 42 7.5 42 11 C 42 14.5 38.5 17 34 17 L 10 17 C 5.5 17 2 15.5 2 11 Z" fill="#EA580C" />
-                                      <path d="M 5 6 L 10 11 L 5 16 H 8 L 13 11 L 8 6 Z" fill="#FFFFFF" />
-                                      <text x="16" y="14.5" fill="#FFFFFF" fontSize="10.5" fontWeight="900" fontFamily="sans-serif" fontStyle="italic" letterSpacing="-0.5">Ues</text>
-                                    </g>
-                                  </svg>
-                                </div>
-                              )}
-                              {method.iconType === "dac" && (
-                                <div className="flex-shrink-0 shadow-xs rounded-lg overflow-hidden border border-gray-205 bg-white">
-                                  <svg className="w-14 h-9" viewBox="0 0 54 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <rect width="54" height="32" rx="6" fill="#FFFFFF" />
-                                    <g transform="translate(2, 4)">
-                                      <path d="M 4 8 L 10 12 L 4 16 Z" fill="#047857" />
-                                      <path d="M 10 8 L 16 12 L 10 16 Z" fill="#B91C1C" />
-                                      <text x="19" y="14" fill="#111827" fontSize="11" fontWeight="900" fontFamily="sans-serif" letterSpacing="0.2">DAC</text>
-                                      <text x="4" y="22" fill="#4B5563" fontSize="4.8" fontWeight="850" fontFamily="sans-serif" letterSpacing="0.1">GRUPO AGENCIA</text>
-                                    </g>
-                                  </svg>
-                                </div>
-                              )}
-                              {method.iconType === "depunta" && (
-                                <div className="flex-shrink-0 shadow-xs rounded-lg overflow-hidden border border-gray-205 bg-white">
-                                  <svg className="w-14 h-9" viewBox="0 0 54 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <rect width="54" height="32" rx="6" fill="#FFFFFF" />
-                                    <g transform="translate(4, 4)">
-                                      <circle cx="11" cy="12" r="8" fill="#B91C1C" />
-                                      <text x="11.2" y="14.5" fill="#FFFFFF" fontSize="7" fontWeight="900" fontFamily="sans-serif" textAnchor="middle">DE</text>
-                                      <text x="21.5" y="15" fill="#111827" fontSize="9.5" fontWeight="900" fontFamily="sans-serif" letterSpacing="0.2">PUNTA</text>
-                                    </g>
-                                  </svg>
-                                </div>
-                              )}
-
-                              {!(["motorcycle", "truck_orange", "ues", "dac", "depunta"].includes(method.iconType)) && (
-                                <div className="flex-shrink-0 shadow-xs rounded-lg overflow-hidden border border-gray-200 w-14 h-9 bg-zinc-800 text-zinc-450 flex items-center justify-center">
-                                  <Truck className="h-5 w-5" />
-                                </div>
-                              )}
-
                               <div>
                                 <span className="text-xs block font-bold leading-tight text-[#F4EAD7]">
                                   {method.title}
@@ -1767,23 +1766,83 @@ export default function Checkout({
                             </div>
                           </div>
                         </div>
+                      );
+                    })}
 
-                        {isSelected && isAgency && !hasFreeShipping && (
-                          <div className="p-3.5 rounded-xl border flex items-start gap-3 mt-1.5 text-xs transition-all mx-1 animate-fade-in bg-amber-950/20 border-amber-900/40 text-amber-300">
-                            <HelpCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                            <div>
-                              <span className="font-extrabold uppercase tracking-wide text-[10px] block mb-1 text-amber-400">
-                                Envío Por Agencia a pagar en destino:
-                              </span>
-                              <p className="leading-relaxed font-bold text-amber-100">
-                                El costo del paquete lo paga el cliente al recibirlo.
+                    {/* Agency selective Grid (with official logos and clean layout) */}
+                    <div className="space-y-2 pt-2">
+                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#E6BF76] block">
+                        Envío por Agencia (cobro en destino)
+                      </span>
+                      <div className="grid grid-cols-3 gap-2">
+                        {deliveryMethods.filter(m => m.id === "ues" || m.id === "dac" || m.id === "depunta").map((method) => {
+                          const isSelected = selectedDeliveryMethod === method.id;
+                          return (
+                            <div
+                              key={method.id}
+                              onClick={() => setSelectedDeliveryMethod(method.id)}
+                              className={`rounded-xl border transition-all cursor-pointer flex flex-col items-center justify-center p-1.5 h-14 relative ${
+                                isSelected
+                                  ? "border-[#D4A55A] bg-[#050B1A]/85 shadow-md shadow-[#D4A55A]/5"
+                                  : "bg-[#050B1A]/40 border-[#D4A55A]/10 hover:border-[#D4A55A]/25"
+                              }`}
+                            >
+                              {/* Selected check mark indicator */}
+                              {isSelected && (
+                                <div className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-[#D4A55A]" />
+                              )}
+
+                              <div className="w-full h-full flex items-center justify-center bg-white p-1 rounded-lg">
+                                {method.id === "ues" && (
+                                  <img 
+                                    src="https://www.uesinternacional.com/img/logo-footer.svg"
+                                    alt="UES Logo"
+                                    className="max-w-[70px] max-h-full object-contain filter brightness-100"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                )}
+                                {method.id === "dac" && (
+                                  <img 
+                                    src="https://fajabooks.uy/dac-logo.png"
+                                    alt="DAC Logo"
+                                    className="max-w-[70px] max-h-full object-contain"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                )}
+                                {method.id === "depunta" && (
+                                  <img 
+                                    src="https://www.depunta.com/img/logo.svg"
+                                    alt="De Punta Logo"
+                                    className="max-w-[75px] max-h-full object-contain filter brightness-95"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Display warning only for active selected agency */}
+                      {(() => {
+                        const selectedMethod = deliveryMethods.find(m => m.id === selectedDeliveryMethod);
+                        const isAgency = selectedMethod && (selectedMethod.id === "ues" || selectedMethod.id === "dac" || selectedMethod.id === "depunta");
+                        if (isAgency && !hasFreeShipping) {
+                          return (
+                            <div className="p-2.5 rounded-xl border flex items-center gap-2 mt-2 text-xs transition-all animate-fade-in bg-amber-950/20 border-amber-900/30 text-amber-300">
+                              <HelpCircle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                              <p className="leading-normal font-semibold text-zinc-350 text-[11px]">
+                                Envío por <span className="text-[#E6BF76] font-black">
+                                  {selectedMethod.id === "ues" ? "UES" : selectedMethod.id === "dac" ? "DAC" : selectedMethod.id === "depunta" ? "De Punta" : "Agencia"}
+                                </span>: costo de envío cobrado en destino.
                               </p>
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Free Shipping Alert Box */}
@@ -1805,29 +1864,44 @@ export default function Checkout({
             )}
 
             {/* Step 2 Inline Actions */}
-            <div className="pt-4 flex items-center justify-between gap-4">
-              <button
-                type="button"
-                onClick={() => setCheckoutStep(1)}
-                className="flex items-center gap-2 py-3 px-5 rounded-xl text-xs font-extrabold uppercase tracking-widest border border-[#D4A55A]/25 bg-[#050B1A]/60 text-zinc-350 hover:bg-[#050B1A]/90 hover:border-[#D4A55A]/50 hover:text-white transition active:scale-95 cursor-pointer"
-              >
-                <ArrowLeft className="h-4 w-4 text-[#E6BF76]" />
-                <span>Volver</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleContinueToPayment}
-                className="flex items-center gap-2 py-3.5 px-6 rounded-xl text-xs font-extrabold uppercase tracking-widest bg-[#D4A55A] hover:bg-[#E6BF76] text-[#050B1A] shadow-md active:scale-95 transition cursor-pointer"
-              >
-                <span>Continuar al Pago</span>
-                <ArrowRight className="h-4 w-4" />
-              </button>
+            <div className="pt-4 space-y-3">
+              {errorMessage && (
+                <div className="p-3 bg-red-950/35 border border-red-900/30 text-rose-400 text-xs rounded-xl text-center font-bold animate-pulse">
+                  ⚠️ {errorMessage}
+                </div>
+              )}
+              <div className="hidden sm:flex items-center justify-between gap-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorMessage("");
+                    setCheckoutStep(1);
+                  }}
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-xs font-extrabold uppercase tracking-widest border border-[#D4A55A]/25 bg-[#050B1A]/60 text-zinc-350 hover:bg-[#050B1A]/90 hover:border-[#D4A55A]/50 hover:text-white transition active:scale-95 cursor-pointer"
+                >
+                  <ArrowLeft className="h-4 w-4 text-[#E6BF76]" />
+                  <span>Volver</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleContinueToPayment}
+                  className="flex-1 sm:flex-initial flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-xs font-extrabold uppercase tracking-widest bg-[#D4A55A] hover:bg-[#E6BF76] text-[#050B1A] shadow-md active:scale-95 transition cursor-pointer"
+                >
+                  <span>Continuar</span>
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
             </div>
-          </div>
+          </motion.div>
         )}
 
         {checkoutStep === 3 && (
-          <div className="space-y-6 animate-fade-in">
+              <motion.div
+                animate={shakeStep ? { x: [-8, 8, -6, 6, -4, 4, -2, 2, 0] } : {}}
+                transition={{ duration: 0.4 }}
+                onAnimationComplete={() => setShakeStep(false)}
+                className="space-y-6"
+              >
             {/* Box 4: OPCIÓN DE PAGO */}
             <div className="p-6 rounded-2xl border bg-[#0B1730] border-[#D4A55A]/20 text-[#F4EAD7] shadow-xl shadow-black/35">
               <h2 className="text-base font-extrabold tracking-tight mb-4 uppercase flex items-center gap-2.5">
@@ -1860,11 +1934,18 @@ export default function Checkout({
 
                     <div className="flex-1">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-black uppercase tracking-wider text-[#F4EAD7]">
-                          Mercado Pago (100% Seguro)
+                        <span className="text-xs font-black uppercase tracking-wider text-[#F4EAD7] flex items-center gap-1.5 min-w-0">
+                          <span className="truncate">Mercado Pago</span>
+                          <span className="h-4 w-[1px] bg-zinc-700/60 flex-shrink-0" />
+                          <img 
+                            src="https://upload.wikimedia.org/wikipedia/commons/2/29/MercadoPago_logo.svg" 
+                            alt="Mercado Pago Logo"
+                            className="h-3.5 object-contain brightness-0 invert opacity-90 flex-shrink-0"
+                            referrerPolicy="no-referrer"
+                          />
                         </span>
-                        <span className="text-[9px] font-black uppercase bg-emerald-500/10 text-emerald-450 px-2.5 py-0.5 rounded-md">
-                          Online Inmediato
+                        <span className="text-[9px] font-black uppercase bg-emerald-500/10 text-emerald-450 px-2 py-0.5 rounded-md shrink-0">
+                          Online
                         </span>
                       </div>
                       <p className="text-[11px] leading-relaxed mt-1 font-semibold text-zinc-400">
@@ -1946,7 +2027,9 @@ export default function Checkout({
               </div>
 
               {/* Payment Explanatory detail block */}
-              <div className="p-4 rounded-xl border mt-6 bg-[#050B1A]/85 border-[#D4A55A]/20">
+              <div className={`p-4 rounded-xl border mt-6 bg-[#050B1A]/85 border-[#D4A55A]/20 ${
+                paymentMethod === "mercadopago" || paymentMethod === "transfer" ? "hidden sm:block" : ""
+              }`}>
                 {paymentMethod === "mercadopago" ? (
                   <div className="space-y-1.5">
                     <span className="text-[10px] font-extrabold uppercase text-[#E6BF76] tracking-wider">Detalles de Mercado Pago</span>
@@ -1958,14 +2041,14 @@ export default function Checkout({
                   <div className="space-y-1.5">
                     <span className="text-[10px] font-extrabold uppercase text-[#E6BF76] tracking-wider">Detalles de Transferencia Bancaria</span>
                     <p className="text-[11px] leading-relaxed font-semibold text-zinc-350">
-                      Al continuar a <strong className="text-[#D4A55A]">REALIZAR PEDIDO VÍA WHATSAPP</strong>, se generará el detalle de tu compra y se abrirá WhatsApp con el mensaje pre-redactado. Te responderemos inmediatamente con los datos bancarios para coordinar.
+                      Al continuar a <strong className="text-[#D4A55A]">COMPRA</strong>, se registrará el detalle de tu compra en nuestro sistema y recibirás una notificación de confirmación con los datos bancarios.
                     </p>
                   </div>
                 ) : (
                   <div className="space-y-1.5">
                     <span className="text-[10px] font-extrabold uppercase text-[#E6BF76] tracking-wider">Detalles de Efectivo Contraentrega</span>
                     <p className="text-[11px] leading-relaxed font-semibold text-zinc-350">
-                      Al continuar a <strong className="text-[#D4A55A]">REALIZAR PEDIDO VÍA WHATSAPP</strong>, coordinaremos el envío de tu paquete por mensajería. Le abonas el total neto al repartidor cuando toque tu timbre.
+                      Al continuar a <strong className="text-[#D4A55A]">COMPRA</strong>, registraremos el envío de tu paquete por mensajería. Le abonas el total neto al repartidor cuando toque tu timbre.
                     </p>
                   </div>
                 )}
@@ -1973,38 +2056,77 @@ export default function Checkout({
             </div>
 
             {/* Step 3 Inline Actions */}
-            <div className="pt-4 flex items-center justify-between gap-4 flex-wrap">
-              <button
-                type="button"
-                onClick={() => setCheckoutStep(2)}
-                className="flex items-center gap-2 py-3 px-5 rounded-xl text-xs font-extrabold uppercase tracking-widest border border-[#D4A55A]/25 bg-[#050B1A]/60 text-zinc-350 hover:bg-[#050B1A]/90 hover:border-[#D4A55A]/50 hover:text-white transition active:scale-95 cursor-pointer"
-              >
-                <ArrowLeft className="h-4 w-4 text-[#E6BF76]" />
-                <span>Volver</span>
-              </button>
+            <div className="pt-4 space-y-3">
+              {errorMessage && (
+                <div className="p-3 bg-red-950/35 border border-red-900/30 text-rose-400 text-xs rounded-xl text-center font-bold">
+                  ⚠️ {errorMessage}
+                </div>
+              )}
+              <div className="hidden sm:flex flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setErrorMessage("");
+                      setCheckoutStep(2);
+                    }}
+                    className="flex-1 sm:flex-initial flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-xs font-extrabold uppercase tracking-widest border border-[#D4A55A]/25 bg-[#050B1A]/60 text-zinc-350 hover:bg-[#050B1A]/90 hover:border-[#D4A55A]/50 hover:text-white transition active:scale-95 cursor-pointer"
+                  >
+                    <ArrowLeft className="h-4 w-4 text-[#E6BF76]" />
+                    <span>Volver</span>
+                  </button>
 
-              <button
-                type="button"
-                onClick={() => setCheckoutStep(2)}
-                className="flex items-center gap-2 py-3 px-5 rounded-xl text-xs font-extrabold uppercase tracking-widest border border-[#D4A55A]/25 bg-[#050B1A]/60 text-[#E6BF76] hover:bg-[#050B1A]/90 hover:border-[#D4A55A]/50 hover:text-white transition active:scale-95 cursor-pointer"
-              >
-                <ArrowLeft className="h-4 w-4 text-[#D4A55A]" />
-                <span>Modificar Forma de Envío</span>
-              </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setErrorMessage("");
+                      setCheckoutStep(2);
+                    }}
+                    className="flex-1 sm:flex-initial flex items-center justify-center gap-2 py-3 px-5 rounded-xl text-xs font-extrabold uppercase tracking-widest border border-[#D4A55A]/25 bg-[#050B1A]/60 text-[#E6BF76] hover:bg-[#050B1A]/90 hover:border-[#D4A55A]/50 hover:text-white transition active:scale-95 cursor-pointer"
+                  >
+                    <ArrowLeft className="h-4 w-4 text-[#D4A55A]" />
+                    <span>Editar Envío</span>
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
+          </motion.div>
         )}
       </div>
 
           {/* RIGHT COLUMN: Order summary */}
-          <div className="lg:col-span-5">
-            <div className="p-6 rounded-2xl border border-[#D4A55A]/20 bg-[#0B1730] text-[#F4EAD7] shadow-xl shadow-black/35 sticky top-6">
-              <h3 className="text-base font-bold mb-4 flex items-center justify-between border-b pb-3 border-zinc-800/80 uppercase">
-                <span>Resumen de Compra</span>
-                <span className="p-1 px-2.5 bg-zinc-850 rounded-lg text-xs font-semibold text-zinc-400 font-mono">
-                  {cartItems.reduce((s, i) => s + i.quantity, 0)} {cartItems.reduce((s, i) => s + i.quantity, 0) === 1 ? "artículo" : "artículos"}
-                </span>
-              </h3>
+          <div className="lg:col-span-5 order-first lg:order-none">
+            <div className="p-4 sm:p-6 rounded-2xl border border-[#D4A55A]/20 bg-[#0B1730] text-[#F4EAD7] shadow-xl shadow-black/35 sticky top-2 sm:top-6 z-30">
+              {/* Accordion Toggle Header for Mobile / Standard Header for Desktop */}
+              <button
+                type="button"
+                onClick={() => setIsSummaryExpanded(!isSummaryExpanded)}
+                className="w-full flex items-center justify-between border-b pb-3 border-zinc-800/80 uppercase text-left group lg:cursor-default"
+              >
+                <div className="flex items-center gap-2">
+                  <ShoppingBag className="h-4.5 w-4.5 text-[#E6BF76]" />
+                  <span className="text-xs sm:text-sm md:text-base font-bold whitespace-nowrap">Resumen de Compra</span>
+                  <span className="p-1 px-2.5 bg-zinc-850 rounded-lg text-[9px] font-semibold text-zinc-400 font-mono">
+                    {cartItems.reduce((s, i) => s + i.quantity, 0)} {cartItems.reduce((s, i) => s + i.quantity, 0) === 1 ? "artículo" : "artículos"}
+                  </span>
+                </div>
+                
+                <div className="flex items-center gap-2.5">
+                  <span className="lg:hidden text-xs sm:text-sm font-black font-mono text-emerald-400">
+                    $ {totalUYU} UYU
+                  </span>
+                  <div className="lg:hidden p-1 rounded-md bg-[#050B1A] border border-[#D4A55A]/25 text-[#E6BF76] group-hover:text-white transition">
+                    {isSummaryExpanded ? (
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    )}
+                  </div>
+                </div>
+              </button>
+
+              {/* Collapsed content container */}
+              <div className={`mt-4 space-y-4 lg:space-y-4 lg:block ${isSummaryExpanded ? "block" : "hidden"}`}>
 
               {/* Items display list */}
               <div className="max-h-60 overflow-y-auto space-y-3.5 pr-1.5 mb-4 custom-scrollbar">
@@ -2079,29 +2201,33 @@ export default function Checkout({
                 })}
               </div>
 
-              {/* Promo code */}
-              <div className="flex gap-2 mb-4 pt-1">
-                <input
-                  type="text"
-                  placeholder="Código de cupón (BUELO15)"
-                  value={promoCode}
-                  onChange={(e) => setPromoCode(e.target.value)}
-                  className="flex-1 text-xs px-3 py-2.5 rounded-lg border border-[#D4A55A]/25 bg-[#050B1A] text-[#F4EAD7] placeholder-zinc-500 outline-none font-mono tracking-wide focus:border-[#D4A55A]"
-                />
-                <button
-                  type="button"
-                  onClick={handleApplyPromo}
-                  className="px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider cursor-pointer transition whitespace-nowrap bg-[#D4A55A] hover:bg-[#E6BF76] text-[#050B1A]"
-                >
-                  Aplicar
-                </button>
-              </div>
+              {/* Promo code - Only in Step 1 */}
+              {checkoutStep === 1 && (
+                <>
+                  <div className="flex gap-2 mb-4 pt-1">
+                    <input
+                      type="text"
+                      placeholder="Código de cupón (BUELO15)"
+                      value={promoCode}
+                      onChange={(e) => setPromoCode(e.target.value)}
+                      className="flex-1 text-xs px-3 py-2.5 rounded-lg border border-[#D4A55A]/25 bg-[#050B1A] text-[#F4EAD7] placeholder-zinc-500 outline-none font-mono tracking-wide focus:border-[#D4A55A]"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleApplyPromo}
+                      className="px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider cursor-pointer transition whitespace-nowrap bg-[#D4A55A] hover:bg-[#E6BF76] text-[#050B1A]"
+                    >
+                      Aplicar
+                    </button>
+                  </div>
 
-              {promoStatus === "success" && (
-                <p className="text-[11px] text-emerald-400 font-semibold mb-3">✔️ ¡Descuento de {appliedDiscount}% aplicado con éxito!</p>
-              )}
-              {promoStatus === "invalid" && (
-                <p className="text-[11px] text-red-450 font-semibold mb-3">❌ Código de cupón no válido o inactivo.</p>
+                  {promoStatus === "success" && (
+                    <p className="text-[11px] text-emerald-400 font-semibold mb-3">✔️ ¡Descuento de {appliedDiscount}% aplicado con éxito!</p>
+                  )}
+                  {promoStatus === "invalid" && (
+                    <p className="text-[11px] text-red-450 font-semibold mb-3">❌ Código de cupón no válido o inactivo.</p>
+                  )}
+                </>
               )}
 
               {/* Price Breakdown in UYU (strictly in Pesos Uruguayos) */}
@@ -2152,7 +2278,7 @@ export default function Checkout({
                 <button
                   disabled={isProcessing}
                   onClick={handleSubmitOrder}
-                  className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl text-xs font-extrabold uppercase tracking-widest shadow-lg shadow-black/15 transition-all transform active:scale-95 disabled:opacity-50 cursor-pointer bg-[#D4A55A] hover:bg-[#E6BF76] text-[#050B1A]"
+                  className="hidden sm:flex w-full items-center justify-center gap-2 py-3.5 px-4 rounded-xl text-xs font-extrabold uppercase tracking-widest shadow-lg shadow-black/15 transition-all transform active:scale-95 disabled:opacity-50 cursor-pointer bg-[#D4A55A] hover:bg-[#E6BF76] text-[#050B1A]"
                 >
                   {isProcessing ? (
                     <>
@@ -2161,7 +2287,7 @@ export default function Checkout({
                     </>
                   ) : (
                     <>
-                      <span>{paymentMethod === "mercadopago" ? "Pagar con Mercado Pago" : "Realizar Pedido vía WhatsApp"}</span>
+                      <span>{paymentMethod === "mercadopago" ? "Pagar con Mercado Pago" : "Compra"}</span>
                       <ArrowRight className="h-4 w-4" />
                     </>
                   )}
@@ -2177,6 +2303,7 @@ export default function Checkout({
               <p className="text-center text-[10px] text-zinc-500 font-semibold uppercase tracking-wider mt-3.5 leading-normal">
                 Proceso seguro e inmediato. Toda la información personal y datos bancarios están protegidos.
               </p>
+              </div> {/* Close collapsed content container */}
             </div>
           </div>
 
@@ -2185,12 +2312,15 @@ export default function Checkout({
 
       {/* Address Management Modal */}
       {isAddressModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-[2px]">
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="w-full max-w-md p-6 rounded-2xl border border-[#D4A55A]/25 bg-[#0B1730] text-[#F4EAD7] shadow-xl shadow-black/90"
+            initial={{ y: "100%", opacity: 0.5 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ type: "spring", damping: 30, stiffness: 350 }}
+            className="w-full max-w-md p-6 rounded-t-3xl sm:rounded-2xl border-t border-x sm:border border-[#D4A55A]/25 bg-[#0B1730] text-[#F4EAD7] shadow-2xl shadow-black max-h-[92vh] overflow-y-auto pb-10 sm:pb-6"
           >
+            {/* Slide-Up Bottom Sheet Drag Handle (Mobile Only) */}
+            <div className="w-12 h-1 bg-zinc-700/60 rounded-full mx-auto mb-4 sm:hidden block" />
             <div className="flex items-center justify-between pb-3.5 border-b border-dashed border-zinc-800/60 mb-4">
               <h3 className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
                 <MapPin className="h-4.5 w-4.5 text-[#E6BF76]" />
@@ -2365,6 +2495,7 @@ export default function Checkout({
                 <input
                   required={modalDept === "Montevideo"}
                   type="text"
+                  autoComplete="street-address"
                   placeholder="Ej: Luis Batlle Berres"
                   value={modalStreet}
                   onChange={(e) => setModalStreet(e.target.value)}
@@ -2385,6 +2516,7 @@ export default function Checkout({
                   <input
                     required={modalDept === "Montevideo"}
                     type="text"
+                    inputMode="numeric"
                     placeholder="Ej: 4282"
                     value={modalDoorNumber}
                     onChange={(e) => setModalDoorNumber(e.target.value)}
@@ -2397,6 +2529,7 @@ export default function Checkout({
                   </label>
                   <input
                     type="text"
+                    inputMode="numeric"
                     placeholder="Opcional"
                     value={modalApartment}
                     onChange={(e) => setModalApartment(e.target.value)}
@@ -2424,6 +2557,72 @@ export default function Checkout({
           </motion.div>
         </div>
       )}
+
+      {/* Dynamic Floating Sticky Bottom Bar for Mobile */}
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0B1730]/95 backdrop-blur-md border-t border-[#D4A55A]/25 p-4 flex items-center justify-between gap-4 pb-5 shadow-[0_-12px_30px_rgba(0,0,0,0.65)] hover:border-t-[#D4A55A]/50 transition-all duration-300">
+        <div className="flex flex-col">
+          <span className="text-[9px] uppercase tracking-wider text-[#E6BF76] font-extrabold font-sans">Total UYU</span>
+          <span className="text-base font-black text-emerald-400 font-mono leading-none">$ {totalUYU}</span>
+          <span className="text-[8px] text-zinc-400 font-medium font-mono mt-0.5">Paso {checkoutStep} de 3</span>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          {checkoutStep > 1 && (
+            <button
+              type="button"
+              onClick={() => {
+                setErrorMessage("");
+                setCheckoutStep(checkoutStep - 1);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className="flex items-center justify-center w-11 h-10 rounded-xl border border-[#D4A55A]/30 bg-[#050B1A]/85 text-[#E6BF76] active:scale-95 transition-all shadow-md shadow-black/15 cursor-pointer"
+            >
+              <ArrowLeft className="h-4.5 w-4.5 stroke-[2.5]" />
+            </button>
+          )}
+
+          {checkoutStep === 1 && (
+            <button
+              type="button"
+              onClick={handleContinueToPayment}
+              className="flex items-center gap-1.5 px-5 py-3 h-10 rounded-xl text-[10px] font-black uppercase tracking-wider bg-[#D4A55A] hover:bg-[#E6BF76] text-[#050B1A] transition active:scale-95 shadow-md shadow-[#D4A55A]/15 cursor-pointer"
+            >
+              <span>Siguiente</span>
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          )}
+          {checkoutStep === 2 && (
+            <button
+              type="button"
+              onClick={handleContinueToPayment}
+              className="flex items-center gap-1.5 px-5 py-3 h-10 rounded-xl text-[10px] font-black uppercase tracking-wider bg-[#D4A55A] hover:bg-[#E6BF76] text-[#050B1A] transition active:scale-95 shadow-md shadow-[#D4A55A]/15 cursor-pointer"
+            >
+              <span>Continuar</span>
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          )}
+          {checkoutStep === 3 && (
+            <button
+              type="button"
+              disabled={isProcessing}
+              onClick={handleSubmitOrder}
+              className="flex items-center gap-1.5 px-5 py-3 h-10 rounded-xl text-[10px] font-black uppercase tracking-wider bg-[#D4A55A] hover:bg-[#E6BF76] text-[#050B1A] transition active:scale-95 shadow-md shadow-black/20 disabled:opacity-50 cursor-pointer"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin text-[#050B1A]" />
+                  <span>Pagar...</span>
+                </>
+              ) : (
+                <>
+                  <span>{paymentMethod === "mercadopago" ? "Pagar" : "Comprar"}</span>
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
 
     </div>
   );

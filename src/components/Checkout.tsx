@@ -23,7 +23,8 @@ import {
   Mail,
   ChevronDown,
   ChevronUp,
-  ShoppingBag
+  ShoppingBag,
+  Handshake
 } from "lucide-react";
 import { CartItem, SiteSettings, Coupon, is3DProduct } from "../types";
 import { motion } from "motion/react";
@@ -1934,23 +1935,24 @@ export default function Checkout({
 
                     <div className="flex-1">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-black uppercase tracking-wider text-[#F4EAD7] flex items-center gap-1.5 min-w-0">
-                          <span className="truncate">Mercado Pago</span>
-                          <span className="h-4 w-[1px] bg-zinc-700/60 flex-shrink-0" />
-                          <img 
-                            src="https://upload.wikimedia.org/wikipedia/commons/2/29/MercadoPago_logo.svg" 
-                            alt="Mercado Pago Logo"
-                            className="h-3.5 object-contain brightness-0 invert opacity-90 flex-shrink-0"
-                            referrerPolicy="no-referrer"
-                          />
-                        </span>
-                        <span className="text-[9px] font-black uppercase bg-emerald-500/10 text-emerald-450 px-2 py-0.5 rounded-md shrink-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-xs font-black uppercase tracking-wider text-[#F4EAD7] whitespace-nowrap">
+                            Mercado Pago
+                          </span>
+                          <span className="h-3.5 w-[1px] bg-zinc-800 flex-shrink-0" />
+                          <div className="flex items-center gap-1 select-none flex-shrink-0">
+                            <div className="w-4.5 h-4.5 rounded-full bg-[#009EE3] flex items-center justify-center shadow-xs shadow-[#009EE3]/30">
+                              <Handshake className="h-2.5 w-2.5 text-white stroke-[2.5]" />
+                            </div>
+                            <span className="text-[11px] font-black lowercase tracking-tighter text-[#009EE3] flex items-center leading-none">
+                              mercado<span className="font-extrabold text-[#009EE3]/80 ml-0.5">pago</span>
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-[9px] font-black uppercase bg-emerald-500/10 text-emerald-450 px-2.5 py-0.5 rounded-md shrink-0">
                           Online
                         </span>
                       </div>
-                      <p className="text-[11px] leading-relaxed mt-1 font-semibold text-zinc-400">
-                        Tarjetas de Crédito, Débito Bancario o Redes de Cobranza (Abitab y Redpagos).
-                      </p>
                     </div>
                   </button>
                 )}

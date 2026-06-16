@@ -8774,7 +8774,7 @@ const resText = await uploadRes.text();
                         <span>🛒</span> Configuración de Carrito y Envíos
                       </h3>
                       <p className="text-zinc-500 text-xs font-semibold leading-relaxed">
-                        Controla las opciones de entrega que se muestran al comprador en el checkout, el retiro físico en local, y habilita la facturación con RUT de empresa uruguaya.
+                        Controla las opciones de entrega que se muestran al comprador en el checkout, el retiro físico en local, y habilita la facturación con RUT.
                       </p>
                     </div>
 
@@ -9003,7 +9003,7 @@ const resText = await uploadRes.text();
                           <div className="flex items-center gap-3">
                             <span className="text-2xl">🧾</span>
                             <div>
-                              <h4 className="font-bold text-sm text-slate-800 dark:text-zinc-200">Facturación con RUT (Empresas)</h4>
+                              <h4 className="font-bold text-sm text-slate-800 dark:text-zinc-200">Facturación con RUT</h4>
                               <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium font-sans">Permite al comprador solicitar factura oficial ingresando RUT de 12 dígitos y Razón Social.</p>
                             </div>
                           </div>

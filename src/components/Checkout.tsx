@@ -23,8 +23,7 @@ import {
   Mail,
   ChevronDown,
   ChevronUp,
-  ShoppingBag,
-  Handshake
+  ShoppingBag
 } from "lucide-react";
 import { CartItem, SiteSettings, Coupon, is3DProduct } from "../types";
 import { motion } from "motion/react";
@@ -1338,8 +1337,7 @@ export default function Checkout({
                         <div className="flex items-center gap-2">
                           <FileText className="h-4.5 w-4.5 text-[#E6BF76]" />
                           <div>
-                            <span className="text-xs font-extrabold uppercase tracking-wider text-zinc-200">Factura con RUT de Empresa</span>
-                            <p className="text-[10px] text-zinc-500 leading-normal">Solicita factura oficial con RUT uruguayo para tu empresa</p>
+                            <span className="text-xs font-extrabold uppercase tracking-wider text-zinc-200">Factura con RUT</span>
                           </div>
                         </div>
                         
@@ -1398,7 +1396,7 @@ export default function Checkout({
                       {wantsInvoice && (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 mt-3 pt-3 border-t border-dashed border-[#D4A55A]/35">
                           <div>
-                            <label className="block text-[10px] font-bold uppercase text-zinc-400 mb-1">RUT de Empresa (12 dígitos) <span className="text-red-500">*</span></label>
+                            <label className="block text-[10px] font-bold uppercase text-zinc-400 mb-1">RUT (12 dígitos) <span className="text-red-500">*</span></label>
                             <input
                               type="text"
                               placeholder="Ej: 219999990011"
@@ -1934,24 +1932,18 @@ export default function Checkout({
                     </div>
 
                     <div className="flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-xs font-black uppercase tracking-wider text-[#F4EAD7] whitespace-nowrap">
-                            Mercado Pago
-                          </span>
-                          <span className="h-3.5 w-[1px] bg-zinc-800 flex-shrink-0" />
-                          <div className="flex items-center gap-1 select-none flex-shrink-0">
-                            <div className="w-4.5 h-4.5 rounded-full bg-[#009EE3] flex items-center justify-center shadow-xs shadow-[#009EE3]/30">
-                              <Handshake className="h-2.5 w-2.5 text-white stroke-[2.5]" />
-                            </div>
-                            <span className="text-[11px] font-black lowercase tracking-tighter text-[#009EE3] flex items-center leading-none">
-                              mercado<span className="font-extrabold text-[#009EE3]/80 ml-0.5">pago</span>
-                            </span>
-                          </div>
-                        </div>
-                        <span className="text-[9px] font-black uppercase bg-emerald-500/10 text-emerald-450 px-2.5 py-0.5 rounded-md shrink-0">
-                          Online
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-xs font-black uppercase tracking-wider text-[#F4EAD7] whitespace-nowrap">
+                          Mercado Pago
                         </span>
+                        <div className="bg-white h-10 sm:h-11 px-2 rounded-lg flex items-center justify-center select-none flex-shrink-0 border border-zinc-200 shadow-xs">
+                          <img 
+                            src="https://res.cloudinary.com/dwqzjqjwz/image/upload/v1781615753/MP_RGB_HANDSHAKE_color_vertical_z5rbvz.png" 
+                            alt="Mercado Pago Logo" 
+                            className="h-8.5 sm:h-9.5 w-auto object-contain select-none animate-fade-in"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
                       </div>
                     </div>
                   </button>

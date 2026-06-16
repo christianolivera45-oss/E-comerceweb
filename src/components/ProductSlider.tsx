@@ -150,13 +150,13 @@ export default function ProductSlider({
       {/* Scrollable Products Container */}
       <div 
         ref={containerRef}
-        className="overflow-x-auto scrollbar-none flex gap-6 pb-4 pt-1 snap-x snap-mandatory"
+        className="overflow-x-auto scrollbar-none flex gap-3 sm:gap-6 pb-4 pt-1 snap-x snap-mandatory"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
         {displayedProducts.map((p) => (
           <div 
             key={p.id} 
-            className="flex-shrink-0 w-[280px] sm:w-[300px] snap-start"
+            className="flex-shrink-0 w-[155px] sm:w-[220px] md:w-[285px] snap-start"
           >
             <ProductCard
               product={p}

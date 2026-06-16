@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { X, ShoppingCart, MessageSquare, ShieldCheck, Truck, RefreshCw, ChevronLeft, ChevronRight, AlertCircle, Share2, Maximize2, Cpu, Wrench, Clock, Calendar, Home, Ruler } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Product, SiteSettings, is3DProduct } from "../types";
@@ -235,6 +235,27 @@ export default function ProductDetails({
   const [activeImgIndex, setActiveImgIndex] = useState(0);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
 
+  // Touch Swiping state for Mobiles
+  const [swipeStartX, setSwipeStartX] = useState<number | null>(null);
+
+  const handleSwipeStart = (e: React.TouchEvent) => {
+    setSwipeStartX(e.touches[0].clientX);
+  };
+
+  const handleSwipeEnd = (e: React.TouchEvent) => {
+    if (swipeStartX === null) return;
+    const swipeEndX = e.changedTouches[0].clientX;
+    const diffX = swipeStartX - swipeEndX;
+    const threshold = 40; // minimum pixels to count as a swipe
+
+    if (diffX > threshold) {
+      handleNextImg();
+    } else if (diffX < -threshold) {
+      handlePrevImg();
+    }
+    setSwipeStartX(null);
+  };
+
   // Keep track of the last color that triggered an automatic image transition
   const autoSwitchedColorRef = useRef("");
 
@@ -440,9 +461,13 @@ Me gustaría coordinar stock, fabricación y envío.`;
         }`}>
           
           {/* Main card for product details */}
-          <div className={`relative w-full h-[280px] sm:h-[360px] md:h-[460px] rounded-[24px] flex items-center justify-center p-4 sm:p-5 select-none overflow-hidden ${
-            isThemeDark ? "bg-[#0c0c0e]/30" : "bg-[#fcfbfc]"
-          }`}>
+          <div 
+            onTouchStart={handleSwipeStart}
+            onTouchEnd={handleSwipeEnd}
+            className={`relative w-full h-[280px] sm:h-[360px] md:h-[460px] rounded-[24px] flex items-center justify-center p-4 sm:p-5 select-none overflow-hidden ${
+              isThemeDark ? "bg-[#0c0c0e]/30" : "bg-[#fcfbfc]"
+            }`}
+          >
             
             <div 
               onClick={() => setIsLightboxOpen(true)}
@@ -1383,6 +1408,44 @@ Me gustaría coordinar stock, fabricación y envío.`;
           </div>
         )}
       </AnimatePresence>
+
+      {/* Sticky Bottom Quick Buy Ribbon for Mobile */}
+      {!showSizeChart && (
+        <div className="md:hidden fixed bottom-[60px] left-0 right-0 bg-[#0B1730]/95 backdrop-blur-md border-t border-[#D4A55A]/15 px-4 py-3 z-[60] flex items-center justify-between gap-3 shadow-2xl select-none">
+          <div className="flex items-center gap-2 min-w-0">
+            <img 
+              src={allImages[0] || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=150&q=80"}
+              alt={product.name}
+              className="w-10 h-10 rounded-lg object-contain bg-[#050B1A]/40 border border-[#D4A55A]/10 p-0.5 shrink-0"
+              referrerPolicy="no-referrer"
+            />
+            <div className="min-w-0">
+              <h4 className="text-[11px] font-bold text-[#F4EAD7] truncate">{product.name}</h4>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-xs font-semibold text-[#E6BF76]">
+                  ${Math.round(dynamicPrice)}
+                </span>
+                {(selectedSize || selectedColor) && (
+                  <span className="text-[9px] text-[#D4A55A]/80 font-medium font-sans truncate">
+                    ({[selectedSize, selectedColor].filter(Boolean).join(" / ")})
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={handleAddToCart}
+            className={`py-2 px-4 rounded-full text-[10px] font-sans font-extrabold uppercase tracking-widest shrink-0 cursor-pointer border ${
+              currentStock > 0
+                ? "bg-[#D4A55A] hover:bg-[#E6BF76] border-transparent text-[#050B1A]"
+                : "bg-transparent border-slate-700 text-slate-400 cursor-not-allowed"
+            }`}
+          >
+            {currentStock > 0 ? "Comprar" : "Sin Stock"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

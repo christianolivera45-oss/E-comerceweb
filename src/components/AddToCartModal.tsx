@@ -102,16 +102,16 @@ export default function AddToCartModal({
             transition={{ duration: 0.18 }}
             className={`relative w-full max-w-md rounded-2xl border shadow-xl p-6 overflow-hidden flex flex-col ${
               isDark 
-                ? "bg-zinc-900 border-zinc-800 text-white" 
-                : "bg-white border-slate-201 text-slate-800"
+                ? "bg-[#0B1730] border-[#D4A55A]/25 text-[#F4EAD7]" 
+                : "bg-white border-slate-200 text-slate-800"
             }`}
           >
             {/* Header: Short & direct */}
             <div className="flex items-center gap-2.5 mb-5">
-              <div className="w-6 h-6 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
+              <div className="w-6.5 h-6.5 rounded-full bg-[#D4A55A]/15 text-[#E6BF76] flex items-center justify-center shrink-0">
                 <Check className="w-4 h-4 stroke-[3]" />
               </div>
-              <span className={`text-sm font-extrabold tracking-tight ${isDark ? "text-white" : "text-slate-900"}`}>
+              <span className={`text-sm font-extrabold tracking-tight ${isDark ? "text-[#F4EAD7]" : "text-slate-900"}`}>
                 Agregado al carrito de compras
               </span>
             </div>
@@ -119,35 +119,35 @@ export default function AddToCartModal({
             {/* Compact Product Details block */}
             <div className={`p-3 rounded-xl border mb-5 flex items-center gap-4.5 ${
               isDark 
-                ? "bg-zinc-950/40 border-zinc-800/60" 
+                ? "bg-[#050B1A]/45 border-[#D4A55A]/15" 
                 : "bg-slate-50 border-slate-100"
             }`}>
               <img
                 src={product.imageUrl}
                 alt={product.name}
-                className="w-14 h-14 rounded-lg object-cover shrink-0 border border-black/10 dark:border-white/5"
+                className="w-14 h-14 rounded-lg object-contain bg-[#050B1A]/40 shrink-0 border border-[#D4A55A]/10 p-0.5"
                 referrerPolicy="no-referrer"
               />
               <div className="flex-1 min-w-0">
-                <h4 className="text-sm font-black truncate text-slate-900 dark:text-white">
+                <h4 className="text-sm font-black truncate text-[#F4EAD7] dark:text-white">
                   {product.name}
                 </h4>
                 <div className="flex items-center gap-2 mt-1 text-xs opacity-75">
-                  <span className="font-medium text-slate-600 dark:text-zinc-300">Cant: {quantity}</span>
-                  {(selectedSize || selectedColor) && <span className="opacity-40">•</span>}
-                  {selectedSize && <span className="font-medium text-slate-600 dark:text-zinc-300">Talle: {selectedSize}</span>}
-                  {selectedColor && <span className="font-medium text-slate-600 dark:text-zinc-300">Color: {selectedColor}</span>}
+                  <span className="font-medium text-slate-400 dark:text-zinc-400">Cant: {quantity}</span>
+                  {(selectedSize || selectedColor) && <span className="opacity-40 text-slate-400">•</span>}
+                  {selectedSize && <span className="font-medium text-slate-400 dark:text-zinc-400">Talle: {selectedSize}</span>}
+                  {selectedColor && <span className="font-medium text-slate-400 dark:text-zinc-400">Color: {selectedColor}</span>}
                 </div>
               </div>
-              <span className={`font-mono text-sm font-black shrink-0 ${isDark ? "text-emerald-400" : "text-indigo-600"}`}>
+              <span className={`font-mono text-sm font-black shrink-0 ${isDark ? "text-[#E6BF76]" : "text-indigo-600"}`}>
                 UYU ${Math.round(product.price * quantity)}
               </span>
             </div>
 
             {/* Cross-selling Recommendations Section */}
             {crossSellProducts.length > 0 && (
-              <div className="mb-6 mt-1 border-t border-dashed border-slate-200 dark:border-zinc-800 pt-4">
-                <span className={`text-[10px] uppercase font-black tracking-wider block mb-3 opacity-60 ${isDark ? "text-zinc-400" : "text-slate-505"}`}>
+              <div className="mb-6 mt-1 border-t border-dashed border-[#D4A55A]/15 dark:border-zinc-800 pt-4">
+                <span className={`text-[10px] uppercase font-black tracking-wider block mb-3 opacity-80 ${isDark ? "text-[#D4A55A]/80" : "text-slate-505"}`}>
                   ¡Completa tu pedido! Te sugerimos:
                 </span>
                 
@@ -159,21 +159,21 @@ export default function AddToCartModal({
                         key={item.id}
                         className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-left transition relative overflow-hidden ${
                           isDark 
-                            ? "bg-zinc-950/30 border-zinc-800/80 hover:border-zinc-700/80 text-white" 
+                            ? "bg-[#050B1A]/30 border-[#D4A55A]/15 hover:border-[#D4A55A]/35 text-white" 
                             : "bg-slate-100/50 border-slate-200/60 hover:border-slate-200 text-slate-800"
                         }`}
                       >
                         <img
                           src={item.imageUrl}
                           alt={item.name}
-                          className="w-10 h-10 rounded-md object-cover shrink-0 border border-black/5 dark:border-white/5"
+                          className="w-10 h-10 rounded-md object-contain bg-[#050B1A]/40 shrink-0 border border-[#D4A55A]/10 p-0.5"
                           referrerPolicy="no-referrer"
                         />
                         <div className="flex-1 min-w-0 pr-6">
-                          <h5 className="text-xs font-bold truncate">
+                          <h5 className="text-[11px] font-bold truncate text-[#F4EAD7]">
                             {item.name}
                           </h5>
-                          <span className={`font-mono text-[10px] font-extrabold block mt-0.5 ${isDark ? "text-emerald-400" : "text-indigo-600"}`}>
+                          <span className={`font-mono text-[10px] font-extrabold block mt-0.5 ${isDark ? "text-[#E6BF76]" : "text-indigo-600"}`}>
                             UYU ${Math.round(item.price)}
                           </span>
                         </div>
@@ -186,7 +186,7 @@ export default function AddToCartModal({
                             isAdded 
                               ? "bg-emerald-500 text-white" 
                               : isDark 
-                                ? "bg-zinc-800 hover:bg-zinc-700 text-zinc-300" 
+                                ? "bg-[#0B1730] hover:bg-[#D4A55A]/10 text-[#E6BF76] border border-[#D4A55A]/25" 
                                 : "bg-white border border-slate-200 hover:bg-slate-100 text-slate-700"
                           }`}
                           title="Agregar al carrito"
@@ -210,7 +210,7 @@ export default function AddToCartModal({
                 onClick={onClose}
                 className={`py-2.5 rounded-xl text-xs font-black transition cursor-pointer border ${
                   isDark 
-                    ? "bg-zinc-800 hover:bg-zinc-750 border-zinc-700 text-zinc-300" 
+                    ? "bg-[#0B1730] hover:bg-[#D4A55A]/10 border-[#D4A55A]/20 text-[#F4EAD7]" 
                     : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
                 }`}
               >
@@ -218,7 +218,11 @@ export default function AddToCartModal({
               </button>
               <button
                 onClick={onGoToCheckout}
-                className="py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition cursor-pointer text-center shadow-sm shadow-indigo-600/10"
+                className={`py-2.5 rounded-xl text-xs font-black transition cursor-pointer text-center shadow-lg uppercase tracking-wider ${
+                  isDark
+                    ? "bg-[#D4A55A] hover:bg-[#E6BF76] text-[#050B1A] shadow-[#D4A55A]/10"
+                    : "bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/10"
+                }`}
               >
                 Ir a pagar →
               </button>

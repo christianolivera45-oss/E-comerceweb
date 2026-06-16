@@ -14,6 +14,7 @@ import {
   Cpu,
   Save,
   Grid,
+  List,
   Sparkles,
   Smartphone,
   CheckCircle2,
@@ -80,7 +81,11 @@ import {
   Send,
   Info,
   MapPin,
-  Globe
+  Globe,
+  Instagram,
+  Facebook,
+  Phone,
+  ShieldCheck
 } from "lucide-react";
 import { Product, SiteSettings, ShopState, CartItem, Category, Subcategory, ProductVariant, is3DProduct } from "./types";
 import ThemeStyles from "./components/ThemeStyles";
@@ -230,6 +235,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   promotionBannerBgColor: "#4f46e5",
   promotionBannerTextColor: "#ffffff",
   promotionBannerTransition: "slide",
+  heroSliderTransition: "slide",
   showPromotionBanner: true,
   lowStockThreshold: 5,
   mercadopagoActive: true,
@@ -755,7 +761,14 @@ export default function App() {
   const [sortBy, setSortBy] = useState<string>("featured");
   const [onlyInStock, setOnlyInStock] = useState<boolean>(false);
   const [showFiltersPanel, setShowFiltersPanel] = useState<boolean>(false);
+  const [mobileLayoutMode, setMobileLayoutMode] = useState<"grid" | "list">("list");
   const [stockFilterTab, setStockFilterTab] = useState<"all" | "outOfStock" | "lowStock" | "alerts">("alerts");
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Auto-reset pagination on catalog changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCategory, selectedSubcategory, searchQuery, sortBy, onlyInStock]);
 
   // Custom toast notification system to bypass iframe alert limits
   const showToast = (message: string, type: "success" | "error" | "info" = "info") => {
@@ -2524,6 +2537,13 @@ export default function App() {
     return 0;
   });
 
+  const itemsPerPage = 10;
+  const totalPages = Math.ceil(sortedProducts.length / itemsPerPage);
+  const paginatedProducts = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return sortedProducts.slice(startIndex, startIndex + itemsPerPage);
+  }, [sortedProducts, currentPage]);
+
   const featuredProducts = store.products.filter((p) => p.featured && !p.paused);
 
   const clothingProducts = store.products.filter((p) => {
@@ -3139,19 +3159,70 @@ export default function App() {
 
           {/* Search bar container */}
           <section id="catalog-view" className="py-8 max-w-7xl mx-auto px-6 w-full flex-1">
+
+
+            {/* Subcategory Pills Bar (Shown when a specific category is selected and contains subcategories) */}
+            {(() => {
+              const activeCategoryObject = (store.dbCategories || []).find(
+                (c) => c.nombre === selectedCategory || c.id === selectedCategory
+              );
+              if (!activeCategoryObject) return null;
+              
+              const currentSubs = (store.dbSubcategories || []).filter(
+                (s) => s.categoria_id === activeCategoryObject.id && s.active !== false
+              );
+              if (currentSubs.length === 0) return null;
+
+              return (
+                <div className="flex items-center gap-2 py-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] border-b border-zinc-200/50 dark:border-zinc-800/55 pb-4 mb-6 select-none -mx-6 px-6 lg:mx-0 lg:px-0">
+                  <span className="text-[10px] uppercase font-extrabold text-zinc-500 mr-2 tracking-wider shrink-0">Subcategorías:</span>
+                  <button
+                    onClick={() => {
+                      navigateToProductRoute(activeCategoryObject.id, "all");
+                    }}
+                    className={`py-1.5 px-3.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-all border cursor-pointer active:scale-95 duration-150 ${
+                      !selectedSubcategory || selectedSubcategory === "all"
+                        ? "bg-[#E6BF76]/25 border-[#E6BF76]/60 text-[#E6BF76] font-black"
+                        : "bg-[#0B1730]/40 text-[#F4EAD7]/75 border-zinc-800 hover:border-[#D4A55A]/30 hover:text-[#E6BF76]"
+                    }`}
+                  >
+                    Ver Todo
+                  </button>
+                  {currentSubs.map((subObj) => {
+                    const isSubActive = selectedSubcategory === subObj.id;
+                    return (
+                      <button
+                        key={subObj.id}
+                        onClick={() => {
+                          navigateToProductRoute(activeCategoryObject.id, subObj.id);
+                        }}
+                        className={`py-1.5 px-3.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-all border cursor-pointer active:scale-95 duration-150 ${
+                          isSubActive
+                            ? "bg-[#E6BF76]/25 border-[#E6BF76]/60 text-[#E6BF76] font-black"
+                            : "bg-[#0B1730]/40 text-[#F4EAD7]/75 border-zinc-800 hover:border-[#D4A55A]/30 hover:text-[#E6BF76]"
+                        }`}
+                      >
+                        {subObj.nombre}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
             {selectedCategory !== "todos" && (
-              <div className="flex flex-col md:flex-row md:items-center justify-end gap-6 mb-6 border-b pb-6 border-zinc-200/50 dark:border-zinc-800/50">
+              <div className="flex flex-col md:flex-row md:items-center justify-end gap-6 mb-6 border-b pb-6 border-zinc-200/50 dark:border-zinc-850/50">
                 {/* Premium Search, Sorting & Stock Filter Bar */}
                 <div className="w-full md:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
-                  {/* Show elegant Filtros & Orden button ONLY when a category is selected */}
+                  {/* Show elegant Filtros & Orden button */}
                   <button
                     id="btn-advanced-filters"
                     onClick={() => setShowFiltersPanel(!showFiltersPanel)}
                     className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-xs font-bold transition-all border cursor-pointer select-none ${
                       showFiltersPanel || onlyInStock || sortBy !== "featured"
-                        ? "theme-btn-accent text-zinc-950 border-transparent shadow-sm scale-102"
+                        ? "theme-btn-accent text-[#050B1A] border-transparent shadow-sm scale-102"
                         : store.settings.themeMode === "dark"
-                        ? "bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800"
+                        ? "bg-zinc-900 border-[#D4A55A]/30 text-[#E6BF76] hover:border-[#D4A55A]/60"
                         : "bg-slate-100 border-slate-200 text-zinc-700 hover:bg-slate-200"
                     }`}
                   >
@@ -3165,7 +3236,7 @@ export default function App() {
               </div>
             )}
 
-            {/* Collapsible advanced filters panel (Only shown inside a category) */}
+            {/* Collapsible advanced filters panel - Desktop Only */}
             <AnimatePresence>
               {selectedCategory !== "todos" && showFiltersPanel && (
                 <motion.div
@@ -3173,7 +3244,7 @@ export default function App() {
                   animate={{ height: "auto", opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.25, ease: "easeInOut" }}
-                  className="overflow-hidden pb-6 border-b border-zinc-200/50 dark:border-zinc-800/50 mb-6"
+                  className="hidden md:block overflow-hidden pb-6 border-b border-zinc-200/50 dark:border-zinc-800/50 mb-6"
                 >
                   <div className={`p-5 rounded-2xl border ${
                     store.settings.themeMode === "dark"
@@ -3249,10 +3320,240 @@ export default function App() {
               )}
             </AnimatePresence>
 
+            {/* Mobile Bottom Sheet Filters Panel - Mobile Only (Drawer slide up) */}
+            <AnimatePresence>
+              {selectedCategory !== "todos" && showFiltersPanel && (
+                <div className="fixed inset-0 z-50 md:hidden flex items-end justify-center pointer-events-none">
+                  {/* Backdrop overlay */}
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    onClick={() => setShowFiltersPanel(false)}
+                    className="absolute inset-0 bg-black/75 backdrop-blur-xs pointer-events-auto"
+                  />
+
+                  {/* Drawer Sheet */}
+                  <motion.div
+                    initial={{ y: "100%" }}
+                    animate={{ y: 0 }}
+                    exit={{ y: "100%" }}
+                    transition={{ type: "spring", damping: 26, stiffness: 220 }}
+                    className={`relative w-full rounded-t-[2rem] border-t shadow-2xl flex flex-col max-h-[85vh] pointer-events-auto overflow-hidden z-10 ${
+                      store.settings.themeMode === "dark"
+                        ? "bg-[#090F21] border-[#D4A55A]/25 text-white"
+                        : "bg-white border-slate-200 text-zinc-950"
+                    }`}
+                  >
+                    {/* Top pill drag handle */}
+                    <div className="w-12 h-1.5 bg-zinc-300 dark:bg-zinc-850 rounded-full mx-auto my-3 shrink-0" />
+
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-6 pb-4 border-b border-zinc-150 dark:border-zinc-900 shrink-0">
+                      <div className="flex items-center gap-2">
+                        <Sliders className="w-4 h-4 text-[#D4A55A]" />
+                        <span className="text-sm font-bold uppercase tracking-wider">Filtros & Orden</span>
+                      </div>
+                      <button
+                        onClick={() => setShowFiltersPanel(false)}
+                        className="p-1 px-2.5 rounded-lg text-xs font-bold text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 cursor-pointer"
+                      >
+                        Cerrar
+                      </button>
+                    </div>
+
+                    {/* Content Scroll Area */}
+                    <div className="overflow-y-auto px-6 py-5 space-y-6 pb-28">
+                      {/* Section 1: Order by */}
+                      <div>
+                        <h4 className="text-[10px] font-extrabold uppercase tracking-widest text-[#D4A55A] mb-3">
+                          Ordenar por
+                        </h4>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { id: "featured", label: "Destacados ⭐" },
+                            { id: "price-asc", label: "Menor Precio 📈" },
+                            { id: "price-desc", label: "Mayor Precio 📉" },
+                            { id: "newest", label: "Más Recientes 📅" }
+                          ].map(option => (
+                            <button
+                              key={option.id}
+                              onClick={() => setSortBy(option.id)}
+                              className={`py-3 px-2 rounded-xl text-xs font-bold cursor-pointer transition-all duration-200 text-center ${
+                                sortBy === option.id
+                                  ? "bg-[#D4A55A]/15 text-[#E6BF76] border border-[#D4A55A]/60 font-black shadow-sm"
+                                  : store.settings.themeMode === "dark"
+                                  ? "bg-zinc-900/40 text-zinc-400 border border-zinc-905 hover:text-white"
+                                  : "bg-slate-50 text-zinc-600 border border-slate-150 hover:bg-slate-100"
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Section 2: Store Availability */}
+                      <div className="space-y-3">
+                        <h4 className="text-[10px] font-extrabold uppercase tracking-widest text-[#D4A55A]">
+                          Disponibilidad
+                        </h4>
+                        <div className="flex items-center justify-between p-3.5 rounded-2xl border border-zinc-150 dark:border-zinc-900 bg-zinc-50/50 dark:bg-zinc-900/10">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-xs font-bold">Solo con Stock disponible</span>
+                            <span className="text-[10px] text-zinc-400 font-medium whitespace-nowrap">Ocultar productos agotados</span>
+                          </div>
+                          <button
+                            onClick={() => setOnlyInStock(!onlyInStock)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer outline-none ${
+                              onlyInStock ? "bg-indigo-600 dark:bg-[#D4A55A]" : "bg-zinc-300 dark:bg-zinc-800"
+                            }`}
+                          >
+                            <span
+                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+                                onlyInStock ? "translate-x-6" : "translate-x-1"
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Section 3: Categories & Subcategories */}
+                      <div>
+                        <h4 className="text-[10px] font-extrabold uppercase tracking-widest text-[#D4A55A] mb-3">
+                          Categorías
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => {
+                              navigateToProductRoute("todos", "all");
+                            }}
+                            className={`py-2 px-3.5 rounded-full text-xs font-bold border transition-all cursor-pointer ${
+                              selectedCategory === "todos"
+                                ? "bg-[#D4A55A] text-[#050B1A] border-[#D4A55A]"
+                                : store.settings.themeMode === "dark"
+                                ? "bg-zinc-900/50 border-zinc-800 text-zinc-300"
+                                : "bg-slate-50 border-slate-200 text-zinc-700"
+                            }`}
+                          >
+                            Todos
+                          </button>
+                          {(store.dbCategories || []).filter(c => c.active !== false).map((cat) => {
+                            const isCatActive = selectedCategory === cat.nombre || selectedCategory === cat.id;
+                            return (
+                              <button
+                                key={cat.id}
+                                onClick={() => {
+                                  navigateToProductRoute(cat.id, "all");
+                                }}
+                                className={`py-2 px-3.5 rounded-full text-xs font-bold border transition-all cursor-pointer ${
+                                  isCatActive
+                                    ? "bg-[#D4A55A] text-[#050B1A] border-[#D4A55A]"
+                                    : store.settings.themeMode === "dark"
+                                    ? "bg-zinc-900/50 border-zinc-800 text-zinc-300"
+                                    : "bg-slate-50 border-slate-200 text-zinc-700"
+                                }`}
+                              >
+                                {cat.nombre}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Subcategories if category selected has subs */}
+                      {(() => {
+                        const activeCategoryObject = (store.dbCategories || []).find(
+                          (c) => c.nombre === selectedCategory || c.id === selectedCategory
+                        );
+                        if (!activeCategoryObject) return null;
+                        
+                        const currentSubs = (store.dbSubcategories || []).filter(
+                          (s) => s.categoria_id === activeCategoryObject.id && s.active !== false
+                        );
+                        if (currentSubs.length === 0) return null;
+
+                        return (
+                          <div className="space-y-3 pt-3 border-t border-zinc-150 dark:border-zinc-900">
+                            <h4 className="text-[10px] font-extrabold uppercase tracking-widest text-[#D4A55A]">
+                              Subcategorías de {activeCategoryObject.nombre}
+                            </h4>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                onClick={() => {
+                                  navigateToProductRoute(activeCategoryObject.id, "all");
+                                }}
+                                className={`py-1.5 px-3 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
+                                  !selectedSubcategory || selectedSubcategory === "all"
+                                    ? "bg-[#E6BF76]/20 border-[#E6BF76]/60 text-[#E6BF76]"
+                                    : store.settings.themeMode === "dark"
+                                    ? "bg-zinc-900/50 border-zinc-800 text-zinc-300"
+                                    : "bg-slate-50 border-slate-200 text-zinc-700"
+                                }`}
+                              >
+                                Ver Todo
+                              </button>
+                              {currentSubs.map((subObj) => {
+                                const isSubActive = selectedSubcategory === subObj.id;
+                                return (
+                                  <button
+                                    key={subObj.id}
+                                    onClick={() => {
+                                      navigateToProductRoute(activeCategoryObject.id, subObj.id);
+                                    }}
+                                    className={`py-1.5 px-3 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
+                                      isSubActive
+                                        ? "bg-[#E6BF76]/20 border-[#E6BF76]/60 text-[#E6BF76]"
+                                        : store.settings.themeMode === "dark"
+                                        ? "bg-zinc-900/50 border-zinc-800 text-zinc-300"
+                                        : "bg-slate-50 border-slate-200 text-zinc-700"
+                                    }`}
+                                  >
+                                    {subObj.nombre}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Bottom Action Footer Bar */}
+                    <div className={`absolute bottom-0 left-0 right-0 p-4 border-t flex gap-3 z-20 ${
+                      store.settings.themeMode === "dark"
+                        ? "bg-[#090F21]/95 border-zinc-900/80 text-white backdrop-blur-md"
+                        : "bg-white/95 border-slate-150 text-zinc-950 backdrop-blur-md"
+                    }`}>
+                      {(onlyInStock || sortBy !== "featured" || selectedCategory !== "todos" || selectedSubcategory !== "all") && (
+                        <button
+                          onClick={() => {
+                            setOnlyInStock(false);
+                            setSortBy("featured");
+                            navigateToProductRoute("todos", "all");
+                          }}
+                          className="px-4 py-3 rounded-xl border border-red-500/30 text-red-500 hover:bg-red-500/10 text-xs font-bold transition-all shrink-0 cursor-pointer"
+                        >
+                          Limpiar
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setShowFiltersPanel(false)}
+                        className="flex-1 py-3 text-center rounded-xl bg-gradient-to-r from-[#D4A55A] to-[#E6BF76] hover:brightness-110 active:brightness-95 text-zinc-950 text-xs font-black transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        Ver {sortedProducts.length} productos
+                      </button>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
+
             {/* Clean current filters notification strip on non-panel view */}
             {selectedCategory !== "todos" && !showFiltersPanel && (onlyInStock || sortBy !== "featured") && (
-              <div className="flex items-center justify-between gap-3 pb-4 border-b border-zinc-200/50 dark:border-zinc-800/50 mb-6 px-1">
-                <span className="text-[11px] text-indigo-400 font-semibold">✨ Filtro rápido activo para ordenar tu catálogo</span>
+              <div className="flex items-center justify-between gap-3 pb-4 border-b border-zinc-200/50 dark:border-zinc-805/50 mb-6 px-1">
+                <span className="text-[11px] text-[#E6BF76] font-semibold">✨ Filtro rápido activo para ordenar tu catálogo</span>
                 <button
                   onClick={() => {
                     setOnlyInStock(false);
@@ -3312,6 +3613,32 @@ export default function App() {
                     </h3>
                     <span className="text-xs font-mono text-zinc-500 dark:text-zinc-400">({sortedProducts.length} productos)</span>
                   </div>
+
+                  {/* Mobile Layout Mode Toggle (Compact Grid 2 vs List 1) */}
+                  <div className="lg:hidden flex items-center bg-[#0B1730]/60 border border-[#D4A55A]/20 rounded-xl p-0.5 gap-0.5">
+                    <button
+                      onClick={() => setMobileLayoutMode("grid")}
+                      className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                        mobileLayoutMode === "grid"
+                          ? "bg-[#D4A55A] text-[#050B1A]"
+                          : "text-zinc-400 hover:text-[#E6BF76]"
+                      }`}
+                      title="Vista de Cuadrícula"
+                    >
+                      <Grid className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setMobileLayoutMode("list")}
+                      className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                        mobileLayoutMode === "list"
+                          ? "bg-[#D4A55A] text-[#050B1A]"
+                          : "text-zinc-400 hover:text-[#E6BF76]"
+                      }`}
+                      title="Vista de Lista"
+                    >
+                      <List className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
 
                 {sortedProducts.length === 0 ? (
@@ -3334,17 +3661,119 @@ export default function App() {
                     </button>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
-                    {sortedProducts.map((p) => (
-                      <ProductCard
-                        key={p.id}
-                        product={p}
-                        settings={store.settings}
-                        onAddToCart={(prod, sz, col) => handleAddToCart(prod, sz, col)}
-                        onViewProduct={(prod) => handleOpenProduct(prod)}
-                      />
-                    ))}
-                  </div>
+                  <>
+                    <div className={`grid gap-3 sm:gap-6 ${
+                      mobileLayoutMode === "list"
+                        ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
+                        : "grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
+                    }`}>
+                      {paginatedProducts.map((p) => (
+                        <ProductCard
+                          key={p.id}
+                          product={p}
+                          layoutMode={mobileLayoutMode}
+                          settings={store.settings}
+                          onAddToCart={(prod, sz, col) => handleAddToCart(prod, sz, col)}
+                          onViewProduct={(prod) => handleOpenProduct(prod)}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Pagination Controls */}
+                    {totalPages > 1 && (
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 pt-6 border-t border-zinc-200/50 dark:border-zinc-800/50">
+                        <div className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
+                          Mostrando <span className="font-bold text-zinc-700 dark:text-zinc-300">{Math.min((currentPage - 1) * itemsPerPage + 1, sortedProducts.length)}</span> al <span className="font-bold text-zinc-700 dark:text-zinc-300">{Math.min(currentPage * itemsPerPage, sortedProducts.length)}</span> de <span className="font-bold text-[#D4A55A]">{sortedProducts.length}</span> productos
+                        </div>
+                        
+                        <div className="flex items-center gap-1.5">
+                          {/* Prev Page */}
+                          <button
+                            onClick={() => {
+                              if (currentPage > 1) {
+                                setCurrentPage(currentPage - 1);
+                                document.getElementById("catalog-view")?.scrollIntoView({ behavior: "smooth" });
+                              }
+                            }}
+                            disabled={currentPage === 1}
+                            className={`p-2 px-3 rounded-xl border text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:pointer-events-none ${
+                              store.settings.themeMode === "dark"
+                                ? "bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800"
+                                : "bg-white border-slate-200 text-zinc-700 hover:bg-slate-50"
+                            }`}
+                            title="Página Anterior"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                            <span className="hidden sm:inline">Anterior</span>
+                          </button>
+
+                          {/* Numbers */}
+                          <div className="flex items-center gap-1">
+                            {Array.from({ length: totalPages }).map((_, index) => {
+                              const pageNum = index + 1;
+                              if (
+                                pageNum === 1 ||
+                                pageNum === totalPages ||
+                                Math.abs(pageNum - currentPage) <= 1
+                              ) {
+                                return (
+                                  <button
+                                    key={pageNum}
+                                    onClick={() => {
+                                      setCurrentPage(pageNum);
+                                      document.getElementById("catalog-view")?.scrollIntoView({ behavior: "smooth" });
+                                    }}
+                                    className={`w-9 h-9 rounded-xl text-xs font-black transition-all duration-200 cursor-pointer flex items-center justify-center ${
+                                      currentPage === pageNum
+                                        ? "bg-gradient-to-r from-[#D4A55A] to-[#E6BF76] text-zinc-950 shadow-sm outline-none"
+                                        : store.settings.themeMode === "dark"
+                                        ? "bg-zinc-900 border border-zinc-805 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800"
+                                        : "bg-white border border-slate-200 text-zinc-700 hover:bg-slate-100"
+                                    }`}
+                                  >
+                                    {pageNum}
+                                  </button>
+                                );
+                              }
+                              
+                              if (
+                                pageNum === 2 ||
+                                pageNum === totalPages - 1
+                              ) {
+                                return (
+                                  <span key={pageNum} className="px-1 text-xs text-zinc-400 font-bold">
+                                    ...
+                                  </span>
+                                );
+                              }
+
+                              return null;
+                            })}
+                          </div>
+
+                          {/* Next Page */}
+                          <button
+                            onClick={() => {
+                              if (currentPage < totalPages) {
+                                setCurrentPage(currentPage + 1);
+                                document.getElementById("catalog-view")?.scrollIntoView({ behavior: "smooth" });
+                              }
+                            }}
+                            disabled={currentPage === totalPages}
+                            className={`p-2 px-3 rounded-xl border text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:pointer-events-none ${
+                              store.settings.themeMode === "dark"
+                                ? "bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-800"
+                                : "bg-white border-slate-200 text-zinc-700 hover:bg-slate-50"
+                            }`}
+                            title="Siguiente Página"
+                          >
+                            <span className="hidden sm:inline">Siguiente</span>
+                            <ChevronRight className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             ) : (
@@ -3401,35 +3830,141 @@ export default function App() {
           </section>
 
           {/* Features highlight banner */}
-          <footer className={`py-12 border-t mt-12 transition-all duration-300 ${
+          <footer className={`py-10 sm:py-14 border-t mt-12 sm:mt-16 transition-all duration-300 relative overflow-hidden ${
             store.settings.themeMode === "dark" 
-              ? "bg-zinc-950/40 border-zinc-900/60 text-zinc-400" 
-              : "bg-white border-slate-100/85 text-slate-500"
+              ? "bg-[#050B1A] border-[#D4A55A]/25 text-slate-300" 
+              : "bg-[#FAF7F2] border-slate-200 text-slate-700"
           }`}>
-            <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-8 text-center md:text-left">
-              <div className="space-y-2 group">
-                <h4 className="font-bold text-xs uppercase tracking-[0.14em] font-sans transition-all duration-300 text-[#F4EAD7] group-hover:text-[#E6BF76]">
-                  {store.settings.footerCol1Title || "🚀 Compra Personalizada"}
-                </h4>
-                <p className="text-xs leading-relaxed opacity-85 hover:opacity-100 transition-opacity">
+            {/* Top aesthetic ambient light strip */}
+            {store.settings.themeMode === "dark" && (
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-[1px] bg-gradient-to-r from-transparent via-[#D4A55A]/40 to-transparent"></div>
+            )}
+            
+            <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6 lg:gap-10">
+              {/* BRAND COLUMN / REDES SOCIALES */}
+              <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ${
+                store.settings.themeMode === "dark"
+                  ? "bg-[#0B1730]/40 border-[#D4A55A]/10 hover:border-[#D4A55A]/25"
+                  : "bg-white border-slate-200 shadow-sm"
+              }`}>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="p-1.5 rounded-lg bg-[#D4A55A]/10 text-[#E6BF76]">
+                    <Globe className="h-4 w-4" />
+                  </span>
+                  <h4 className={`font-bold text-xs uppercase tracking-wider font-sans ${
+                    store.settings.themeMode === "dark" ? "text-[#F4EAD7]" : "text-slate-900"
+                  }`}>
+                    Nuestras Redes
+                  </h4>
+                </div>
+                
+                <p className="text-xs leading-relaxed opacity-85 mb-4">
+                  Sigue nuestras publicaciones, novedades del talle y promociones imperdibles agregadas diariamente.
+                </p>
+
+                <div className="flex items-center gap-2.5">
+                  <a 
+                    href="https://instagram.com" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className={`flex-1 p-2.5 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 text-xs font-bold border ${
+                      store.settings.themeMode === "dark"
+                        ? "bg-[#0B1730] hover:bg-[#D4A55A]/15 border-[#D4A55A]/20 text-[#E6BF76]"
+                        : "bg-white hover:bg-slate-100 border-slate-200 text-slate-800"
+                    }`}
+                  >
+                    <Instagram className="h-4 w-4" />
+                    <span>Instagram</span>
+                  </a>
+                  <a 
+                    href="https://facebook.com" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className={`flex-1 p-2.5 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 text-xs font-bold border ${
+                      store.settings.themeMode === "dark"
+                        ? "bg-[#0B1730] hover:bg-[#D4A55A]/15 border-[#D4A55A]/20 text-[#E6BF76]"
+                        : "bg-white hover:bg-slate-100 border-slate-200 text-slate-800"
+                    }`}
+                  >
+                    <Facebook className="h-4 w-4" />
+                    <span>Facebook</span>
+                  </a>
+                </div>
+              </div>
+
+              {/* COLUMN 2 (Feature 1 - Compra Personalizada) */}
+              <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ${
+                store.settings.themeMode === "dark"
+                  ? "bg-[#0B1730]/40 border-[#D4A55A]/10 hover:border-[#D4A55A]/25"
+                  : "bg-white border-slate-200 shadow-sm"
+              }`}>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="p-1.5 rounded-lg bg-[#D4A55A]/10 text-[#E6BF76]">
+                    <ShoppingCart className="h-4 w-4" />
+                  </span>
+                  <h4 className={`font-bold text-xs uppercase tracking-wider font-sans ${
+                    store.settings.themeMode === "dark" ? "text-[#F4EAD7]" : "text-slate-900"
+                  }`}>
+                    {store.settings.footerCol1Title || "🚀 Compra Personalizada"}
+                  </h4>
+                </div>
+                <p className="text-xs leading-relaxed opacity-85">
                   {store.settings.footerCol1Text || "Realiza tus pedidos seleccionando tus talles y colores favoritos. El carrito envía una lista formateada directo a nuestro WhatsApp de atención oficial para coordinar pago y entrega express."}
                 </p>
               </div>
-              <div className="space-y-2 group">
-                <h4 className="font-bold text-xs uppercase tracking-[0.14em] font-sans transition-all duration-300 text-[#F4EAD7] group-hover:text-[#E6BF76]">
-                  {store.settings.footerCol2Title || "🌟 Calidad Asegurada"}
-                </h4>
-                <p className="text-xs leading-relaxed opacity-85 hover:opacity-100 transition-opacity">
+
+              {/* COLUMN 3 (Feature 2 - Calidad Asegurada) */}
+              <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ${
+                store.settings.themeMode === "dark"
+                  ? "bg-[#0B1730]/40 border-[#D4A55A]/10 hover:border-[#D4A55A]/25"
+                  : "bg-white border-slate-200 shadow-sm"
+              }`}>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="p-1.5 rounded-lg bg-[#D4A55A]/10 text-[#E6BF76]">
+                    <ShieldCheck className="h-4 w-4" />
+                  </span>
+                  <h4 className={`font-bold text-xs uppercase tracking-wider font-sans ${
+                    store.settings.themeMode === "dark" ? "text-[#F4EAD7]" : "text-slate-900"
+                  }`}>
+                    {store.settings.footerCol2Title || "🌟 Calidad Asegurada"}
+                  </h4>
+                </div>
+                <p className="text-xs leading-relaxed opacity-85">
                   {store.settings.footerCol2Text || "Todos los productos que visualizas pasan por un control estricto de empaque y selección. Ofrecemos cambio de talle inmediato dentro de las 72 horas de recibida tu compra."}
                 </p>
               </div>
-              <div className="space-y-2 group">
-                <h4 className="font-bold text-xs uppercase tracking-[0.14em] font-sans transition-all duration-300 text-[#F4EAD7] group-hover:text-[#E6BF76]">
-                  {store.settings.footerCol3Title || "📞 Soporte Directo"}
-                </h4>
-                <p className="text-xs leading-relaxed opacity-85 hover:opacity-100 transition-opacity">
-                  {store.settings.footerCol3Text || "¿Habiendo dudas con talles o stock rápido? Pícale al botón de consulta express en la ficha de cada producto y un asesor te responderá inmediatamente en WhatsApp."}
-                </p>
+
+              {/* COLUMN 4 (Google Maps / Ubicación Comercial) */}
+              <div id="footer-map" className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 flex flex-col justify-between ${
+                store.settings.themeMode === "dark"
+                  ? "bg-[#0B1730]/40 border-[#D4A55A]/10 hover:border-[#D4A55A]/25"
+                  : "bg-white border-slate-200 shadow-sm"
+              }`}>
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="p-1.5 rounded-lg bg-[#D4A55A]/10 text-[#E6BF76]">
+                      <MapPin className="h-4 w-4" />
+                    </span>
+                    <h4 className={`font-bold text-xs uppercase tracking-wider font-sans ${
+                      store.settings.themeMode === "dark" ? "text-[#F4EAD7]" : "text-slate-900"
+                    }`}>
+                      Nuestra Ubicación
+                    </h4>
+                  </div>
+                  <p className="text-[11px] leading-relaxed opacity-80 mb-3">
+                    Visítanos en nuestra tienda física. Consulta horarios y rutas directamente en el mapa interactivo.
+                  </p>
+                </div>
+                <div className="w-full h-[140px] rounded-xl overflow-hidden border border-[#D4A55A]/15 relative">
+                  <iframe 
+                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3277.7005578324!2d-55.86459034517074!3d-34.763135191187786!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x95a021e5c567911d%3A0x601fcf5d591c0db4!2sJuem!5e0!3m2!1ses-419!2suy!4v1781623339597!5m2!1ses-419!2suy" 
+                    className="absolute inset-0 w-full h-full"
+                    style={{ border: 0 }} 
+                    allowFullScreen={true} 
+                    loading="lazy" 
+                    referrerPolicy="no-referrer-when-downgrade"
+                  ></iframe>
+                </div>
               </div>
             </div>
 
@@ -3440,16 +3975,29 @@ export default function App() {
               />
             )}
 
-            <div className="max-w-7xl mx-auto px-6 mt-8 pt-8 border-t border-zinc-800/10 text-center text-[11px] space-y-2">
-              <p className="leading-relaxed opacity-75">
-                &copy; 2026 {store.settings.siteTitle}. {store.settings.footerCopyright || "Desarrollado con tecnología de punta responsive. Reservados todos los derechos."}
-              </p>
+            {/* Bottom copyright segment */}
+            <div className={`max-w-7xl mx-auto px-6 mt-10 sm:mt-12 pt-6 sm:pt-8 border-t flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left text-[11px] ${
+              store.settings.themeMode === "dark" ? "border-zinc-800/60" : "border-slate-200"
+            }`}>
+              <div className="space-y-1">
+                <p className="font-medium">
+                  &copy; 2026 {store.settings.siteTitle || "Ventas Juem"}. {store.settings.footerCopyright || "Desarrollado con tecnología de punta responsive. Reservados todos los derechos."}
+                </p>
+                <p className="opacity-60 flex items-center justify-center md:justify-start gap-1">
+                  <MapPin className="h-3 w-3 text-[#D4A55A]" /> Montevideo, Uruguay • Conexión Segura vía WhatsApp Web API
+                </p>
+              </div>
+              
               {!authToken && (
                 <button
                   onClick={() => setIsLoginModalOpen(true)}
-                  className="text-zinc-500 hover:text-indigo-400 dark:text-zinc-500 dark:hover:text-indigo-400 font-semibold cursor-pointer transition text-xs inline-flex items-center gap-1 mt-1"
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg border flex items-center gap-1.5 cursor-pointer transition-all duration-300 ${
+                    store.settings.themeMode === "dark"
+                      ? "bg-[#0B1730] hover:bg-[#D4A55A]/15 border-[#D4A55A]/20 text-[#E6BF76]"
+                      : "bg-white hover:bg-slate-100 border-slate-200 text-slate-700 hover:text-slate-900"
+                  }`}
                 >
-                  <Settings className="w-3.5 h-3.5" />
+                  <Lock className="w-3.5 h-3.5" />
                   <span>Acceso Administrativo</span>
                 </button>
               )}
@@ -4691,6 +5239,44 @@ export default function App() {
                           />
                           <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium">Más Claro (100%)</span>
                         </div>
+
+                        <div className="border-t border-slate-200 dark:border-zinc-800/60 pt-3.5 mt-3 space-y-2">
+                          <label className="block text-xs font-bold text-slate-800 dark:text-zinc-200">
+                            Estilo de Transición del Carrusel (Slider)
+                          </label>
+                          <p className="text-[10px] text-zinc-400 mt-0.5 max-w-xl">
+                            Selecciona el efecto de transición visual cuando cambia el banner en la página principal. Todos los efectos están optimizados para evitar temblores.
+                          </p>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1.5">
+                            {[
+                              { label: "Desplazar ↔", value: "slide" },
+                              { label: "Desvanecer ✧", value: "fade" },
+                              { label: "Zoom-in ☉", value: "zoom" },
+                              { label: "Desplazar ↕", value: "slide-up" }
+                            ].map((opt) => {
+                              const active = (editingSettings.heroSliderTransition || "slide") === opt.value;
+                              return (
+                                <button
+                                  key={opt.value}
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingSettings({
+                                      ...editingSettings,
+                                      heroSliderTransition: opt.value as any
+                                    });
+                                  }}
+                                  className={`py-2 px-3 rounded-lg text-xs font-bold border transition-all text-center cursor-pointer ${
+                                    active
+                                      ? "bg-blue-600/10 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/55 font-black shadow-sm"
+                                      : "bg-white dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:border-slate-350 dark:hover:border-zinc-700 hover:text-slate-800 dark:hover:text-zinc-300"
+                                  }`}
+                                >
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -4775,30 +5361,12 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* Columna 3 */}
-                        <div className="p-3 bg-white dark:bg-zinc-950/70 border border-slate-200 dark:border-zinc-800 rounded-xl space-y-2.5">
-                          <label className="block text-[10px] font-black text-pink-500 uppercase tracking-widest">Columna 3: Información de Contacto / Soporte</label>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div className="md:col-span-1">
-                              <label className="block text-[9px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase mb-1">Título</label>
-                              <input
-                                type="text"
-                                value={editingSettings.footerCol3Title || ""}
-                                onChange={(e) => setEditingSettings({ ...editingSettings, footerCol3Title: e.target.value })}
-                                className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
-                                placeholder="📞 Soporte Directo"
-                              />
-                            </div>
-                            <div className="md:col-span-2">
-                              <label className="block text-[9px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase mb-1">Descripción corta o Canales</label>
-                              <textarea
-                                value={editingSettings.footerCol3Text || ""}
-                                onChange={(e) => setEditingSettings({ ...editingSettings, footerCol3Text: e.target.value })}
-                                className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white h-[68px] resize-none"
-                                placeholder="Canales de soporte directo por WhatsApp..."
-                              />
-                            </div>
-                          </div>
+                        {/* Columna 3 - Mapa e Ubicación */}
+                        <div className="p-3 bg-white dark:bg-zinc-950/70 border border-slate-200 dark:border-zinc-800 rounded-xl space-y-2">
+                          <label className="block text-[10px] font-black text-[#D4A55A] uppercase tracking-widest">Columna 3: Ubicación y Mapa Interactivo</label>
+                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed font-medium">
+                            Esta sección del pie de página ha sido optimizada permanentemente para mostrar el <strong>Mapa de Google Maps interactivo de Juem</strong>. Esto genera mayor credibilidad de marca, profesionalidad y ayuda a tus clientes a visitarte más rápido.
+                          </p>
                         </div>
 
                         {/* Copyright */}

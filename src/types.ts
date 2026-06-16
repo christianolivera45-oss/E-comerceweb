@@ -77,6 +77,7 @@ export interface SiteSettings {
   promotionBannerTransition?: 'slide' | 'fade' | 'zoom';
   showPromotionBanner: boolean;
   heroSlides?: HeroSlide[];
+  heroSliderTransition?: 'slide' | 'fade' | 'zoom' | 'slide-up';
   logoType?: 'text' | 'image';
   logoText?: string;
   logoImageUrl?: string;

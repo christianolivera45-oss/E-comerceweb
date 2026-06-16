@@ -90,27 +90,98 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
     window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, "_blank");
   };
 
-  // Variance configuration for motion slider transition
-  const slideVariants = {
-    enter: (dir: number) => ({
-      x: dir > 0 ? "100%" : "-100%",
-      opacity: 0
-    }),
-    center: {
-      zIndex: 1,
-      x: 0,
-      opacity: 1
-    },
-    exit: (dir: number) => ({
-      zIndex: 0,
-      x: dir < 0 ? "100%" : "-100%",
-      opacity: 0
-    })
+  // Variance configuration for motion slider transition based on SiteSettings
+  const transitionType = settings.heroSliderTransition || "slide";
+
+  const getVariants = () => {
+    switch (transitionType) {
+      case "fade":
+        return {
+          enter: { opacity: 0, scale: 1 },
+          center: { zIndex: 1, opacity: 1, scale: 1 },
+          exit: { zIndex: 0, opacity: 0, scale: 1 }
+        };
+      case "zoom":
+        return {
+          enter: { opacity: 0, scale: 1.06 },
+          center: { zIndex: 1, opacity: 1, scale: 1 },
+          exit: { zIndex: 0, opacity: 0, scale: 0.95 }
+        };
+      case "slide-up":
+        return {
+          enter: (dir: number) => ({
+            y: dir > 0 ? "100%" : "-100%",
+            opacity: 0,
+            scale: 1
+          }),
+          center: {
+            zIndex: 1,
+            y: 0,
+            opacity: 1,
+            scale: 1
+          },
+          exit: (dir: number) => ({
+            zIndex: 0,
+            y: dir < 0 ? "100%" : "-100%",
+            opacity: 0,
+            scale: 1
+          })
+        };
+      case "slide":
+      default:
+        return {
+          enter: (dir: number) => ({
+            x: dir > 0 ? "100%" : "-100%",
+            opacity: 0,
+            scale: 1
+          }),
+          center: {
+            zIndex: 1,
+            x: 0,
+            opacity: 1,
+            scale: 1
+          },
+          exit: (dir: number) => ({
+            zIndex: 0,
+            x: dir < 0 ? "100%" : "-100%",
+            opacity: 0,
+            scale: 1
+          })
+        };
+    }
   };
+
+  const getTransition = () => {
+    switch (transitionType) {
+      case "fade":
+        return {
+          opacity: { duration: 0.5, ease: "easeInOut" }
+        };
+      case "zoom":
+        return {
+          scale: { duration: 0.6, ease: [0.25, 1, 0.5, 1] },
+          opacity: { duration: 0.5, ease: "easeInOut" }
+        };
+      case "slide-up":
+        return {
+          y: { type: "tween", ease: [0.25, 1, 0.5, 1], duration: 0.6 },
+          opacity: { duration: 0.45, ease: "easeInOut" }
+        };
+      case "slide":
+      default:
+        return {
+          x: { type: "tween", ease: [0.25, 1, 0.5, 1], duration: 0.6 },
+          opacity: { duration: 0.45, ease: "easeInOut" }
+        };
+    }
+  };
+
+  const slideVariants = getVariants();
+  const slideTransition = getTransition();
 
   return (
     <div 
-      className="relative h-[280px] sm:h-[380px] md:h-[480px] lg:h-[560px] w-full overflow-hidden bg-[#050B1A] text-white select-none group"
+      className="relative h-[280px] sm:h-[380px] md:h-[480px] lg:h-[560px] w-full overflow-hidden bg-[#050B1A] text-white select-none group transform-gpu"
       onMouseEnter={() => setIsPlaying(false)}
       onMouseLeave={() => setIsPlaying(true)}
       onTouchStart={onTouchStart}
@@ -127,11 +198,9 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{
-              x: { type: "spring", stiffness: 300, damping: 30 },
-              opacity: { duration: 0.3 }
-            }}
-            className="absolute inset-0 w-full h-full"
+            transition={slideTransition}
+            className="absolute inset-0 w-full h-full transform-gpu"
+            style={{ willChange: "transform, opacity" }}
           >
             {/* Background Image - Boosted with visual filters to guarantee brightness even for dark images */}
             <img
@@ -150,32 +219,34 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
             {/* Slide Content */}
             <div className="absolute inset-0 flex items-center uppercase-none">
               <div className="max-w-7xl mx-auto px-5 sm:px-8 w-full text-center md:text-left relative z-10">
-                <div className="max-w-2xl">
+                <div className="max-w-2xl transform-gpu">
 
                   <motion.h1 
-                    initial={{ opacity: 0, y: 15 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2, duration: 0.4 }}
-                    className="text-xl sm:text-3xl md:text-5xl lg:text-7.5xl font-serif font-light text-[#F4EAD7] tracking-wide leading-tight drop-shadow-md mb-2 md:mb-4"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.15, duration: 0.5, ease: "easeInOut" }}
+                    className="text-xl sm:text-3xl md:text-5xl lg:text-7.5xl font-serif font-light text-[#F4EAD7] tracking-wide leading-tight drop-shadow-md mb-2 md:mb-4 transform-gpu"
+                    style={{ willChange: "opacity" }}
                   >
                     {slides[currentIndex].title}
                   </motion.h1>
                   
                   <motion.p 
-                    initial={{ opacity: 0, y: 15 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3, duration: 0.4 }}
-                    className="text-[11px] sm:text-sm md:text-base text-zinc-350 font-sans tracking-wide leading-normal md:leading-relaxed max-w-xl font-light line-clamp-2 md:line-clamp-none"
-                    style={{ color: "#D3CCD8" }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.25, duration: 0.5, ease: "easeInOut" }}
+                    className="text-[11px] sm:text-sm md:text-base text-zinc-350 font-sans tracking-wide leading-normal md:leading-relaxed max-w-xl font-light line-clamp-2 md:line-clamp-none transform-gpu"
+                    style={{ color: "#D3CCD8", willChange: "opacity" }}
                   >
                     {slides[currentIndex].subtitle}
                   </motion.p>
 
                   <motion.div 
-                    initial={{ opacity: 0, y: 15 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.4, duration: 0.4 }}
-                    className="mt-3.5 sm:mt-6 md:mt-8 flex flex-wrap items-center justify-center md:justify-start gap-4"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.35, duration: 0.5, ease: "easeInOut" }}
+                    className="mt-3.5 sm:mt-6 md:mt-8 flex flex-wrap items-center justify-center md:justify-start gap-4 transform-gpu"
+                    style={{ willChange: "opacity" }}
                   >
                     <button
                       onClick={() => onExploreCatalog(slides[currentIndex].buttonLink)}

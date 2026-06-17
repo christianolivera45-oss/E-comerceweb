@@ -400,24 +400,24 @@ export function generateOrderCreatedEmailHtml(order: any, settings: any): { subj
     : defaultBody;
 
   const itemsRows = items.map((item: any) => {
-    const sizeStr = item.sizeSelected ? `<span style="display:inline-block; background-color: #FAF5EB; color: #B45309; border: 1px solid #FCD34D; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-right: 4px;">Talle: ${item.sizeSelected}</span>` : "";
-    const colorStr = item.colorSelected ? `<span style="display:inline-block; background-color: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 11px;">Color: ${item.colorSelected}</span>` : "";
+    const sizeStr = item.sizeSelected ? `<span style="display:inline-block; background-color: #FAF5EB; color: #B45309; border: 1px solid #FCD34D; font-weight: bold; padding: 2px 5px; border-radius: 4px; font-size: 10px; margin-right: 4px; white-space: nowrap;">Talle: ${item.sizeSelected}</span>` : "";
+    const colorStr = item.colorSelected ? `<span style="display:inline-block; background-color: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; font-weight: bold; padding: 2px 5px; border-radius: 4px; font-size: 10px; white-space: nowrap;">Color: ${item.colorSelected}</span>` : "";
     
     return `
       <tr>
-        <td style="padding: 14px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13.5px; color: #0C1221; text-align: left; vertical-align: middle;">
-          <div style="font-weight: 700; color: #0C1221; margin-bottom: 5px;">${item.productName}</div>
-          <div style="margin-top: 4px;">${sizeStr} ${colorStr}</div>
+        <td style="padding: 10px 6px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #0C1221; text-align: left; vertical-align: middle; word-break: break-word;">
+          <div style="font-weight: 700; color: #0C1221; margin-bottom: 3px; line-height: 1.3;">${item.productName}</div>
+          <div style="margin-top: 4px; line-height: 1.2;">${sizeStr} ${colorStr}</div>
         </td>
-        <td style="padding: 14px 10px; border-bottom: 1px solid #e2e8f0; font-size: 14px; text-align: center; color: #0C1221; vertical-align: middle;">
-          <span style="background-color: #0C1221; color: #ffffff; padding: 4px 11px; border-radius: 6px; font-size: 13px; font-weight: 800; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #D4A55A;">
+        <td style="padding: 10px 4px; border-bottom: 1px solid #e2e8f0; font-size: 13px; text-align: center; color: #0C1221; vertical-align: middle;">
+          <span style="background-color: #0C1221; color: #ffffff; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: 800; display: inline-block; min-width: 12px; text-align: center; border: 1.5px solid #D4A55A;">
             ${item.quantity}
           </span>
         </td>
-        <td style="padding: 14px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #475569; text-align: right; font-family: monospace; vertical-align: middle;">
+        <td style="padding: 10px 4px; border-bottom: 1px solid #e2e8f0; font-size: 12.5px; color: #475569; text-align: right; font-family: monospace; vertical-align: middle; white-space: nowrap;">
           $${item.unitPrice}
         </td>
-        <td style="padding: 14px 10px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #0C1221; text-align: right; font-weight: bold; font-family: monospace; vertical-align: middle;">
+        <td style="padding: 10px 6px; border-bottom: 1px solid #e2e8f0; font-size: 13.5px; color: #0C1221; text-align: right; font-weight: bold; font-family: monospace; vertical-align: middle; white-space: nowrap;">
           $${item.totalPrice}
         </td>
       </tr>
@@ -425,7 +425,7 @@ export function generateOrderCreatedEmailHtml(order: any, settings: any): { subj
   }).join("");
 
   const html = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #FAF9F6; padding: 40px 10px; color: #0C1221; line-height: 1.5;">
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #FAF9F6; padding: 25px 8px; color: #0C1221; line-height: 1.5;">
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; border: 1.5px solid #E6BF76; overflow: hidden; box-shadow: 0 4px 20px rgba(12, 18, 33, 0.08);">
         
         <!-- Header Container with gold stroke -->
@@ -434,7 +434,7 @@ export function generateOrderCreatedEmailHtml(order: any, settings: any): { subj
             <img src="${settings.emailHeaderImageUrl}" alt="${siteTitle}" style="width: 100%; max-width: 600px; height: auto; display: block; margin: 0 auto; object-fit: cover;" />
           </div>
         ` : `
-          <div style="background-color: #0C1221; padding: 35px 30px; text-align: center; color: #ffffff; border-bottom: 4px solid #D4A55A;">
+          <div style="background-color: #0C1221; padding: 30px 16px; text-align: center; color: #ffffff; border-bottom: 4px solid #D4A55A;">
             ${settings.logoType === "image" && settings.logoImageUrl ? `
               <div style="margin-bottom: 12px; text-align: center;">
                 <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 60px; max-width: 220px; object-fit: contain; display: inline-block; vertical-align: middle; border-radius: 4px; background-color: rgba(255, 255, 255, 0.1); padding: 4px;" />
@@ -447,7 +447,7 @@ export function generateOrderCreatedEmailHtml(order: any, settings: any): { subj
         `}
 
         <!-- Body -->
-        <div style="padding: 30px;">
+        <div style="padding: 22px 16px;">
           ${settings.emailHeaderImageUrl && settings.logoType === "image" && settings.logoImageUrl ? `
             <div style="text-align: center; margin-bottom: 25px;">
               <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 55px; max-width: 180px; object-fit: contain;" />
@@ -459,8 +459,8 @@ export function generateOrderCreatedEmailHtml(order: any, settings: any): { subj
           </p>
 
           <!-- Order Summary Dashboard Card (Zebra look, very readable) -->
-          <div style="background-color: #FAF9F6; border: 1.5px solid #E6BF76; border-radius: 8px; padding: 18px; margin-bottom: 25px;">
-            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+          <div style="background-color: #FAF9F6; border: 1.5px solid #E6BF76; border-radius: 8px; padding: 15px; margin-bottom: 25px;">
+            <table border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse; font-size: 13px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
               <tr>
                 <td style="padding: 6px 0; color: #475569; font-weight: 600; text-align: left;">Número de Pedido:</td>
                 <td style="padding: 6px 0; color: #0C1221; font-weight: 800; text-align: right; font-family: monospace; font-size: 14.5px;">#${orderId}</td>
@@ -480,41 +480,44 @@ export function generateOrderCreatedEmailHtml(order: any, settings: any): { subj
           <h3 style="margin: 0 0 12px 0; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #0C1221; border-bottom: 2px solid #D4A55A; padding-bottom: 6px;">Artículos Solicitados</h3>
           
           <!-- Items Table -->
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
-            <thead>
-              <tr style="background-color: #0C1221; color: #E6BF76;">
-                <th style="padding: 10px; text-align: left; font-size: 11px; font-weight: 750; text-transform: uppercase; border-radius: 4px 0 0 4px; border: 1px solid #0C1221;">Artículo</th>
-                <th style="padding: 10px; text-align: center; font-size: 11px; font-weight: 750; text-transform: uppercase; width: 60px; border: 1px solid #0C1221;">Cant.</th>
-                <th style="padding: 10px; text-align: right; font-size: 11px; font-weight: 750; text-transform: uppercase; width: 80px; border: 1px solid #0C1221;">Precio</th>
-                <th style="padding: 10px; text-align: right; font-size: 11px; font-weight: 750; text-transform: uppercase; width: 90px; border-radius: 0 4px 4px 0; border: 1px solid #0C1221;">Subtotal</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itemsRows}
-            </tbody>
-          </table>
-
-          <!-- Financial summary block in Gold/Bone palette -->
-          <div style="width: 290px; margin-left: auto; margin-bottom: 30px; background-color: #FAF9F6; border: 1.5px solid #E6BF76; padding: 16px; border-radius: 8px;">
-            <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; color: #475569;">
-              <span>Subtotal:</span>
-              <span style="color: #0f172a; font-weight: 600;">$${subtotal}</span>
-            </div>
-            ${discount > 0 ? `
-            <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; color: #b91c1c; font-weight: bold;">
-              <span>Descuento (Cupón: ${coupon}):</span>
-              <span>-$${discount}</span>
-            </div>
-            ` : ""}
-            <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; color: #475569;">
-              <span>Envío:</span>
-              <span style="color: #0f172a; font-weight: 600;">${shippingCost === 0 ? "Gratis" : `$${shippingCost}`}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; padding: 10px 0; border-top: 1.5px solid #D4A55A; font-weight: 850; font-size: 18px; color: #0C1221; margin-top: 8px;">
-              <span>TOTAL NETO:</span>
-              <span style="color: #D4A55A;">$${total}</span>
-            </div>
+          <div style="overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch;">
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px; min-width: 280px;">
+              <thead>
+                <tr style="background-color: #0C1221; color: #E6BF76;">
+                  <th style="padding: 10px 6px; text-align: left; font-size: 11px; font-weight: 750; text-transform: uppercase; border-radius: 4px 0 0 4px; border: 1px solid #0C1221;">Artículo</th>
+                  <th style="padding: 10px 4px; text-align: center; font-size: 11px; font-weight: 750; text-transform: uppercase; width: 45px; border: 1px solid #0C1221;">Cant.</th>
+                  <th style="padding: 10px 4px; text-align: right; font-size: 11px; font-weight: 750; text-transform: uppercase; width: 65px; border: 1px solid #0C1221;">Precio</th>
+                  <th style="padding: 10px 6px; text-align: right; font-size: 11px; font-weight: 750; text-transform: uppercase; width: 75px; border-radius: 0 4px 4px 0; border: 1px solid #0C1221;">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsRows}
+              </tbody>
+            </table>
           </div>
+
+          <!-- Financial summary block in Gold/Bone palette (Using nested stable table instead of flex blocks) -->
+          <table align="right" border="0" cellpadding="0" cellspacing="0" style="width: 270px; margin-bottom: 30px; background-color: #FAF9F6; border: 1.5px solid #E6BF76; padding: 14px; border-radius: 8px; border-collapse: collapse; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; box-sizing: border-box;">
+            <tr>
+              <td style="padding: 4px 0; font-size: 13px; color: #475569; text-align: left;">Subtotal:</td>
+              <td style="padding: 4px 0; font-size: 13px; color: #0f172a; font-weight: 600; text-align: right; font-family: monospace;">$${subtotal}</td>
+            </tr>
+            ${discount > 0 ? `
+            <tr>
+              <td style="padding: 4px 0; font-size: 13px; color: #b91c1c; font-weight: bold; text-align: left;">Descuento (Cupón: ${coupon}):</td>
+              <td style="padding: 4px 0; font-size: 13px; color: #b91c1c; font-weight: bold; text-align: right; font-family: monospace;">-$${discount}</td>
+            </tr>
+            ` : ""}
+            <tr>
+              <td style="padding: 4px 0; font-size: 13px; color: #475569; text-align: left;">Envío:</td>
+              <td style="padding: 4px 0; font-size: 13px; color: #0f172a; font-weight: 600; text-align: right;">${shippingCost === 0 ? "Gratis" : `$${shippingCost}`}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px 0 0 0; border-top: 1.5px solid #D4A55A; font-weight: 850; font-size: 16px; color: #0C1221; text-align: left; margin-top: 8px;">TOTAL NETO:</td>
+              <td style="padding: 10px 0 0 0; border-top: 1.5px solid #D4A55A; font-weight: 850; font-size: 17px; color: #D4A55A; text-align: right; font-family: monospace; margin-top: 8px;">$${total}</td>
+            </tr>
+          </table>
+          <div style="clear: both; height: 1px;"></div>
 
           <!-- Notes / Special Instructions block -->
           ${notes && notes.trim() && notes !== "Ninguna" ? `
@@ -635,7 +638,7 @@ export function generateOrderShippedEmailHtml(order: any, settings: any): { subj
   const reviewLink = "https://g.page/r/search/review"; // Fallback reviews link
 
   const html = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; padding: 40px 10px; color: #0f172a; line-height: 1.5;">
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; padding: 25px 8px; color: #0f172a; line-height: 1.5;">
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);">
         
         <!-- Header -->
@@ -644,7 +647,7 @@ export function generateOrderShippedEmailHtml(order: any, settings: any): { subj
             <img src="${settings.emailHeaderImageUrl}" alt="${siteTitle}" style="width: 100%; max-width: 600px; height: auto; display: block; margin: 0 auto; object-fit: cover;" />
           </div>
         ` : `
-          <div style="background-color: #0C1221; padding: 35px 30px; text-align: center; color: #ffffff; border-bottom: 4px solid #D4A55A;">
+          <div style="background-color: #0C1221; padding: 30px 16px; text-align: center; color: #ffffff; border-bottom: 4px solid #D4A55A;">
             ${settings.logoType === "image" && settings.logoImageUrl ? `
               <div style="margin-bottom: 12px; text-align: center;">
                 <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 60px; max-width: 220px; object-fit: contain; display: inline-block; vertical-align: middle; border-radius: 4px; background-color: rgba(255, 255, 255, 0.1); padding: 4px;" />
@@ -657,7 +660,7 @@ export function generateOrderShippedEmailHtml(order: any, settings: any): { subj
         `}
 
         <!-- Body -->
-        <div style="padding: 30px;">
+        <div style="padding: 22px 16px;">
           ${settings.emailHeaderImageUrl && settings.logoType === "image" && settings.logoImageUrl ? `
             <div style="text-align: center; margin-bottom: 25px;">
               <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 55px; max-width: 180px; object-fit: contain;" />
@@ -671,29 +674,29 @@ export function generateOrderShippedEmailHtml(order: any, settings: any): { subj
           <!-- Tracking section inside email -->
           ${trackingHtml}
 
-          <!-- Delivery / Date Info Box -->
-          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; margin-bottom: 25px;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 13px;">
-              <span style="color: #64748b; font-weight: 600;">Pedido de referencia:</span>
-              <span style="color: #0f172a; font-weight: 700; font-family: monospace;">#${orderId}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 13px;">
-              <span style="color: #64748b; font-weight: 600;">Fecha de Envío:</span>
-              <span style="color: #0f172a; font-weight: 500;">${new Date().toLocaleDateString("es-UY")}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; font-size: 13px;">
-              <span style="color: #64748b; font-weight: 600;">Estado Actual del Pedido:</span>
-              <span style="color: #10b981; font-weight: bold;">ENVIADO / DESPACHADO</span>
-            </div>
-          </div>
+          <!-- Delivery / Date Info Box (Clean stable table layout instead of flex items) -->
+          <table border="0" cellpadding="0" cellspacing="0" style="width: 100%; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; margin-bottom: 25px; font-size: 13px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+            <tr>
+              <td style="padding: 4px 0; color: #64748b; font-weight: 600; text-align: left;">Pedido de referencia:</td>
+              <td style="padding: 4px 0; color: #0f172a; font-weight: 700; font-family: monospace; text-align: right;">#${orderId}</td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; color: #64748b; font-weight: 600; text-align: left;">Fecha de Envío:</td>
+              <td style="padding: 4px 0; color: #0f172a; font-weight: 500; text-align: right;">${new Date().toLocaleDateString("es-UY")}</td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; color: #64748b; font-weight: 600; text-align: left;">Estado Actual del Pedido:</td>
+              <td style="padding: 4px 0; color: #10b981; font-weight: bold; text-align: right;">ENVIADO / DESPACHADO</td>
+            </tr>
+          </table>
 
           <!-- Items list in this shipment -->
           <h3 style="margin: 0 0 12px 0; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; border-bottom: 2px solid #f1f5f9; padding-bottom: 6px;">Productos en el Envío</h3>
           <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
             <thead>
               <tr style="background-color: #f8fafc;">
-                <th style="padding: 10px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b;">Artículo</th>
-                <th style="padding: 10px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; width: 80px;">Cantidad</th>
+                <th style="padding: 10px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; border-bottom: 1px solid #e2e8f0;">Artículo</th>
+                <th style="padding: 10px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; width: 80px; border-bottom: 1px solid #e2e8f0;">Cantidad</th>
               </tr>
             </thead>
             <tbody>
@@ -757,7 +760,7 @@ export function generateOrderStatusChangedEmailHtml(params: {
     : replacePlaceholders(defaultBody, { orderId });
 
   const html = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; padding: 40px 10px; color: #0f172a; line-height: 1.5;">
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; padding: 25px 8px; color: #0f172a; line-height: 1.5;">
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);">
         
         <!-- Header -->
@@ -766,7 +769,7 @@ export function generateOrderStatusChangedEmailHtml(params: {
             <img src="${settings.emailHeaderImageUrl}" alt="${siteTitle}" style="width: 100%; max-width: 600px; height: auto; display: block; margin: 0 auto; object-fit: cover;" />
           </div>
         ` : `
-          <div style="background-color: #0C1221; padding: 30px; text-align: center; color: #ffffff; border-bottom: 4px solid #D4A55A;">
+          <div style="background-color: #0C1221; padding: 30px 16px; text-align: center; color: #ffffff; border-bottom: 4px solid #D4A55A;">
             ${settings.logoType === "image" && settings.logoImageUrl ? `
               <div style="margin-bottom: 12px; text-align: center;">
                 <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 60px; max-width: 220px; object-fit: contain; display: inline-block; vertical-align: middle; border-radius: 4px; background-color: rgba(255, 255, 255, 0.1); padding: 4px;" />
@@ -779,7 +782,7 @@ export function generateOrderStatusChangedEmailHtml(params: {
         `}
 
         <!-- Body -->
-        <div style="padding: 30px;">
+        <div style="padding: 22px 16px;">
           ${settings.emailHeaderImageUrl && settings.logoType === "image" && settings.logoImageUrl ? `
             <div style="text-align: center; margin-bottom: 25px;">
               <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 55px; max-width: 180px; object-fit: contain;" />
@@ -804,21 +807,21 @@ export function generateOrderStatusChangedEmailHtml(params: {
             ${newStatus === "pedido_reembolsado" ? "El importe de tu compra ha sido devuelto de forma exitosa." : ""}
           </p>
 
-          <!-- Order Summary Details -->
-          <div style="background-color: #f8fafc; border-radius: 12px; padding: 15px; margin-bottom: 25px; border: 1px solid #e2e8f0; font-size: 12px; color: #475569;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-              <span>Referencia de la Orden:</span>
-              <strong style="color: #0f172a;">#${orderId}</strong>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-              <span>Importe Total:</span>
-              <strong style="color: #0f172a;">$${order.total || 0}</strong>
-            </div>
-            <div style="display: flex; justify-content: space-between;">
-              <span>Línea telefónica del cliente:</span>
-              <strong style="color: #0f172a;">${order.customerPhone || "N/A"}</strong>
-            </div>
-          </div>
+          <!-- Order Summary Details (Using stable table block instead of flex rows) -->
+          <table border="0" cellpadding="0" cellspacing="0" style="width: 100%; background-color: #f8fafc; border-radius: 12px; padding: 15px; margin-bottom: 25px; border: 1px solid #e2e8f0; font-size: 12px; color: #475569; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+            <tr>
+              <td style="padding: 4px 0; color: #64748b; font-weight: 600; text-align: left;">Referencia de la Orden:</td>
+              <td style="padding: 4px 0; color: #0f172a; font-weight: 700; text-align: right; font-family: monospace;">#${orderId}</td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; color: #64748b; font-weight: 600; text-align: left;">Importe Total:</td>
+              <td style="padding: 4px 0; color: #0f172a; font-weight: 700; text-align: right; font-family: monospace;">$${order.total || 0}</td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; color: #64748b; font-weight: 600; text-align: left;">Línea telefónica del cliente:</td>
+              <td style="padding: 4px 0; color: #0f172a; font-weight: 700; text-align: right;">${order.customerPhone || "N/A"}</td>
+            </tr>
+          </table>
 
 
         </div>

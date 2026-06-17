@@ -40,23 +40,13 @@ interface AddressItem {
 }
 
 const DEPT_ZONES: Record<string, string[]> = {
-  Montevideo: [
-    "Paso de la Arena",
-    "Pocitos",
-    "Buceo",
-    "Malvín",
-    "Centro",
-    "Cordón",
-    "Tres Cruces",
-    "Parque Rodó",
-    "La Teja",
-    "Cerro",
-    "Unión",
-    "Colón",
-    "Prado",
-    "Carrasco",
-    "Aguada",
-    "Punta Carretas"
+  Artigas: [
+    "Artigas (Capital)",
+    "Bella Unión",
+    "Tomás Gomensoro",
+    "Baltasar Brum",
+    "Las Piedras (Artigas)",
+    "Paso Campamento"
   ],
   Canelones: [
     "Aguas Corrientes",
@@ -110,23 +100,14 @@ const DEPT_ZONES: Record<string, string[]> = {
     "Toledo",
     "Villa Aeroparque"
   ],
-  Maldonado: [
-    "Maldonado Centro",
-    "Punta del Este",
-    "Piriápolis",
-    "San Carlos",
-    "José Ignacio",
-    "Manantiales",
-    "Pinares",
-    "Aiguá",
-    "Pan de Azúcar"
-  ],
-  "San José": [
-    "San José de Mayo",
-    "Ciudad del Plata",
-    "Libertad",
-    "Ecilda Paullier",
-    "Rodríguez"
+  "Cerro Largo": [
+    "Melo (Capital)",
+    "Río Branco",
+    "Fraile Muerto",
+    "Isidoro Noblía",
+    "Aceguá",
+    "Ramón Trigo",
+    "Tupambaé"
   ],
   Colonia: [
     "Colonia del Sacramento",
@@ -135,7 +116,159 @@ const DEPT_ZONES: Record<string, string[]> = {
     "Juan Lacaze",
     "Rosario",
     "Tarariras",
-    "Nueva Palmira"
+    "Nueva Palmira",
+    "Colonia Valdense",
+    "Florencio Sánchez",
+    "Conchillas",
+    "Ombúes de Lavalle"
+  ],
+  Durazno: [
+    "Durazno (Capital)",
+    "Sarandí del Yí",
+    "Villa del Carmen",
+    "La Paloma (Durazno)",
+    "Centenario",
+    "Blanquillo",
+    "Carlos Reyles"
+  ],
+  Flores: [
+    "Trinidad (Capital)",
+    "Ismael Cortinas"
+  ],
+  Florida: [
+    "Florida (Capital)",
+    "Sarandí Grande",
+    "Casupá",
+    "Fray Marcos",
+    "Cardal",
+    "25 de Mayo",
+    "25 de Agosto",
+    "Chamizo",
+    "Nico Pérez"
+  ],
+  Lavalleja: [
+    "Minas (Capital)",
+    "José Pedro Varela",
+    "Solís de Mataojo",
+    "Mariscala",
+    "José Batlle y Ordóñez",
+    "Pirarajá",
+    "Villa Serrana"
+  ],
+  Maldonado: [
+    "Maldonado Centro",
+    "Punta del Este",
+    "Piriápolis",
+    "San Carlos",
+    "José Ignacio",
+    "Manantiales",
+    "Pinares",
+    "La Barra",
+    "Portezuelo",
+    "Aiguá",
+    "Pan de Azúcar",
+    "Punta Ballena",
+    "Las Flores",
+    "Bella Vista"
+  ],
+  Montevideo: [
+    "Paso de la Arena",
+    "Pocitos",
+    "Buceo",
+    "Malvín",
+    "Centro",
+    "Cordón",
+    "Tres Cruces",
+    "Parque Rodó",
+    "La Teja",
+    "Cerro",
+    "Unión",
+    "Colón",
+    "Prado",
+    "Carrasco",
+    "Aguada",
+    "Punta Carretas"
+  ],
+  Paysandú: [
+    "Paysandú (Capital)",
+    "Guichón",
+    "Quebracho",
+    "Lorenzo Geyres",
+    "Piedras Coloradas",
+    "Gallinal",
+    "Tambores (Paysandú)"
+  ],
+  "Río Negro": [
+    "Fray Bentos (Capital)",
+    "Young",
+    "Nuevo Berlín",
+    "San Javier",
+    "Algorta",
+    "Bellaco"
+  ],
+  Rivera: [
+    "Rivera (Capital)",
+    "Tranqueras",
+    "Minas de Corrales",
+    "Vichadero",
+    "Masoller"
+  ],
+  Rocha: [
+    "Rocha (Capital)",
+    "Chuy",
+    "Castillos",
+    "Lascano",
+    "La Paloma",
+    "Punta del Diablo",
+    "La Pedrera",
+    "Barra de Valizas",
+    "Cabo Polonio",
+    "Aguas Dulces",
+    "San Luis al Medio",
+    "18 de Julio"
+  ],
+  Salto: [
+    "Salto (Capital)",
+    "Constitución",
+    "Belén",
+    "Daymán",
+    "San Antonio",
+    "Termas del Arapey"
+  ],
+  "San José": [
+    "San José de Mayo",
+    "Ciudad del Plata",
+    "Libertad",
+    "Ecilda Paullier",
+    "Rodríguez",
+    "Puntas de Valdez",
+    "Capurro",
+    "Mal Abrigo"
+  ],
+  Soriano: [
+    "Mercedes (Capital)",
+    "Dolores",
+    "Cardona",
+    "Chacras de Dolores",
+    "José Enrique Rodó",
+    "Palmitas",
+    "Villa Soriano"
+  ],
+  Tacuarembó: [
+    "Tacuarembó (Capital)",
+    "Paso de los Toros",
+    "San Gregorio de Polanco",
+    "Ansina",
+    "Curtina",
+    "Caraguatá"
+  ],
+  "Treinta y Tres": [
+    "Treinta y Tres (Capital)",
+    "Vergara",
+    "Santa Clara de Olimar",
+    "Cerro Chato",
+    "General Enrique Martínez (Charqueada)",
+    "Rincón"
   ]
 };
 

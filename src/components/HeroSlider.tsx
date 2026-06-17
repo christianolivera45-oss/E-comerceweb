@@ -296,24 +296,7 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
         <ChevronRight className="h-4.5 w-4.5" />
       </button>
 
-      {/* Slide Indicators / Pagos Dots */}
-      <div className="absolute bottom-3 left-0 right-0 z-20 hidden md:flex justify-center gap-1.5">
-        {slides.map((_, index) => (
-          <button
-            key={index}
-            onClick={() => {
-              setDirection(index > currentIndex ? 1 : -1);
-              setCurrentIndex(index);
-            }}
-            className={`w-1.5 h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
-              index === currentIndex 
-                ? "bg-[#D4A55A] w-5" 
-                : "bg-white/30 hover:bg-white/60"
-            }`}
-            aria-label={`Ir a diapositiva ${index + 1}`}
-          />
-        ))}
-      </div>
+
     </div>
   );
 }

@@ -1,6 +1,5 @@
 import dotenv from "dotenv";
 dotenv.config({ override: true });
-import { GoogleGenAI } from "@google/genai";
 import dns from "dns";
 if (dns && typeof dns.setDefaultResultOrder === "function") {
   dns.setDefaultResultOrder("ipv4first");
@@ -16,24 +15,6 @@ import { v2 as cloudinary } from "cloudinary";
 import multer from "multer";
 import { MercadoPagoConfig, Preference, Payment } from "mercadopago";
 import { sendEmail, emailDeliveryLogs, generateOrderCreatedEmailHtml, generateOrderStatusChangedEmailHtml } from "./server_emails";
-
-let geminiClient: GoogleGenAI | null = null;
-function getGeminiClient(): GoogleGenAI | null {
-  if (!geminiClient) {
-    const key = process.env.GEMINI_API_KEY;
-    if (key) {
-      geminiClient = new GoogleGenAI({
-        apiKey: key,
-        httpOptions: {
-          headers: {
-            "User-Agent": "aistudio-build",
-          },
-        },
-      });
-    }
-  }
-  return geminiClient;
-}
 
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -1437,67 +1418,6 @@ async function startServer() {
     }
     emailDeliveryLogs.length = 0; // Empty the in-memory array
     res.json({ success: true, message: "Historial de correos vaciado correctamente." });
-  });
-
-  // Gemini AI review emails endpoint
-  app.get("/api/admin/gemini/review-emails", async (req, res) => {
-    const authHeader = req.headers.authorization;
-    if (!isValidToken(authHeader)) {
-      return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación." });
-    }
-
-    try {
-      const client = getGeminiClient();
-      if (!client) {
-        return res.json({ 
-          success: false, 
-          hasApiKey: false, 
-          message: "No se encontró la API Key de Gemini. Por favor, añádela en Settings > Secrets." 
-        });
-      }
-
-      // Gather up to last 20 emails
-      const limitedLogs = emailDeliveryLogs.slice(0, 20).map(log => ({
-        to: log.to,
-        subject: log.subject,
-        emailType: log.emailType,
-        status: log.status,
-        timestamp: log.timestamp,
-        orderId: log.orderId
-      }));
-
-      const activeOrdersCount = currentStoreState.orders ? currentStoreState.orders.length : 0;
-      const pendingOrdersCount = currentStoreState.orders ? currentStoreState.orders.filter(o => o.status === "pedido_iniciado" || o.status === "pago_pendiente" || o.status === "pago_aprobado").length : 0;
-
-      const prompt = `Analiza los siguientes logs recientes de correo electrónico de la tienda Juem (Uruguay) para auditar la preparación de pedidos.
-
-Estadísticas del Negocio:
-- Pedidos totales registrados: ${activeOrdersCount}
-- Pedidos pendientes de procesar/empaquetar/despachar: ${pendingOrdersCount}
-
-Logs recientes de correos (últimos 20):
-${JSON.stringify(limitedLogs, null, 2)}
-
-Instrucciones para tu reporte de auditoría:
-1. Brinda una advertencia o alerta muy clara si hay pedidos recientemente ingresados que requieran preparación ("Compra Aprobada / Pago Confirmado ✓" o "Pedido Iniciado"). Informa detalladamente sus IDs de pedido y correos para que el personal de Juem sepa exactamente qué armar inmediatamente.
-2. Reporta si hay algún correo con estado "failure" (fallo de entrega) para que lo revisen.
-3. Resume brevemente cómo va el flujo de despachos en la última jornada.
-4. Mantén la respuesta con un tono profesional, claro, directo y con un formato Markdown súper legible (usa viñetas y negritas).`;
-
-      const response = await client.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt
-      });
-
-      res.json({ 
-        success: true, 
-        hasApiKey: true,
-        summary: response.text || "No se pudo generar el análisis de correos."
-      });
-    } catch (err: any) {
-      console.error("Error in Gemini review emails API:", err);
-      res.status(500).json({ success: false, message: "Error al invocar la API de Gemini.", error: err.message });
-    }
   });
 
   // Send a test email to check SMTP connection

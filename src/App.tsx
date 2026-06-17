@@ -1091,36 +1091,6 @@ export default function App() {
   const [testEmailAddress, setTestEmailAddress] = useState("");
   const [emailLogsLoading, setEmailLogsLoading] = useState(false);
 
-  const [geminiAnalysis, setGeminiAnalysis] = useState("");
-  const [geminiLoading, setGeminiLoading] = useState(false);
-  const [geminiError, setGeminiError] = useState("");
-
-  const handleGeminiReview = async () => {
-    setGeminiLoading(true);
-    setGeminiError("");
-    try {
-      const activeToken = localStorage.getItem("apex_admin_token") || authToken;
-      const res = await fetch("/api/admin/gemini/review-emails", {
-        headers: { "Authorization": `Bearer ${activeToken}` }
-      });
-      const data = await res.json();
-      if (data.success) {
-        if (data.hasApiKey === false) {
-          setGeminiError(data.message);
-        } else {
-          setGeminiAnalysis(data.summary);
-        }
-      } else {
-        setGeminiError(data.message || "Error de respuesta de la API de Gemini.");
-      }
-    } catch (e) {
-      console.error("Error invoking Gemini email review:", e);
-      setGeminiError("Error de comunicación y conexión con el servidor.");
-    } finally {
-      setGeminiLoading(false);
-    }
-  };
-
   const fetchEmailLogs = async () => {
     setEmailLogsLoading(true);
     try {
@@ -11162,56 +11132,6 @@ const resText = await uploadRes.text();
                             <span>Vaciar Historial</span>
                           </button>
                         </div>
-                      </div>
-
-                      {/* GEMINI EMAIL LOGS & PENDING ORDERS AUDITOR */}
-                      <div className="p-4 bg-slate-50 dark:bg-zinc-950/50 rounded-xl border border-dashed border-amber-500/30 space-y-3">
-                        <div className="flex items-center justify-between flex-wrap gap-2">
-                          <div className="flex items-center gap-2">
-                            <Sparkles className="h-4 w-4 text-amber-500 animate-pulse" />
-                            <span className="text-xs font-bold text-slate-800 dark:text-zinc-200">Asistente de Auditoría AI (Gemini 3.5 Flash)</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleGeminiReview}
-                            disabled={geminiLoading}
-                            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-500/50 text-white rounded-lg text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm shadow-amber-500/20 h-7"
-                          >
-                            {geminiLoading ? (
-                              <>
-                                <RefreshCw className="h-3 w-3 animate-spin" />
-                                <span>Analizando correos...</span>
-                              </>
-                            ) : (
-                              <>
-                                <Sparkles className="h-3 w-3" />
-                                <span>Revisar Correos y Alertar Pedidos</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-
-                        {geminiError && (
-                          <div className="p-2.5 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 text-red-600 dark:text-red-400 text-[10px] rounded-lg">
-                            ⚠️ {geminiError}
-                          </div>
-                        )}
-
-                        {geminiAnalysis ? (
-                          <div className="p-3 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-left space-y-1">
-                            <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-2 flex items-center gap-1.5">
-                              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                              <span>Análisis de Bitácora & Notificación de Pedidos Activos:</span>
-                            </div>
-                            <div className="whitespace-pre-wrap text-[11.5px] leading-relaxed font-sans text-slate-700 dark:text-zinc-300">
-                              {geminiAnalysis}
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="text-[10.5px] text-slate-500 text-left">
-                            Haz clic en <strong>Revisar Correos y Alertar Pedidos</strong> para que la Inteligencia Artificial revise los envíos de correos, compruebe si hay órdenes entrantes para armar y notifique si hay alguna acción que requiera tu atención inmediata.
-                          </p>
-                        )}
                       </div>
 
                       {emailLogsLoading && emailLogs.length === 0 ? (

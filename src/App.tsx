@@ -226,6 +226,8 @@ const DEFAULT_SETTINGS: SiteSettings = {
   bannerOpacity: 80,
   featuredSliderSpeed: 2500,
   googleAnalyticsId: "",
+  googleTagManagerId: "",
+  metaPixelId: "",
   whatsappNumber: "5491123456789",
   primaryColor: "#2563eb",
   accentColor: "#10b981",
@@ -1321,6 +1323,109 @@ export default function App() {
     }
   }, [store.settings?.googleAnalyticsId]);
 
+  // Synchronize and Initialize Google Tag Manager (GTM) dynamically based on admin settings
+  useEffect(() => {
+    const gtmId = store.settings?.googleTagManagerId;
+    if (!gtmId) return;
+
+    // Check if GTM script is already added
+    const scriptId = "google-tag-manager-script";
+    let script = document.getElementById(scriptId);
+
+    if (!script) {
+      const inlineScript = document.createElement("script");
+      inlineScript.id = scriptId;
+      inlineScript.innerHTML = `
+        (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+        new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+        j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+        'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+        })(window,document,'script','dataLayer','${gtmId}');
+      `;
+      document.head.appendChild(inlineScript);
+
+      const noscriptId = "google-tag-manager-noscript";
+      let noscript = document.getElementById(noscriptId);
+      if (!noscript) {
+        noscript = document.createElement("noscript");
+        noscript.id = noscriptId;
+        noscript.innerHTML = `<iframe src="https://www.googletagmanager.com/ns.html?id=${gtmId}" height="0" width="0" style="display:none;visibility:hidden"></iframe>`;
+        document.body.insertBefore(noscript, document.body.firstChild);
+      }
+    }
+  }, [store.settings?.googleTagManagerId]);
+
+  // Synchronize and Initialize Meta Pixel (Facebook Pixel) dynamically based on admin settings
+  useEffect(() => {
+    const pixelId = store.settings?.metaPixelId;
+    if (!pixelId) return;
+
+    // Check if Meta Pixel script is already added
+    const scriptId = "meta-pixel-script";
+    let script = document.getElementById(scriptId);
+
+    if (!script) {
+      const inlineScript = document.createElement("script");
+      inlineScript.id = scriptId;
+      inlineScript.innerHTML = `
+        !function(f,b,e,v,n,t,s)
+        {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+        n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+        if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+        n.queue=[];t=b.createElement(e);t.async=!0;
+        t.src=v;s=b.getElementsByTagName(e)[0];
+        s.parentNode.insertBefore(t,s)}(window, document,'script',
+        'https://connect.facebook.net/en_US/fbevents.js');
+        fbq('init', '${pixelId}');
+        fbq('track', 'PageView');
+      `;
+      document.head.appendChild(inlineScript);
+
+      const noscriptId = "meta-pixel-noscript";
+      let noscript = document.getElementById(noscriptId);
+      if (!noscript) {
+        noscript = document.createElement("noscript");
+        noscript.id = noscriptId;
+        noscript.innerHTML = `<img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=${pixelId}&ev=PageView&noscript=1" />`;
+        document.body.insertBefore(noscript, document.body.firstChild);
+      }
+    }
+  }, [store.settings?.metaPixelId]);
+
+  // Dynamic Meta Pixel Tracking based on navigational State changes
+  useEffect(() => {
+    const pixelId = store.settings?.metaPixelId;
+    if (!pixelId || typeof window === "undefined" || !(window as any).fbq) return;
+
+    try {
+      // Track standard PageView on route changes
+      (window as any).fbq('track', 'PageView');
+
+      // Trigger automatic e-commerce InitiateCheckout when view changing to checkout
+      if (activeTab === "checkout") {
+        (window as any).fbq('track', 'InitiateCheckout', {
+          content_ids: cart.map(c => c.product.id),
+          content_type: 'product',
+          value: cart.reduce((acc, c) => acc + (c.product.price * c.quantity), 0),
+          currency: 'UYU'
+        });
+      }
+
+      // Trigger Meta Pixel ViewContent event when viewing a product
+      if (selectedProduct) {
+        (window as any).fbq('track', 'ViewContent', {
+          content_name: selectedProduct.name,
+          content_ids: [selectedProduct.id],
+          content_type: 'product',
+          value: selectedProduct.price,
+          currency: 'UYU'
+        });
+      }
+    } catch (pixelError) {
+      console.warn("Meta Pixel transition tracking error: ", pixelError);
+    }
+  }, [store.settings?.metaPixelId, activeTab, selectedProduct?.id]);
+
   // Dynamic GA4 Pageview & view_item Tracking based on navigational State changes
   useEffect(() => {
     const gaId = store.settings?.googleAnalyticsId;
@@ -1758,6 +1863,21 @@ export default function App() {
         });
       } catch (gaError) {
         console.warn("GA add_to_cart event error: ", gaError);
+      }
+    }
+
+    // Dynamic Meta Pixel AddToCart tracking
+    if (store.settings?.metaPixelId && typeof window !== "undefined" && (window as any).fbq) {
+      try {
+        (window as any).fbq('track', 'AddToCart', {
+          content_name: product.name,
+          content_ids: [product.id],
+          content_type: 'product',
+          value: product.price * qtyAdded,
+          currency: 'UYU'
+        });
+      } catch (pixelError) {
+        console.warn("Meta Pixel AddToCart error: ", pixelError);
       }
     }
 
@@ -9751,18 +9871,37 @@ const resText = await uploadRes.text();
                         </div>
                       </div>
 
-                      <div className="space-y-3">
-                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 font-sans">
-                          <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse"></span>
-                          Google Analytics ID de Medición (Measurement ID)
-                        </label>
-                        <input
-                          type="text"
-                          value={editingSettings.googleAnalyticsId || ""}
-                          onChange={(e) => setEditingSettings({ ...editingSettings, googleAnalyticsId: e.target.value.trim() })}
-                          className="w-full px-4 py-3 bg-slate-50/50 dark:bg-zinc-900/30 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono placeholder-slate-400 dark:placeholder-zinc-600"
-                          placeholder="p.ej. G-XXXXXXXXXX"
-                        />
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 font-sans">
+                              <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse"></span>
+                              Google Analytics ID de Medición (Measurement ID)
+                            </label>
+                            <input
+                              type="text"
+                              value={editingSettings.googleAnalyticsId || ""}
+                              onChange={(e) => setEditingSettings({ ...editingSettings, googleAnalyticsId: e.target.value.trim() })}
+                              className="w-full px-4 py-3 bg-slate-50/50 dark:bg-zinc-900/30 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono placeholder-slate-400 dark:placeholder-zinc-600"
+                              placeholder="p.ej. G-XXXXXXXXXX"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 font-sans">
+                              <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#1e40af] animate-pulse"></span>
+                              Google Tag Manager ID (GTM Container ID)
+                            </label>
+                            <input
+                              type="text"
+                              value={editingSettings.googleTagManagerId || ""}
+                              onChange={(e) => setEditingSettings({ ...editingSettings, googleTagManagerId: e.target.value.trim() })}
+                              className="w-full px-4 py-3 bg-slate-50/50 dark:bg-zinc-900/30 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-mono placeholder-slate-400 dark:placeholder-zinc-600"
+                              placeholder="p.ej. GTM-WVZZ4FT"
+                            />
+                          </div>
+                        </div>
+
                         <div className="bg-blue-500/5 dark:bg-blue-950/20 border border-blue-500/10 dark:border-blue-900/20 rounded-xl p-3.5 space-y-1.5">
                           <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 block">⚡ Métricas de Comercio Electrónico Sincronizadas:</span>
                           <ul className="text-[10px] text-slate-600 dark:text-zinc-400 space-y-1 list-disc list-inside">
@@ -9771,6 +9910,52 @@ const resText = await uploadRes.text();
                             <li><strong className="text-slate-800 dark:text-zinc-200">add_to_cart:</strong> Registra la selección y adición de talles y variantes antes de iniciar el pedido.</li>
                             <li><strong className="text-slate-800 dark:text-zinc-200">begin_checkout:</strong> Intención de pago iniciada al entrar al carrito final.</li>
                             <li><strong className="text-slate-800 dark:text-zinc-200">purchase:</strong> Órdenes exitosas disparadas para Mercado Pago y compras en directo mediante WhatsApp.</li>
+                            <li><strong className="text-slate-800 dark:text-zinc-200">Google Tag Manager:</strong> Inyección directa asoncrónica de contenedores de etiquetas personalizados y píxeles de conversión.</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* PANEL A.2: META PIXEL (FACEBOOK PIXEL) */}
+                    <div className="p-6 bg-slate-50 dark:bg-zinc-950/40 rounded-3xl border border-slate-200 dark:border-zinc-800/50 space-y-4">
+                      {/* Banner Info */}
+                      <div className="flex gap-4 items-start pb-4 border-b border-slate-200 dark:border-zinc-800">
+                        <div className="p-3 bg-[#1877F2]/10 text-[#1877F2] rounded-2xl shrink-0">
+                          <Facebook className="w-6 h-6 text-[#1877F2] animate-pulse" />
+                        </div>
+                        <div className="space-y-1 flex-1">
+                          <h3 className="font-extrabold text-base text-slate-800 dark:text-zinc-100">Píxel de Meta (Facebook Pixel)</h3>
+                          <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed">
+                            Vincula tu Píxel de Meta para medir de forma automatizada las conversiones de tus campañas de Facebook e Instagram Ads. La tienda reportará en tiempo real el comportamiento de tus clientes en Uruguay para crear públicos de retargeting de alta conversión.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="block text-[10px] font-extrabold text-[#1877F2] dark:text-blue-400 uppercase tracking-widest flex items-center gap-1.5 font-sans">
+                              <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#1877F2] animate-pulse"></span>
+                              Meta Pixel ID (ID del Píxel de Facebook)
+                            </label>
+                            <input
+                              type="text"
+                              value={editingSettings.metaPixelId || ""}
+                              onChange={(e) => setEditingSettings({ ...editingSettings, metaPixelId: e.target.value.trim() })}
+                              className="w-full px-4 py-3 bg-slate-50/50 dark:bg-zinc-900/30 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono placeholder-slate-400 dark:placeholder-zinc-600"
+                              placeholder="p.ej. 1214041725895312"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="bg-[#1877F2]/5 dark:bg-[#1877F2]/10 border border-[#1877F2]/10 dark:border-[#1877F2]/20 rounded-xl p-3.5 space-y-1.5">
+                          <span className="text-[11px] font-bold text-[#1877F2] dark:text-[#1877F2] block">🎯 Eventos Estándar de Meta Reportados de Forma Automática:</span>
+                          <ul className="text-[10px] text-slate-600 dark:text-zinc-400 space-y-1 list-disc list-inside">
+                            <li><strong className="text-slate-800 dark:text-zinc-200">PageView:</strong> Reportado al instante cada vez que un usuario navega por tu tienda.</li>
+                            <li><strong className="text-slate-800 dark:text-zinc-200">ViewContent:</strong> Reportado al ingresar a ver la ficha detallada de un producto (fomenta retargeting específico).</li>
+                            <li><strong className="text-slate-800 dark:text-zinc-200">AddToCart:</strong> Reportado al añadir variantes de talle o color al carrito.</li>
+                            <li><strong className="text-slate-800 dark:text-zinc-200">InitiateCheckout:</strong> Reportado cuando entran al checkout con intención de concretar compra.</li>
+                            <li><strong className="text-slate-800 dark:text-zinc-200">Purchase:</strong> Reportado con valor en pesos uruguayos (UYU) y lista de productos para compras con Mercado Pago y confirmaciones vía WhatsApp.</li>
                           </ul>
                         </div>
                       </div>

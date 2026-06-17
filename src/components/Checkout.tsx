@@ -1358,6 +1358,20 @@ export default function Checkout({
               console.warn("GA tracking error: ", gaError);
             }
           }
+
+          // Meta Pixel purchase tracking before MercadoPago redirect
+          if (settings?.metaPixelId && typeof window !== "undefined" && (window as any).fbq) {
+            try {
+              (window as any).fbq('track', 'Purchase', {
+                value: totalUYU,
+                currency: 'UYU',
+                content_ids: cartItems.map(item => item.product.id),
+                content_type: 'product'
+              });
+            } catch (pixelError) {
+              console.warn("Meta Pixel Purchase tracking error: ", pixelError);
+            }
+          }
           // Send to official secure payment gateway
           window.location.href = data.initPoint;
         } else {
@@ -1442,6 +1456,20 @@ export default function Checkout({
             });
           } catch (gaError) {
             console.warn("GA tracking error: ", gaError);
+          }
+        }
+
+        // Meta Pixel purchase tracking before WhatsApp redirect
+        if (settings?.metaPixelId && typeof window !== "undefined" && (window as any).fbq) {
+          try {
+            (window as any).fbq('track', 'Purchase', {
+              value: totalUYU,
+              currency: 'UYU',
+              content_ids: cartItems.map(item => item.product.id),
+              content_type: 'product'
+            });
+          } catch (pixelError) {
+            console.warn("Meta Pixel Purchase tracking error: ", pixelError);
           }
         }
 

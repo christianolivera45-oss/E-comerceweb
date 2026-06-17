@@ -126,12 +126,14 @@
   "settings": {
     "siteTitle": "Juem ",
     "siteSubtitle": "Moda, tecnología y accesorios con envío a todo el país.",
-    "bannerTitle": "Colección Exclusiva de Primavera",
-    "bannerSubtitle": "Descubre las últimas tendencias con descuentos de hasta el 40%.",
-    "bannerImageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1781010194/ventas_juem_cloudinary/nm76hocn1mdqik5l3nkj.png",
+    "bannerTitle": "Innovación en 3D para tu día a día",
+    "bannerSubtitle": "escubrí productos únicos, funcionales y personalizados creados con impresión 3D.",
+    "bannerImageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1781636577/ventas_juem_cloudinary/yuo3jolscrbp37iy8ybt.png",
     "bannerOpacity": 100,
     "featuredSliderSpeed": 2500,
     "googleAnalyticsId": "",
+    "googleTagManagerId": "GTM-WVZZ4F8T",
+    "metaPixelId": "",
     "whatsappNumber": "598098058775",
     "primaryColor": "#003385",
     "accentColor": "#EFBF04",
@@ -141,6 +143,7 @@
     "promotionBannerBgColor": "#050b1a",
     "promotionBannerTextColor": "#ffffff",
     "promotionBannerTransition": "zoom",
+    "heroSliderTransition": "fade",
     "showPromotionBanner": false,
     "lowStockThreshold": 4,
     "mercadopagoActive": true,
@@ -155,9 +158,11 @@
     "heroSlides": [
       {
         "id": "slide-1",
-        "title": "Colección Exclusiva de Primavera",
-        "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1781010194/ventas_juem_cloudinary/nm76hocn1mdqik5l3nkj.png",
-        "subtitle": "Descubre las últimas tendencias con descuentos de hasta el 40%."
+        "title": "Innovación en 3D para tu día a día",
+        "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1781636577/ventas_juem_cloudinary/yuo3jolscrbp37iy8ybt.png",
+        "subtitle": "escubrí productos únicos, funcionales y personalizados creados con impresión 3D.",
+        "buttonLink": "category:Impresión 3d",
+        "buttonText": "Ver catálogo"
       },
       {
         "id": "slide-2",
@@ -167,16 +172,16 @@
       },
       {
         "id": "slide-3",
-        "title": "Accesorios & Complementos",
-        "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1781109834/ventas_juem_cloudinary/tya6puohjj4klldt6qr4.png",
-        "subtitle": "Lentes, mochilas, relojes y detalles que transforman cualquier outfit.",
+        "title": "Todo para el Invierno",
+        "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1781635375/ventas_juem_cloudinary/mmhnulss33yaycuf2oak.png",
+        "subtitle": "Gorros, cuellos, buzos y accesorios seleccionados para mantenerte abrigado.",
         "buttonLink": "category:Ropa",
-        "buttonText": "Regalo para Pápa"
+        "buttonText": "Invierno"
       }
     ],
     "logoType": "image",
     "logoText": "J",
-    "logoImageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780264210/ChatGPT_Image_31_may_2026_17_29_14_lpz7zu.png",
+    "logoImageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1781633873/ventas_juem_cloudinary/wyd2kl8pqlnbdsejnm4l.png",
     "footerCol1Title": "🚀 Compra Personalizada",
     "footerCol1Text": "Realiza tus pedidos seleccionando tus talles y colores favoritos. El carrito envía una lista formateada directo a nuestro WhatsApp de atención oficial para coordinar pago y entrega express.",
     "footerCol2Title": "🌟 Calidad Asegurada",
@@ -312,7 +317,7 @@
       ],
       "variants": [
         {
-          "id": "5a5eb629-c180-4c7e-a7fc-b996116fab93",
+          "id": "a6166c78-8a9f-4639-a9a7-2e23c3722908",
           "size": "PLA",
           "color": "Negro",
           "colorCode": "#000000",
@@ -362,7 +367,7 @@
       ],
       "variants": [
         {
-          "id": "b740cd7e-0e3d-466c-8482-0c197aeeadd2",
+          "id": "8dd469fd-25fb-4ebb-9526-795f0521b0fd",
           "size": "11\"",
           "color": "Turquesa",
           "colorCode": "#9ca3af",
@@ -371,7 +376,7 @@
           "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265675/productos34_29896_s7mkpo.jpg"
         },
         {
-          "id": "e2239874-bd4f-4abe-b193-a1c0dbddc572",
+          "id": "0fd58d3a-3404-466e-8a6f-2962e58d0afa",
           "size": "11\"",
           "color": "Rosa",
           "colorCode": "#f472b6",
@@ -380,7 +385,7 @@
           "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265677/productos32_35602_y8dxnc.jpg"
         },
         {
-          "id": "c8dc0dd1-9b68-4f12-bee7-0dc514a5c84a",
+          "id": "1e09f884-44b4-48cb-8195-6b4826cc7be0",
           "size": "11\"",
           "color": "Negro",
           "colorCode": "#000000",
@@ -389,7 +394,7 @@
           "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780265675/1084_bkc6ar.jpg"
         },
         {
-          "id": "6c31f6ef-8355-4e04-9c94-aed4dbc2a2e1",
+          "id": "0bc1805c-d442-4cd0-b84d-50f66fa24603",
           "size": "11\"",
           "color": "Turquesa",
           "colorCode": "#9ca3af",
@@ -490,7 +495,7 @@
       ],
       "variants": [
         {
-          "id": "3d195c80-f46d-46e4-8f8a-42541aa7fe25",
+          "id": "e17250c9-be39-4931-a5a0-3e6a65f38224",
           "size": "XL",
           "color": "Negro",
           "colorCode": "#000000",
@@ -499,7 +504,7 @@
           "imageUrl": "https://res.cloudinary.com/dwqzjqjwz/image/upload/v1780008436/polar_xkibhp.jpg"
         },
         {
-          "id": "79fb8041-14f6-446e-915e-2962f6b34738",
+          "id": "be9c4b52-5e9c-40b7-bdf4-10760041f396",
           "size": "XL",
           "color": "Azul",
           "colorCode": "#3b82f6",
@@ -509,7 +514,7 @@
           "price": 840
         },
         {
-          "id": "9f717d29-0041-4cf6-92ae-d45be050a22e",
+          "id": "4dbb262d-4c7a-41f9-9017-d637954bd226",
           "size": "XL",
           "color": "Negro",
           "colorCode": "#000000",
@@ -553,581 +558,5 @@
     "passwordHash": "7219fc1c5ecfc887aae98aa0338884186acac202b63924cb5a8bb8ea943c4fd1",
     "sessionToken": "session-52847781b6e0b82e0cd17c0eca5945f0"
   },
-  "orders": [
-    {
-      "id": "d475cd40-3ac5-4c98-b4ea-cfb99bb754d5",
-      "customerEmail": "christian.olivera45@gmail.com",
-      "customerName": "Christian olivera",
-      "customerPhone": "095085181",
-      "subtotal": 850,
-      "discountAmount": 0,
-      "shippingCost": 0,
-      "total": 850,
-      "status": "pedido_iniciado",
-      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
-      "paymentMethod": "transfer",
-      "createdAt": "2026-06-12T14:15:08.437Z",
-      "updatedAt": "2026-06-12T14:15:08.437Z",
-      "items": [
-        {
-          "id": "06574925-6fad-4f07-9c3e-ed0e57fd4641",
-          "productId": "14",
-          "productName": "Soporte Para Tablet De Pared Alto Ranurado Anti Robo",
-          "sizeSelected": "PLA",
-          "colorSelected": "Negro",
-          "unitPrice": 850,
-          "quantity": 1,
-          "totalPrice": 850
-        }
-      ]
-    },
-    {
-      "id": "5a925d7a-39b5-4ce7-aa64-9c6bb9cde0c9",
-      "customerEmail": "christian.olivera45@gmail.com",
-      "customerName": "Christian olivera",
-      "customerPhone": "095085181",
-      "subtotal": 399,
-      "discountAmount": 0,
-      "shippingCost": 0,
-      "total": 399,
-      "status": "pedido_iniciado",
-      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
-      "paymentMethod": "transfer",
-      "createdAt": "2026-06-12T13:14:11.584Z",
-      "updatedAt": "2026-06-12T13:14:11.584Z",
-      "items": [
-        {
-          "id": "2e5b794d-01de-41f0-8445-efeec48323b8",
-          "productId": "12",
-          "productName": "Toalla Turbante Baño Pelo Gorro Algodón  dia de la ma",
-          "sizeSelected": "S",
-          "colorSelected": "Negro",
-          "unitPrice": 399,
-          "quantity": 1,
-          "totalPrice": 399
-        }
-      ]
-    },
-    {
-      "id": "d685c0f0-72ab-4a67-b3b7-f04fd4e1b404",
-      "customerEmail": "christian.olivera45@gmail.com",
-      "customerName": "Christian olivera",
-      "customerPhone": "095085181",
-      "subtotal": 299,
-      "discountAmount": 0,
-      "shippingCost": 0,
-      "total": 299,
-      "status": "pedido_iniciado",
-      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
-      "paymentMethod": "transfer",
-      "createdAt": "2026-06-12T13:02:09.657Z",
-      "updatedAt": "2026-06-12T13:02:09.657Z",
-      "items": [
-        {
-          "id": "6c90fd58-99d8-4172-958d-f1865bdc9a45",
-          "productId": "11",
-          "productName": "Media Panty Térmica Mujer Efecto Piel Con Corderito",
-          "sizeSelected": "L/XL",
-          "colorSelected": "Negro",
-          "unitPrice": 299,
-          "quantity": 1,
-          "totalPrice": 299
-        }
-      ]
-    },
-    {
-      "id": "d24d2b38-dbc5-437b-bf07-2b3020644791",
-      "customerEmail": "christian.olivera45@gmail.com",
-      "customerName": "Christian olivera",
-      "customerPhone": "095085181",
-      "subtotal": 480,
-      "discountAmount": 0,
-      "shippingCost": 0,
-      "total": 480,
-      "status": "pedido_iniciado",
-      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
-      "paymentMethod": "transfer",
-      "createdAt": "2026-06-11T17:50:47.809Z",
-      "updatedAt": "2026-06-11T17:50:47.809Z",
-      "items": [
-        {
-          "id": "eadcc936-e485-460d-a52c-11eaf0b9adab",
-          "productId": "13",
-          "productName": "Funda Neopreno 11 Plan Ceibal Lisas",
-          "sizeSelected": "11\"",
-          "colorSelected": "Rosa",
-          "unitPrice": 480,
-          "quantity": 1,
-          "totalPrice": 480
-        }
-      ]
-    },
-    {
-      "id": "18d100a7-f3ed-4fee-b91f-7365c0eb93e6",
-      "customerEmail": "christian.olivera45@gmail.com",
-      "customerName": "Christia olivera",
-      "customerPhone": "095085181",
-      "subtotal": 480,
-      "discountAmount": 0,
-      "shippingCost": 0,
-      "total": 480,
-      "status": "pedido_iniciado",
-      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
-      "paymentMethod": "transfer",
-      "createdAt": "2026-06-11T14:37:50.234Z",
-      "updatedAt": "2026-06-11T14:37:50.234Z",
-      "items": [
-        {
-          "id": "e1ccac76-a0cf-4aa0-948f-b5d8a8057dc8",
-          "productId": "13",
-          "productName": "Funda Neopreno 11 Plan Ceibal Lisas",
-          "sizeSelected": "11\"",
-          "colorSelected": "Rosa",
-          "unitPrice": 480,
-          "quantity": 1,
-          "totalPrice": 480
-        }
-      ]
-    },
-    {
-      "id": "3731dff4-7965-4c09-b511-40a36c24f3cf",
-      "customerEmail": "christian.olivera45@gmail.com",
-      "customerName": "Christian olivera",
-      "customerPhone": "095085181",
-      "subtotal": 480,
-      "discountAmount": 0,
-      "shippingCost": 0,
-      "total": 480,
-      "status": "pedido_iniciado",
-      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
-      "paymentMethod": "transfer",
-      "createdAt": "2026-06-11T14:08:36.055Z",
-      "updatedAt": "2026-06-11T14:08:36.055Z",
-      "items": [
-        {
-          "id": "de0925fd-20b7-492a-b9d9-e93374fba22b",
-          "productId": "13",
-          "productName": "Funda Neopreno 11 Plan Ceibal Lisas",
-          "sizeSelected": "11\"",
-          "colorSelected": "Rosa",
-          "unitPrice": 480,
-          "quantity": 1,
-          "totalPrice": 480
-        }
-      ]
-    },
-    {
-      "id": "9f71f57b-f6e5-41d9-a479-cc5879d0344d",
-      "customerEmail": "christian.olivera45@gmail.com",
-      "customerName": "Christian olivera",
-      "customerPhone": "095085181",
-      "subtotal": 480,
-      "discountAmount": 0,
-      "shippingCost": 0,
-      "total": 480,
-      "status": "pedido_iniciado",
-      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
-      "paymentMethod": "transfer",
-      "createdAt": "2026-06-11T14:07:40.128Z",
-      "updatedAt": "2026-06-11T14:07:40.128Z",
-      "items": [
-        {
-          "id": "a46827b2-df0f-4b8f-9e10-d1791853aefc",
-          "productId": "13",
-          "productName": "Funda Neopreno 11 Plan Ceibal Lisas",
-          "sizeSelected": "11\"",
-          "colorSelected": "Rosa",
-          "unitPrice": 480,
-          "quantity": 1,
-          "totalPrice": 480
-        }
-      ]
-    },
-    {
-      "id": "da747456-3e78-48d7-a39a-29eccd4ba626",
-      "customerEmail": "christian.olivera45@gmail.com",
-      "customerName": "Christina olivera",
-      "customerPhone": "095085181",
-      "subtotal": 480,
-      "discountAmount": 0,
-      "shippingCost": 0,
-      "total": 480,
-      "status": "pedido_iniciado",
-      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
-      "paymentMethod": "transfer",
-      "createdAt": "2026-06-11T13:27:16.887Z",
-      "updatedAt": "2026-06-11T13:27:16.887Z",
-      "items": [
-        {
-          "id": "50547216-776a-4008-9ac5-33848cac7da2",
-          "productId": "13",
-          "productName": "Funda Neopreno 11 Plan Ceibal Lisas",
-          "sizeSelected": "11\"",
-          "colorSelected": "Rosa",
-          "unitPrice": 480,
-          "quantity": 1,
-          "totalPrice": 480
-        }
-      ]
-    },
-    {
-      "id": "816ce851-933a-4606-b360-260f0e4c9ff3",
-      "customerEmail": "christian.olivera45@gmail.com",
-      "customerName": "Christian Olivera",
-      "customerPhone": "095085181",
-      "subtotal": 480,
-      "discountAmount": 0,
-      "shippingCost": 0,
-      "total": 480,
-      "status": "pedido_iniciado",
-      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
-      "paymentMethod": "transfer",
-      "createdAt": "2026-06-11T13:12:22.284Z",
-      "updatedAt": "2026-06-11T13:12:22.284Z",
-      "items": [
-        {
-          "id": "770d79d0-b90e-496e-a767-f60542dcf9fd",
-          "productId": "13",
-          "productName": "Funda Neopreno 11 Plan Ceibal Lisas",
-          "sizeSelected": "11\"",
-          "colorSelected": "Rosa",
-          "unitPrice": 480,
-          "quantity": 1,
-          "totalPrice": 480
-        }
-      ]
-    },
-    {
-      "id": "67494e75-c400-450a-91f0-700932c4bfab",
-      "customerEmail": "christian.olivera45@gmail.com",
-      "customerName": "Christian Olivera",
-      "customerPhone": "095085181",
-      "subtotal": 299,
-      "discountAmount": 0,
-      "shippingCost": 0,
-      "total": 299,
-      "status": "pedido_iniciado",
-      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
-      "paymentMethod": "transfer",
-      "createdAt": "2026-06-11T13:11:13.895Z",
-      "updatedAt": "2026-06-11T13:11:13.895Z",
-      "items": [
-        {
-          "id": "ca201191-50ca-41bc-9a4c-243591760e3d",
-          "productId": "11",
-          "productName": "Media Panty Térmica Mujer Efecto Piel Con Corderito",
-          "sizeSelected": "L/XL",
-          "colorSelected": "Negro",
-          "unitPrice": 299,
-          "quantity": 1,
-          "totalPrice": 299
-        }
-      ]
-    },
-    {
-      "id": "2455cc0b-4e03-4589-af9c-1a1fc588251f",
-      "customerEmail": "christian.olivera45@gmail.com",
-      "customerName": "Christina olivera",
-      "customerPhone": "095085181",
-      "subtotal": 480,
-      "discountAmount": 0,
-      "shippingCost": 0,
-      "total": 480,
-      "status": "pedido_iniciado",
-      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
-      "paymentMethod": "transfer",
-      "createdAt": "2026-06-11T13:09:42.683Z",
-      "updatedAt": "2026-06-11T13:09:42.683Z",
-      "items": [
-        {
-          "id": "d9fb5ea0-ea8d-4546-b78c-67abd5d33bad",
-          "productId": "13",
-          "productName": "Funda Neopreno 11 Plan Ceibal Lisas",
-          "sizeSelected": "11\"",
-          "colorSelected": "Rosa",
-          "unitPrice": 480,
-          "quantity": 1,
-          "totalPrice": 480
-        }
-      ]
-    },
-    {
-      "id": "5fd713e3-f47c-4abf-991d-0af5b17f4541",
-      "customerEmail": "christian.olivera45@gmail.com",
-      "customerName": "Christian Olivera",
-      "customerPhone": "095085181",
-      "subtotal": 399,
-      "discountAmount": 0,
-      "shippingCost": 0,
-      "total": 399,
-      "status": "pedido_iniciado",
-      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
-      "paymentMethod": "transfer",
-      "createdAt": "2026-06-11T12:27:12.634Z",
-      "updatedAt": "2026-06-11T12:27:12.634Z",
-      "items": [
-        {
-          "id": "af67fc94-551c-4cb5-b9fa-5882e1b5996e",
-          "productId": "12",
-          "productName": "Toalla Turbante Baño Pelo Gorro Algodón  dia de la ma",
-          "sizeSelected": "S",
-          "colorSelected": "Negro",
-          "unitPrice": 399,
-          "quantity": 1,
-          "totalPrice": 399
-        }
-      ]
-    },
-    {
-      "id": "ff36edfd-8b17-4db3-b0af-cada3ce8db31",
-      "customerEmail": "christian.olivera45@gmail.com",
-      "customerName": "Christian Olivera",
-      "customerPhone": "095085181",
-      "subtotal": 399,
-      "discountAmount": 0,
-      "shippingCost": 0,
-      "total": 399,
-      "status": "pedido_iniciado",
-      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
-      "paymentMethod": "transfer",
-      "createdAt": "2026-06-11T12:26:16.801Z",
-      "updatedAt": "2026-06-11T12:26:16.801Z",
-      "items": [
-        {
-          "id": "e000dfdd-a638-4b5d-b672-e2c3e4f62b20",
-          "productId": "12",
-          "productName": "Toalla Turbante Baño Pelo Gorro Algodón  dia de la ma",
-          "sizeSelected": "S",
-          "colorSelected": "Negro",
-          "unitPrice": 399,
-          "quantity": 1,
-          "totalPrice": 399
-        }
-      ]
-    },
-    {
-      "id": "8cba94cd-bbcd-44ed-8e7d-c74a9b3d45da",
-      "customerEmail": "christian.olivera45@gmail.com",
-      "customerName": "Christian Olivera",
-      "customerPhone": "095085181",
-      "subtotal": 399,
-      "discountAmount": 0,
-      "shippingCost": 0,
-      "total": 399,
-      "status": "pago_pendiente",
-      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
-      "paymentMethod": "mercadopago",
-      "createdAt": "2026-06-11T12:25:09.095Z",
-      "updatedAt": "2026-06-11T12:25:16.144Z",
-      "items": [
-        {
-          "id": "4596b565-f9a2-4ae2-97d5-e03ca0fe99db",
-          "productId": "12",
-          "productName": "Toalla Turbante Baño Pelo Gorro Algodón  dia de la ma",
-          "sizeSelected": "S",
-          "colorSelected": "Negro",
-          "unitPrice": 399,
-          "quantity": 1,
-          "totalPrice": 399
-        }
-      ]
-    },
-    {
-      "id": "64a91709-2bc1-4706-867f-f709ffca4de3",
-      "customerEmail": "christian.olivera45@gmail.com",
-      "customerName": "Chr Oli",
-      "customerPhone": "095085181",
-      "subtotal": 999,
-      "discountAmount": 0,
-      "shippingCost": 0,
-      "total": 999,
-      "status": "pedido_iniciado",
-      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
-      "paymentMethod": "mercadopago",
-      "createdAt": "2026-06-10T23:00:18.241Z",
-      "updatedAt": "2026-06-10T23:00:18.241Z",
-      "items": [
-        {
-          "id": "5da2ac70-4bec-4b87-a17d-11c2e02229df",
-          "productId": "14",
-          "productName": "Soporte Para Tablet De Pared Alto Ranurado Anti Robo",
-          "unitPrice": 999,
-          "quantity": 1,
-          "totalPrice": 999
-        }
-      ]
-    },
-    {
-      "id": "99efa2ba-5494-4a63-ab40-80400480a159",
-      "customerEmail": "christian.olivera45@gmail.com",
-      "customerName": "Christina olivera",
-      "customerPhone": "09508542",
-      "subtotal": 8119,
-      "discountAmount": 0,
-      "shippingCost": 0,
-      "total": 8119,
-      "status": "pedido_iniciado",
-      "notes": "Envío a Domicilio: Calle: Calle 45, Manzana: 47, Solar: 25, Localidad: Canelones, Dpto: Canelones | Consumidor Final (No RUT)",
-      "paymentMethod": "transfer",
-      "createdAt": "2026-06-10T22:42:14.120Z",
-      "updatedAt": "2026-06-10T22:42:14.120Z",
-      "items": [
-        {
-          "id": "13476e62-e476-47fa-96a5-7348a8140555",
-          "productId": "11",
-          "productName": "Media Panty Térmica Mujer Efecto Piel Con Corderito",
-          "unitPrice": 299,
-          "quantity": 10,
-          "totalPrice": 2990
-        },
-        {
-          "id": "7788ca0e-5688-4276-8e7c-6d73e026b20c",
-          "productId": "15",
-          "productName": "Lámpara Uv Mata Anti Mosquitos Usb Silenciosa Sin Químico",
-          "colorSelected": "Blanco",
-          "unitPrice": 329,
-          "quantity": 1,
-          "totalPrice": 329
-        },
-        {
-          "id": "59bdd76a-6fd2-446c-b3f7-7a3e07e224e7",
-          "productId": "13",
-          "productName": "Funda Neopreno 11 Plan Ceibal Lisas",
-          "sizeSelected": "11\"",
-          "colorSelected": "Rosa",
-          "unitPrice": 480,
-          "quantity": 10,
-          "totalPrice": 4800
-        }
-      ]
-    },
-    {
-      "id": "0da44814-691b-4a47-b373-f87c8a5ff090",
-      "customerEmail": "christian.olivera45@gmail.com",
-      "customerName": "Christina olivera",
-      "customerPhone": "095085181",
-      "subtotal": 8119,
-      "discountAmount": 812,
-      "shippingCost": 0,
-      "total": 7307,
-      "couponCode": "BUELO15",
-      "status": "pedido_iniciado",
-      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
-      "paymentMethod": "mercadopago",
-      "createdAt": "2026-06-10T22:40:20.090Z",
-      "updatedAt": "2026-06-10T22:40:20.090Z",
-      "items": [
-        {
-          "id": "a9663c4c-d043-4eef-aff0-f1f3ca7827e3",
-          "productId": "11",
-          "productName": "Media Panty Térmica Mujer Efecto Piel Con Corderito",
-          "unitPrice": 299,
-          "quantity": 10,
-          "totalPrice": 2990
-        },
-        {
-          "id": "db5ec90e-9b06-4b09-ba97-7a1f7f9e5205",
-          "productId": "15",
-          "productName": "Lámpara Uv Mata Anti Mosquitos Usb Silenciosa Sin Químico",
-          "colorSelected": "Blanco",
-          "unitPrice": 329,
-          "quantity": 1,
-          "totalPrice": 329
-        },
-        {
-          "id": "f7f482b1-bcb3-4324-821f-54f2d860f1f5",
-          "productId": "13",
-          "productName": "Funda Neopreno 11 Plan Ceibal Lisas",
-          "sizeSelected": "11\"",
-          "colorSelected": "Rosa",
-          "unitPrice": 480,
-          "quantity": 10,
-          "totalPrice": 4800
-        }
-      ]
-    },
-    {
-      "id": "0497a059-9ae1-485e-bc2c-e7c0f4483ef8",
-      "customerEmail": "christian.olivera45@gmail.com",
-      "customerName": "Christian olivera",
-      "customerPhone": "095085181",
-      "subtotal": 480,
-      "discountAmount": 48,
-      "shippingCost": 0,
-      "total": 432,
-      "couponCode": "BUELO15",
-      "status": "pedido_iniciado",
-      "notes": "Envío a Domicilio: Calle: Miguelete, Nº: 4243, Barrio: Cordón, Localidad: Montevideo, Dpto: Montevideo | RUT: 219999830019 (Juanpe) - Dir. Fiscal: Justicia",
-      "paymentMethod": "mercadopago",
-      "createdAt": "2026-06-10T12:14:38.770Z",
-      "updatedAt": "2026-06-10T12:14:38.770Z",
-      "items": [
-        {
-          "id": "4f32bcbe-ed34-4d3e-8bbc-50f2bca402f8",
-          "productId": "13",
-          "productName": "Funda Neopreno 11 Plan Ceibal Lisas",
-          "sizeSelected": "11\"",
-          "colorSelected": "Rosa",
-          "unitPrice": 480,
-          "quantity": 1,
-          "totalPrice": 480
-        }
-      ]
-    },
-    {
-      "id": "ee8243db-7534-4007-a933-6e2ccfd58926",
-      "customerEmail": "christian.olivera45@gmail.com",
-      "customerName": "Christian Olivera",
-      "customerPhone": "095085181",
-      "subtotal": 399,
-      "discountAmount": 40,
-      "shippingCost": 0,
-      "total": 359,
-      "couponCode": "BUELO15",
-      "status": "pedido_iniciado",
-      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
-      "paymentMethod": "transfer",
-      "createdAt": "2026-06-10T12:11:35.855Z",
-      "updatedAt": "2026-06-10T12:11:35.855Z",
-      "items": [
-        {
-          "id": "97c1c051-83b0-476b-b118-04f5be9f7136",
-          "productId": "12",
-          "productName": "Toalla Turbante Baño Pelo Gorro Algodón  dia de la ma",
-          "sizeSelected": "S",
-          "colorSelected": "Negro",
-          "unitPrice": 399,
-          "quantity": 1,
-          "totalPrice": 399
-        }
-      ]
-    },
-    {
-      "id": "8445dee7-0b32-42b9-aca7-f517c7511a0d",
-      "customerEmail": "christian.olivera45@gmail.com",
-      "customerName": "Christian Olivera",
-      "customerPhone": "095085181",
-      "subtotal": 399,
-      "discountAmount": 0,
-      "shippingCost": 0,
-      "total": 399,
-      "status": "pedido_iniciado",
-      "notes": "Retiro en Local de la Empresa | Consumidor Final (No RUT)",
-      "paymentMethod": "transfer",
-      "createdAt": "2026-06-09T12:30:12.528Z",
-      "updatedAt": "2026-06-09T12:30:12.528Z",
-      "items": [
-        {
-          "id": "4a83f1b9-9092-4214-8939-cb5a5b1ec854",
-          "productId": "12",
-          "productName": "Toalla Turbante Baño Pelo Gorro Algodón  dia de la ma",
-          "sizeSelected": "S",
-          "colorSelected": "Negro",
-          "unitPrice": 399,
-          "quantity": 1,
-          "totalPrice": 399
-        }
-      ]
-    }
-  ]
+  "orders": []
 }

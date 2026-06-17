@@ -147,6 +147,8 @@ export interface SiteSettings {
   bannerOpacity?: number;
   featuredSliderSpeed?: number;
   googleAnalyticsId?: string;
+  googleTagManagerId?: string;
+  metaPixelId?: string;
 }
 
 export interface Category {

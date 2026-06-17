@@ -172,87 +172,131 @@ export default function CartDrawer({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {cartItems.map((item, index) => (
-                    <div
-                      key={`${item.product.id}-${item.selectedSize || "nosize"}-${item.selectedColor || "nocolor"}`}
-                      className="flex gap-3 p-3 rounded-xl border bg-[#0B1730]/60 border-[#D4A55A]/15 hover:border-[#D4A55A]/30 transition-all duration-300"
-                    >
-                      <img
-                        src={item.product.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80"}
-                        alt={item.product.name}
-                        className="h-20 w-16 rounded-lg object-cover bg-zinc-800 flex-shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-medium leading-snug line-clamp-2">
-                          {item.product.name}
-                        </h4>
-                        
-                        {/* Options tags */}
-                        {(item.selectedSize || item.selectedColor) && (
-                          <div className="flex flex-wrap gap-1.5 mt-1 font-mono text-[10px] text-[#E6BF76]">
-                            {item.selectedSize && (
-                              <span className="px-1.5 py-0.5 rounded bg-[#0B1730] border border-[#D4A55A]/25">
-                                {is3DProduct(item.product) ? "Material" : "Talle"}: {item.selectedSize}
-                              </span>
-                            )}
-                            {item.selectedColor && (
-                              <span className="px-1.5 py-0.5 rounded bg-[#0B1730] border border-[#D4A55A]/25 font-bold">Color: {item.selectedColor}</span>
-                            )}
+                  <p className="text-[10px] text-zinc-400 text-center select-none py-1.5 flex items-center justify-center gap-1.5 bg-[#0B1730]/60 rounded-xl border border-[#D4A55A]/10 px-2 leading-snug">
+                    <span>📱 Desliza a los lados para eliminar un artículo</span>
+                  </p>
+                  
+                  <AnimatePresence initial={false}>
+                    {cartItems.map((item) => {
+                      const itemKey = `${item.product.id}-${item.selectedSize || "nosize"}-${item.selectedColor || "nocolor"}`;
+                      return (
+                        <motion.div
+                          key={itemKey}
+                          layout
+                          initial={{ opacity: 0, y: 15 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, height: 0, scale: 0.92, marginBottom: 0, transition: { duration: 0.22 } }}
+                          className="relative overflow-hidden rounded-xl bg-red-600/90"
+                        >
+                          {/* Background Actions underneath the swiped card */}
+                          <div className="absolute inset-0 flex items-center justify-between px-5 bg-gradient-to-r from-red-650 to-red-600 text-white z-0 rounded-xl select-none">
+                            <div className="flex items-center gap-2 text-xs font-bold text-white/90">
+                              <Trash2 className="h-4 w-4 animate-pulse" />
+                              <span>Eliminar</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs font-bold text-white/90">
+                              <span>Eliminar</span>
+                              <Trash2 className="h-4 w-4 animate-pulse" />
+                            </div>
                           </div>
-                        )}
 
-                        <div className="flex items-center justify-between mt-3">
-                          {/* Stepper */}
-                          <div className="flex items-center rounded-lg border text-sm border-[#D4A55A]/25 bg-[#050B1A]">
+                          {/* Frontend Draggable Card */}
+                          <motion.div
+                            drag="x"
+                            dragDirectionLock
+                            dragConstraints={{ left: 0, right: 0 }}
+                            dragElastic={{ left: 0.75, right: 0.75 }}
+                            onDragEnd={(_, info) => {
+                              const threshold = 110;
+                              if (info.offset.x < -threshold || info.offset.x > threshold) {
+                                onRemoveItem(item.product.id, item.selectedSize, item.selectedColor);
+                              }
+                            }}
+                            className="relative z-10 flex gap-3 p-3 rounded-xl border bg-[#0B1730] border-[#D4A55A]/15 hover:border-[#D4A55A]/35 transition-transform duration-300 touch-pan-y cursor-grab active:cursor-grabbing select-none"
+                          >
+                            <img
+                              src={item.product.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80"}
+                              alt={item.product.name}
+                              className="h-20 w-16 rounded-lg object-cover bg-zinc-800 flex-shrink-0"
+                              draggable="false"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <h4 className="text-sm font-medium leading-snug line-clamp-2 select-all">
+                                {item.product.name}
+                              </h4>
+                              
+                              {/* Options tags */}
+                              {(item.selectedSize || item.selectedColor) && (
+                                <div className="flex flex-wrap gap-1.5 mt-1 font-mono text-[10px] text-[#E6BF76]">
+                                  {item.selectedSize && (
+                                    <span className="px-1.5 py-0.5 rounded bg-[#050B1A] border border-[#D4A55A]/25">
+                                      {is3DProduct(item.product) ? "Material" : "Talle"}: {item.selectedSize}
+                                    </span>
+                                  )}
+                                  {item.selectedColor && (
+                                    <span className="px-1.5 py-0.5 rounded bg-[#050B1A] border border-[#D4A55A]/25 font-bold">Color: {item.selectedColor}</span>
+                                  )}
+                                </div>
+                              )}
+
+                              <div className="flex items-center justify-between mt-3">
+                                {/* Stepper */}
+                                <div className="flex items-center rounded-lg border text-sm border-[#D4A55A]/25 bg-[#050B1A]" onClick={(e) => e.stopPropagation()}>
+                                  <button
+                                    onClick={() => {
+                                      if (item.quantity > 1) {
+                                        onUpdateQuantity(item.product.id, item.quantity - 1, item.selectedSize, item.selectedColor);
+                                      } else {
+                                        onRemoveItem(item.product.id, item.selectedSize, item.selectedColor);
+                                      }
+                                    }}
+                                    className="px-2 py-1 text-zinc-400 hover:text-[#E6BF76] cursor-pointer"
+                                  >
+                                    <Minus className="h-3.5 w-3.5" />
+                                  </button>
+                                  <span className="px-2 font-mono text-xs text-[#F4EAD7]">{item.quantity}</span>
+                                  <button
+                                    onClick={() => {
+                                      const stock = getAvailableStock(item.product, item.selectedSize, item.selectedColor);
+                                      if (item.quantity < stock) {
+                                        onUpdateQuantity(item.product.id, item.quantity + 1, item.selectedSize, item.selectedColor);
+                                      }
+                                    }}
+                                    disabled={item.quantity >= getAvailableStock(item.product, item.selectedSize, item.selectedColor)}
+                                    className={`px-2 py-1 text-zinc-400 hover:text-[#E6BF76] cursor-pointer ${
+                                      item.quantity >= getAvailableStock(item.product, item.selectedSize, item.selectedColor)
+                                        ? "opacity-25 cursor-not-allowed text-zinc-650"
+                                        : ""
+                                    }`}
+                                  >
+                                    <Plus className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+
+                                {/* Price */}
+                                <div className="text-right">
+                                  <span className="text-sm font-bold text-[#E6BF76]">
+                                    ${Math.round(getItemPrice(item) * item.quantity)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Delete button */}
                             <button
-                              onClick={() => {
-                                if (item.quantity > 1) {
-                                  onUpdateQuantity(item.product.id, item.quantity - 1, item.selectedSize, item.selectedColor);
-                                } else {
-                                  onRemoveItem(item.product.id, item.selectedSize, item.selectedColor);
-                                }
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onRemoveItem(item.product.id, item.selectedSize, item.selectedColor);
                               }}
-                              className="px-2 py-1 text-zinc-400 hover:text-[#E6BF76] cursor-pointer"
+                              className="text-[#E6BF76]/60 hover:text-red-400 self-start p-1 transition cursor-pointer"
                             >
-                              <Minus className="h-3.5 w-3.5" />
+                              <Trash2 className="h-4 w-4" />
                             </button>
-                            <span className="px-2 font-mono text-xs text-[#F4EAD7]">{item.quantity}</span>
-                            <button
-                              onClick={() => {
-                                const stock = getAvailableStock(item.product, item.selectedSize, item.selectedColor);
-                                if (item.quantity < stock) {
-                                  onUpdateQuantity(item.product.id, item.quantity + 1, item.selectedSize, item.selectedColor);
-                                }
-                              }}
-                              disabled={item.quantity >= getAvailableStock(item.product, item.selectedSize, item.selectedColor)}
-                              className={`px-2 py-1 text-zinc-400 hover:text-[#E6BF76] cursor-pointer ${
-                                item.quantity >= getAvailableStock(item.product, item.selectedSize, item.selectedColor)
-                                  ? "opacity-25 cursor-not-allowed text-zinc-650"
-                                  : ""
-                              }`}
-                            >
-                              <Plus className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-
-                          {/* Price */}
-                          <div className="text-right">
-                            <span className="text-sm font-bold text-[#E6BF76]">
-                              ${Math.round(getItemPrice(item) * item.quantity)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Delete */}
-                      <button
-                        onClick={() => onRemoveItem(item.product.id, item.selectedSize, item.selectedColor)}
-                        className="text-[#E6BF76]/60 hover:text-red-400 self-start p-1 transition cursor-pointer"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
+                          </motion.div>
+                        </motion.div>
+                      );
+                    })}
+                  </AnimatePresence>
                 </div>
               )}
             </div>
@@ -283,19 +327,43 @@ export default function CartDrawer({
                 </div>
 
                 {/* Action button to proceed to Checkout */}
-                <div className="pt-2 border-t border-dashed border-[#D4A55A]/20">
+                <div className="pt-2 border-t border-dashed border-[#D4A55A]/20 flex items-center gap-2">
                   <button
                     onClick={() => {
                       onProceedToCheckout();
                       onClose();
                     }}
-                    className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-extrabold uppercase tracking-widest bg-[#D4A55A] hover:bg-[#E6BF76] text-[#050B1A] mt-1 shadow-lg shadow-[#D4A55A]/10 transition-all transform active:scale-95 cursor-pointer"
+                    className="flex-grow flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-extrabold uppercase tracking-widest bg-[#D4A55A] hover:bg-[#E6BF76] text-[#050B1A] shadow-lg shadow-[#D4A55A]/10 transition-all transform active:scale-95 cursor-pointer"
                   >
                     <span>Continuar</span>
                     <ArrowRight className="h-4 w-4" />
                   </button>
+                  
+                  {/* Botón de cerrar para celular al alcance de la mano (Thumb-friendly Close) */}
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="md:hidden flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-xl bg-[#0B1730] hover:bg-[#0B1730]/80 text-[#E6BF76] border border-[#D4A55A]/35 active:scale-95 transition-all cursor-pointer"
+                    title="Cerrar Carrito"
+                    aria-label="Cerrar Carrito"
+                  >
+                    <X className="h-5 w-5 stroke-[2.5]" />
+                  </button>
                 </div>
               </div>
+            )}
+
+            {/* Floating cerrar button for mobile when cart is empty (perfectly positioned for the thumb) */}
+            {cartItems.length === 0 && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="md:hidden fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#0B1730] text-[#E6BF76] border-2 border-[#D4A55A]/40 shadow-[0_8px_30px_rgba(0,0,0,0.7)] active:scale-95 transition-all cursor-pointer"
+                title="Cerrar Carrito"
+                aria-label="Cerrar Carrito"
+              >
+                <X className="h-6 w-6 stroke-[2.5]" />
+              </button>
             )}
           </motion.div>
         </>

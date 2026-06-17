@@ -94,7 +94,11 @@ export default function ProductCard({
   const optimizeImageUrl = (url: string) => {
     if (!url) return "";
     if (url.includes("unsplash.com")) {
-      return url.replace("auto=format", "fm=webp") + (url.includes("w=") ? "" : "&w=600");
+      let optimized = url.replace("auto=format", "fm=webp");
+      // Remove any existing width or quality params to prevent duplication
+      optimized = optimized.replace(/[&?]w=\d+/g, "").replace(/[&?]q=\d+/g, "");
+      // Add optimized width and lower quality (q=70) for super fast mobile and desktop loading
+      return optimized + (optimized.includes("?") ? "&" : "?") + "w=400&q=70";
     }
     return url;
   };

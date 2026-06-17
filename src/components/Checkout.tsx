@@ -158,16 +158,64 @@ export default function Checkout({
   onBackToCatalog,
   coupons
 }: CheckoutProps) {
-  // Client details states (Clean/empty on start as requested)
+  // Client details states (Clean/empty on start as requested, loaded from localStorage if exists)
   const [isSummaryExpanded, setIsSummaryExpanded] = useState<boolean>(false);
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [wantsInvoice, setWantsInvoice] = useState(false);
-  const [rutNumber, setRutNumber] = useState("");
-  const [companyName, setCompanyName] = useState("");
-  const [fiscalAddress, setFiscalAddress] = useState("");
+  const [firstName, setFirstName] = useState(() => {
+    try {
+      return localStorage.getItem("checkout_firstName") || "";
+    } catch (_) {
+      return "";
+    }
+  });
+  const [lastName, setLastName] = useState(() => {
+    try {
+      return localStorage.getItem("checkout_lastName") || "";
+    } catch (_) {
+      return "";
+    }
+  });
+  const [email, setEmail] = useState(() => {
+    try {
+      return localStorage.getItem("checkout_email") || "";
+    } catch (_) {
+      return "";
+    }
+  });
+  const [phone, setPhone] = useState(() => {
+    try {
+      return localStorage.getItem("checkout_phone") || "";
+    } catch (_) {
+      return "";
+    }
+  });
+  const [wantsInvoice, setWantsInvoice] = useState(() => {
+    try {
+      return localStorage.getItem("checkout_wantsInvoice") === "true";
+    } catch (_) {
+      return false;
+    }
+  });
+  const [rutNumber, setRutNumber] = useState(() => {
+    try {
+      return localStorage.getItem("checkout_rutNumber") || "";
+    } catch (_) {
+      return "";
+    }
+  });
+  const [companyName, setCompanyName] = useState(() => {
+    try {
+      return localStorage.getItem("checkout_companyName") || "";
+    } catch (_) {
+      return "";
+    }
+  });
+  const [fiscalAddress, setFiscalAddress] = useState(() => {
+    try {
+      return localStorage.getItem("checkout_fiscalAddress") || "";
+    } catch (_) {
+      return "";
+    }
+  });
 
   // Validation States for real-time error handling
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -242,34 +290,22 @@ export default function Checkout({
         const cleanVal = value.trim();
         if (!cleanVal) return "El teléfono de contacto es obligatorio.";
         
-        // Permitir números, espacios, guiones, paréntesis y el prefijo +
-        const allowedChars = /^[0-9\s\-+()]+$/;
-        if (!allowedChars.test(cleanVal)) {
-          return "Solo se permiten números, espacios, guiones, paréntesis y el prefijo +.";
-        }
-
         const digitsOnly = cleanVal.replace(/\D/g, "");
         if (digitsOnly.length < 8) return "El teléfono debe tener un mínimo de 8 dígitos.";
-        if (digitsOnly.length > 15) return "El teléfono no puede tener más de 15 dígitos.";
+        if (digitsOnly.length > 9) return "El teléfono no puede tener más de 9 dígitos.";
 
-        // Validar formato de teléfono uruguayo de forma amplia y flexible
+        // Validar fijos (8 dígitos) o celulares (9 dígitos) de Uruguay
         let isUruguayFormat = false;
-        if (digitsOnly.startsWith("598")) {
-          const rest = digitsOnly.slice(3);
-          // Permite formatos como 59899123456, 598099123456, 59824001234
-          if (/^(0?9|2|4)/.test(rest) && rest.length >= 7 && rest.length <= 10) {
-            isUruguayFormat = true;
-          }
-        } else {
-          // Permite formatos nacionales sin prefijo internacional (ej. 099123456, 99123456, 24001234)
-          // El largo suele ser 8 o 9 (o hasta 10 si se incluye prefijo local)
-          if (/^(0?9|9|2|4)/.test(digitsOnly) && digitsOnly.length >= 8 && digitsOnly.length <= 10) {
-            isUruguayFormat = true;
-          }
+        if (/^09\d{7}$/.test(digitsOnly)) {
+          isUruguayFormat = true; // celular Uruguay (ej: 099123456)
+        } else if (/^[24]\d{7}$/.test(digitsOnly)) {
+          isUruguayFormat = true; // fijo Uruguay (ej: 24001234)
+        } else if (/^9\d{7}$/.test(digitsOnly)) {
+          isUruguayFormat = true; // celular uruguayo sin el 0 inicial (ej: 99123456)
         }
 
         if (!isUruguayFormat) {
-          return "Debe ser un teléfono uruguayo válido: fijos (ej: 24001234) o celulares (ej: 099123456).";
+          return "Debe ser un teléfono uruguayo válido: fijos (8 dígitos, ej: 24001234) o celulares (9 dígitos, ej: 099123456).";
         }
         return "";
       }
@@ -306,7 +342,12 @@ export default function Checkout({
 
   const handleFieldChange = (name: string, val: string) => {
     // Basic tag-cleaning sanitization
-    const sanitizedVal = val.replace(/<[^>]*>/g, "");
+    let sanitizedVal = val.replace(/<[^>]*>/g, "");
+    
+    if (name === "phone") {
+      // Permitir únicamente números y descartar cualquier otro carácter, limitado a máximo 9 dígitos
+      sanitizedVal = sanitizedVal.replace(/\D/g, "").slice(0, 9);
+    }
     
     if (name === "firstName") setFirstName(sanitizedVal);
     else if (name === "lastName") setLastName(sanitizedVal);
@@ -325,32 +366,115 @@ export default function Checkout({
   const hasDelivery = settings.deliveryActive !== false;
 
   // Delivery options states
-  const [shippingType, setShippingType] = useState<"pickup" | "delivery">(
-    hasDelivery ? "delivery" : "pickup"
-  );
+  const [shippingType, setShippingType] = useState<"pickup" | "delivery">(() => {
+    try {
+      const stored = localStorage.getItem("checkout_shippingType") as "pickup" | "delivery" | null;
+      if (stored) return stored;
+    } catch (_) {}
+    return hasDelivery ? "delivery" : "pickup";
+  });
   
   // Structured physical address states for Uruguay
-  const [dept, setDept] = useState("Montevideo");
-  const [city, setCity] = useState("");
-  const [street, setStreet] = useState("");
-  const [doorNumber, setDoorNumber] = useState("");
-  const [apartment, setApartment] = useState("");
-  const [solar, setSolar] = useState("");
-  const [manzana, setManzana] = useState("");
-  const [neighborhood, setNeighborhood] = useState("");
-  const [deliveryPreference, setDeliveryPreference] = useState<"home" | "agency">("home");
-  const [shippingNotes, setShippingNotes] = useState("");
+  const [dept, setDept] = useState(() => {
+    try {
+      return localStorage.getItem("checkout_dept") || "Montevideo";
+    } catch (_) {
+      return "Montevideo";
+    }
+  });
+  const [city, setCity] = useState(() => {
+    try {
+      return localStorage.getItem("checkout_city") || "";
+    } catch (_) {
+      return "";
+    }
+  });
+  const [street, setStreet] = useState(() => {
+    try {
+      return localStorage.getItem("checkout_street") || "";
+    } catch (_) {
+      return "";
+    }
+  });
+  const [doorNumber, setDoorNumber] = useState(() => {
+    try {
+      return localStorage.getItem("checkout_doorNumber") || "";
+    } catch (_) {
+      return "";
+    }
+  });
+  const [apartment, setApartment] = useState(() => {
+    try {
+      return localStorage.getItem("checkout_apartment") || "";
+    } catch (_) {
+      return "";
+    }
+  });
+  const [solar, setSolar] = useState(() => {
+    try {
+      return localStorage.getItem("checkout_solar") || "";
+    } catch (_) {
+      return "";
+    }
+  });
+  const [manzana, setManzana] = useState(() => {
+    try {
+      return localStorage.getItem("checkout_manzana") || "";
+    } catch (_) {
+      return "";
+    }
+  });
+  const [neighborhood, setNeighborhood] = useState(() => {
+    try {
+      return localStorage.getItem("checkout_neighborhood") || "";
+    } catch (_) {
+      return "";
+    }
+  });
+  const [deliveryPreference, setDeliveryPreference] = useState<"home" | "agency">(() => {
+    try {
+      return (localStorage.getItem("checkout_deliveryPreference") as "home" | "agency") || "home";
+    } catch (_) {
+      return "home";
+    }
+  });
+  const [shippingNotes, setShippingNotes] = useState(() => {
+    try {
+      return localStorage.getItem("checkout_shippingNotes") || "";
+    } catch (_) {
+      return "";
+    }
+  });
 
   // Delivery carrier selection state
-  const [selectedDeliveryMethod, setSelectedDeliveryMethod] = useState<string>("");
+  const [selectedDeliveryMethod, setSelectedDeliveryMethod] = useState<string>(() => {
+    try {
+      return localStorage.getItem("checkout_selectedDeliveryMethod") || "";
+    } catch (_) {
+      return "";
+    }
+  });
 
   useEffect(() => {
+    try {
+      const stored = localStorage.getItem("checkout_shippingType") as "pickup" | "delivery" | null;
+      if (stored) {
+        if (stored === "pickup" && hasPickup) {
+          setShippingType("pickup");
+          return;
+        }
+        if (stored === "delivery" && hasDelivery) {
+          setShippingType("delivery");
+          return;
+        }
+      }
+    } catch (_) {}
     if (!hasDelivery && hasPickup) {
       setShippingType("pickup");
     } else if (!hasPickup && hasDelivery) {
       setShippingType("delivery");
     }
-  }, [settings.pickupActive, settings.deliveryActive]);
+  }, [settings.pickupActive, settings.deliveryActive, hasPickup, hasDelivery]);
 
   const deliveryMethods = settings.deliveryMethods || [
     {
@@ -391,9 +515,22 @@ export default function Checkout({
     }
   }, [settings.deliveryMethods, selectedDeliveryMethod]);
 
-  // Stored Addresses (empty by default as requested by the user)
-  const [addresses, setAddresses] = useState<AddressItem[]>([]);
-  const [selectedAddressId, setSelectedAddressId] = useState<string>("");
+  // Stored Addresses (empty by default as requested by the user, but persistent offline)
+  const [addresses, setAddresses] = useState<AddressItem[]>(() => {
+    try {
+      const stored = localStorage.getItem("checkout_addresses");
+      return stored ? JSON.parse(stored) : [];
+    } catch (_) {
+      return [];
+    }
+  });
+  const [selectedAddressId, setSelectedAddressId] = useState<string>(() => {
+    try {
+      return localStorage.getItem("checkout_selectedAddressId") || "";
+    } catch (_) {
+      return "";
+    }
+  });
   const [shakeStep, setShakeStep] = useState(false);
 
   // Address Modal editing state
@@ -441,10 +578,32 @@ export default function Checkout({
   }, [selectedDeliveryMethod]);
 
   // Payment methods states & effects
-  const [paymentMethod, setPaymentMethod] = useState<string>("");
-  const [checkoutStep, setCheckoutStep] = useState<1 | 2 | 3>(1);
+  const [paymentMethod, setPaymentMethod] = useState<string>(() => {
+    try {
+      return localStorage.getItem("checkout_paymentMethod") || "";
+    } catch (_) {
+      return "";
+    }
+  });
+  const [checkoutStep, setCheckoutStep] = useState<1 | 2 | 3>(() => {
+    try {
+      const stored = localStorage.getItem("checkout_checkoutStep");
+      if (stored) {
+        const step = parseInt(stored, 10);
+        if (step === 1 || step === 2 || step === 3) return step as 1 | 2 | 3;
+      }
+    } catch (_) {}
+    return 1;
+  });
 
   useEffect(() => {
+    try {
+      const stored = localStorage.getItem("checkout_paymentMethod");
+      if (stored) {
+        setPaymentMethod(stored);
+        return;
+      }
+    } catch (_) {}
     if (settings.mercadopagoActive !== false) {
       setPaymentMethod("mercadopago");
     } else if (settings.transferActive !== false) {
@@ -456,11 +615,183 @@ export default function Checkout({
     }
   }, [settings]);
 
+  // Sync state changes with localStorage in real-time
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_firstName", firstName);
+    } catch (_) {}
+  }, [firstName]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_lastName", lastName);
+    } catch (_) {}
+  }, [lastName]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_email", email);
+    } catch (_) {}
+  }, [email]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_phone", phone);
+    } catch (_) {}
+  }, [phone]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_wantsInvoice", String(wantsInvoice));
+    } catch (_) {}
+  }, [wantsInvoice]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_rutNumber", rutNumber);
+    } catch (_) {}
+  }, [rutNumber]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_companyName", companyName);
+    } catch (_) {}
+  }, [companyName]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_fiscalAddress", fiscalAddress);
+    } catch (_) {}
+  }, [fiscalAddress]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_shippingType", shippingType);
+    } catch (_) {}
+  }, [shippingType]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_dept", dept);
+    } catch (_) {}
+  }, [dept]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_city", city);
+    } catch (_) {}
+  }, [city]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_street", street);
+    } catch (_) {}
+  }, [street]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_doorNumber", doorNumber);
+    } catch (_) {}
+  }, [doorNumber]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_apartment", apartment);
+    } catch (_) {}
+  }, [apartment]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_solar", solar);
+    } catch (_) {}
+  }, [solar]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_manzana", manzana);
+    } catch (_) {}
+  }, [manzana]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_neighborhood", neighborhood);
+    } catch (_) {}
+  }, [neighborhood]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_deliveryPreference", deliveryPreference);
+    } catch (_) {}
+  }, [deliveryPreference]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_shippingNotes", shippingNotes);
+    } catch (_) {}
+  }, [shippingNotes]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_selectedDeliveryMethod", selectedDeliveryMethod);
+    } catch (_) {}
+  }, [selectedDeliveryMethod]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_paymentMethod", paymentMethod);
+    } catch (_) {}
+  }, [paymentMethod]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_checkoutStep", String(checkoutStep));
+    } catch (_) {}
+  }, [checkoutStep]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_addresses", JSON.stringify(addresses));
+    } catch (_) {}
+  }, [addresses]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("checkout_selectedAddressId", selectedAddressId);
+    } catch (_) {}
+  }, [selectedAddressId]);
+
   const [promoCode, setPromoCode] = useState("");
   const [appliedDiscount, setAppliedDiscount] = useState(0); // in percentage
   const [promoStatus, setPromoStatus] = useState<"none" | "success" | "invalid">("none");
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+
+  // Reset loading states when changing payment methods or when returning to this page from gateway
+  useEffect(() => {
+    setIsProcessing(false);
+  }, [paymentMethod]);
+
+  useEffect(() => {
+    const handleReturn = () => {
+      setIsProcessing(false);
+    };
+
+    window.addEventListener("pageshow", handleReturn);
+    window.addEventListener("focus", handleReturn);
+    
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        setIsProcessing(false);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      window.removeEventListener("pageshow", handleReturn);
+      window.removeEventListener("focus", handleReturn);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, []);
   const [successOrder, setSuccessOrder] = useState<{ id: string; num: string; waUrl: string; paymentMethod: string; customerEmail: string; totalPrice: number } | null>(null);
 
   // Auto-open WhatsApp on successful order disabled to allow customers to view the purchase confirmation screen first
@@ -991,6 +1322,38 @@ export default function Checkout({
         });
 
         setIsProcessing(false);
+        
+        // Clean all checkout-related cache upon successful order completion
+        try {
+          const keys = [
+            "checkout_firstName",
+            "checkout_lastName",
+            "checkout_email",
+            "checkout_phone",
+            "checkout_wantsInvoice",
+            "checkout_rutNumber",
+            "checkout_companyName",
+            "checkout_fiscalAddress",
+            "checkout_shippingType",
+            "checkout_dept",
+            "checkout_city",
+            "checkout_street",
+            "checkout_doorNumber",
+            "checkout_apartment",
+            "checkout_solar",
+            "checkout_manzana",
+            "checkout_neighborhood",
+            "checkout_deliveryPreference",
+            "checkout_shippingNotes",
+            "checkout_selectedDeliveryMethod",
+            "checkout_paymentMethod",
+            "checkout_checkoutStep",
+            "checkout_addresses",
+            "checkout_selectedAddressId"
+          ];
+          keys.forEach(key => localStorage.removeItem(key));
+        } catch (_) {}
+
         onClearCart();
       }
     } catch (err: any) {
@@ -1272,7 +1635,7 @@ export default function Checkout({
                       type="tel"
                       inputMode="tel"
                       autoComplete="tel"
-                      maxLength={15}
+                      maxLength={9}
                       placeholder="Ej: 099123456"
                       value={phone}
                       onChange={(e) => handleFieldChange("phone", e.target.value)}
@@ -1353,6 +1716,12 @@ export default function Checkout({
                                 companyName: "",
                                 fiscalAddress: ""
                               }));
+                              setTouchedFields(prev => ({
+                                ...prev,
+                                rutNumber: false,
+                                companyName: false,
+                                fiscalAddress: false
+                              }));
                             }}
                             className={`text-[10px] uppercase font-sans px-2.5 py-1 rounded-md transition font-black ${
                               !wantsInvoice 
@@ -1366,21 +1735,19 @@ export default function Checkout({
                             type="button"
                             onClick={() => {
                               setWantsInvoice(true);
-                              // Trigger state evaluation
-                              setTimeout(() => {
-                                setTouchedFields(prev => ({
-                                  ...prev,
-                                  rutNumber: true,
-                                  companyName: true,
-                                  fiscalAddress: true
-                                }));
-                                setValidationErrors(prev => ({
-                                  ...prev,
-                                  rutNumber: validateField("rutNumber", rutNumber, true),
-                                  companyName: validateField("companyName", companyName, true),
-                                  fiscalAddress: validateField("fiscalAddress", fiscalAddress, true)
-                                }));
-                              }, 10);
+                              // Clear errors and reset touched flags so the inputs appear clean of any warnings initially
+                              setValidationErrors(prev => ({
+                                ...prev,
+                                rutNumber: "",
+                                companyName: "",
+                                fiscalAddress: ""
+                              }));
+                              setTouchedFields(prev => ({
+                                ...prev,
+                                rutNumber: false,
+                                companyName: false,
+                                fiscalAddress: false
+                              }));
                             }}
                             className={`text-[10px] uppercase font-sans px-2.5 py-1 rounded-md transition font-black ${
                               wantsInvoice 

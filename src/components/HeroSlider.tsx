@@ -34,6 +34,21 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
     ? settings.heroSlides 
     : defaultSlides;
 
+  const optimizeImageUrl = (url: string) => {
+    if (!url) return "";
+    if (url.includes("unsplash.com")) {
+      let optimized = url.replace("auto=format", "fm=webp");
+      // On mobile devices we load a much smaller/lighter banner image
+      const isMobile = window.innerWidth < 768;
+      const targetSizeAndQuality = isMobile ? "&w=750&q=70" : "&w=1400&q=75";
+      
+      // strip existing width and quality parameters
+      optimized = optimized.replace(/[&?]w=\d+/g, "").replace(/[&?]q=\d+/g, "");
+      return optimized + (optimized.includes("?") ? "&" : "?") + targetSizeAndQuality;
+    }
+    return url;
+  };
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
   const [direction, setDirection] = useState(1); // 1 = right, -1 = left
@@ -204,11 +219,13 @@ export default function HeroSlider({ settings, onExploreCatalog }: HeroSliderPro
           >
             {/* Background Image - Boosted with visual filters to guarantee brightness even for dark images */}
             <img
-              src={slides[currentIndex].imageUrl}
+              src={optimizeImageUrl(slides[currentIndex].imageUrl)}
               alt={slides[currentIndex].title}
               className="w-full h-full object-cover object-center transition-opacity duration-500 filter brightness-110 contrast-105 saturate-[1.05]"
               style={{ opacity: (settings.bannerOpacity !== undefined ? Math.max(settings.bannerOpacity, 85) : 95) / 100 }}
               referrerPolicy="no-referrer"
+              loading="eager"
+              fetchPriority="high"
             />
             
             {/* Premium Soft Ambient Gradient Overlays */}

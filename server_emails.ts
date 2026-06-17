@@ -393,28 +393,31 @@ export function generateOrderCreatedEmailHtml(order: any, settings: any): { subj
     ? replacePlaceholders(customSubjectTemplate, { orderId, customerName, total: `$${total}`, siteTitle })
     : defaultSubject;
 
-  const defaultBody = "Muchas gracias por realizar tu compra con nosotros. Tu pago ha sido aprobado correctamente y tu pedido ya está siendo preparado para entrega. Aquí tienes los detalles completos de tu compra:";
+  const defaultBody = "Muchas gracias por realizar tu compra con nosotros. Tu pago ha sido recibido y tu pedido ya está en cola de procesamiento para ser armado por nuestro equipo. Aquí tienes la hoja de detalles de tu compra:";
   const customBodyTemplate = settings.emailTemplateOrderCreatedBody;
   const bodyText = customBodyTemplate
     ? replacePlaceholders(customBodyTemplate, { orderId, customerName, total: `$${total}`, siteTitle })
     : defaultBody;
 
   const itemsRows = items.map((item: any) => {
-    const sizeStr = item.sizeSelected ? ` - Talle: ${item.sizeSelected}` : "";
-    const colorStr = item.colorSelected ? ` - Color: ${item.colorSelected}` : "";
-    const nameWithVariant = `${item.productName}${sizeStr}${colorStr}`;
+    const sizeStr = item.sizeSelected ? `<span style="display:inline-block; background-color: #FAF5EB; color: #B45309; border: 1px solid #FCD34D; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-right: 4px;">Talle: ${item.sizeSelected}</span>` : "";
+    const colorStr = item.colorSelected ? `<span style="display:inline-block; background-color: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 11px;">Color: ${item.colorSelected}</span>` : "";
+    
     return `
       <tr>
-        <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; color: #334155;">
-          <strong>${nameWithVariant}</strong>
+        <td style="padding: 14px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13.5px; color: #0C1221; text-align: left; vertical-align: middle;">
+          <div style="font-weight: 700; color: #0C1221; margin-bottom: 5px;">${item.productName}</div>
+          <div style="margin-top: 4px;">${sizeStr} ${colorStr}</div>
         </td>
-        <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; color: #334155; text-align: center;">
-          ${item.quantity}
+        <td style="padding: 14px 10px; border-bottom: 1px solid #e2e8f0; font-size: 14px; text-align: center; color: #0C1221; vertical-align: middle;">
+          <span style="background-color: #0C1221; color: #ffffff; padding: 4px 11px; border-radius: 6px; font-size: 13px; font-weight: 800; display: inline-block; min-width: 14px; text-align: center; border: 1px solid #D4A55A;">
+            ${item.quantity}
+          </span>
         </td>
-        <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; color: #334155; text-align: right;">
+        <td style="padding: 14px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #475569; text-align: right; font-family: monospace; vertical-align: middle;">
           $${item.unitPrice}
         </td>
-        <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; color: #1e293b; text-align: right; font-weight: bold;">
+        <td style="padding: 14px 10px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #0C1221; text-align: right; font-weight: bold; font-family: monospace; vertical-align: middle;">
           $${item.totalPrice}
         </td>
       </tr>
@@ -422,24 +425,24 @@ export function generateOrderCreatedEmailHtml(order: any, settings: any): { subj
   }).join("");
 
   const html = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; padding: 40px 10px; color: #0f172a; line-height: 1.5;">
-      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);">
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #FAF9F6; padding: 40px 10px; color: #0C1221; line-height: 1.5;">
+      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; border: 1.5px solid #E6BF76; overflow: hidden; box-shadow: 0 4px 20px rgba(12, 18, 33, 0.08);">
         
-        <!-- Header -->
+        <!-- Header Container with gold stroke -->
         ${settings.emailHeaderImageUrl ? `
-          <div style="background-color: #0c1221; text-align: center; border-bottom: 4px solid #f59e0b; overflow: hidden; line-height: 0;">
+          <div style="background-color: #0c1221; text-align: center; border-bottom: 4px solid #D4A55A; overflow: hidden; line-height: 0;">
             <img src="${settings.emailHeaderImageUrl}" alt="${siteTitle}" style="width: 100%; max-width: 600px; height: auto; display: block; margin: 0 auto; object-fit: cover;" />
           </div>
         ` : `
-          <div style="background-color: #4f46e5; padding: 35px 30px; text-align: center; color: #ffffff;">
+          <div style="background-color: #0C1221; padding: 35px 30px; text-align: center; color: #ffffff; border-bottom: 4px solid #D4A55A;">
             ${settings.logoType === "image" && settings.logoImageUrl ? `
               <div style="margin-bottom: 12px; text-align: center;">
-                <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 60px; max-width: 220px; object-fit: contain; display: inline-block; vertical-align: middle; border-radius: 8px; background-color: rgba(255, 255, 255, 0.15); padding: 4px;" />
+                <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 60px; max-width: 220px; object-fit: contain; display: inline-block; vertical-align: middle; border-radius: 4px; background-color: rgba(255, 255, 255, 0.1); padding: 4px;" />
               </div>
             ` : `
-              <h1 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.025em;">${siteTitle}</h1>
+              <h1 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.01em; color: #ffffff;">${siteTitle}</h1>
             `}
-            <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9; font-weight: 500;">¡Tu compra ha sido aprobada con éxito! 🎉</p>
+            <p style="margin: 8px 0 0 0; font-size: 13.5px; color: #E6BF76; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em;">✓ Compra Recibida • Preparando Pedido</p>
           </div>
         `}
 
@@ -450,38 +453,40 @@ export function generateOrderCreatedEmailHtml(order: any, settings: any): { subj
               <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 55px; max-width: 180px; object-fit: contain;" />
             </div>
           ` : ""}
-          <h2 style="margin: 0 0 15px 0; font-size: 18px; font-weight: 700; color: #1e1b4b; ${settings.emailHeaderImageUrl ? 'text-align: center;' : ''}">¡Hola, ${customerName}!</h2>
-          <p style="margin: 0 0 25px 0; font-size: 14px; color: #475569; white-space: pre-wrap;">
+          <h2 style="margin: 0 0 12px 0; font-size: 18px; font-weight: 750; color: #0C1221; ${settings.emailHeaderImageUrl ? 'text-align: center;' : ''}">¡Hola, ${customerName}!</h2>
+          <p style="margin: 0 0 25px 0; font-size: 14px; color: #475569; white-space: pre-wrap; line-height: 1.6;">
             ${bodyText}
           </p>
 
-          <!-- Order Summary Dashboard Card -->
-          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; margin-bottom: 25px;">
-            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; margin-bottom: 8px; font-size: 13px;">
-              <span style="color: #64748b; font-weight: 600;">Número de Pedido:</span>
-              <span style="color: #4f46e5; font-weight: 700; font-family: monospace;">#${orderId}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; margin-bottom: 8px; font-size: 13px;">
-              <span style="color: #64748b; font-weight: 600;">Fecha de Compra:</span>
-              <span style="color: #0f172a; font-weight: 500;">${fechaCompraCompilada}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; font-size: 13px;">
-              <span style="color: #64748b; font-weight: 600;">Método de Pago:</span>
-              <span style="color: #0f172a; font-weight: bold;">${paymentMethod}</span>
-            </div>
+          <!-- Order Summary Dashboard Card (Zebra look, very readable) -->
+          <div style="background-color: #FAF9F6; border: 1.5px solid #E6BF76; border-radius: 8px; padding: 18px; margin-bottom: 25px;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+              <tr>
+                <td style="padding: 6px 0; color: #475569; font-weight: 600; text-align: left;">Número de Pedido:</td>
+                <td style="padding: 6px 0; color: #0C1221; font-weight: 800; text-align: right; font-family: monospace; font-size: 14.5px;">#${orderId}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; color: #475569; font-weight: 600; text-align: left; border-top: 1px solid #E6BF76; border-top-style: dashed;">Fecha de Compra:</td>
+                <td style="padding: 6px 0; color: #0C1221; font-weight: 500; text-align: right; border-top: 1px solid #E6BF76; border-top-style: dashed;">${fechaCompraCompilada}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; color: #475569; font-weight: 600; text-align: left; border-top: 1px solid #E6BF76; border-top-style: dashed;">Método de Pago:</td>
+                <td style="padding: 6px 0; color: #D4A55A; font-weight: bold; text-align: right; border-top: 1px solid #E6BF76; border-top-style: dashed;">${paymentMethod}</td>
+              </tr>
+            </table>
           </div>
 
           <!-- Items Title -->
-          <h3 style="margin: 0 0 12px 0; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; border-bottom: 2px solid #f1f5f9; padding-bottom: 6px;">Productos Comprados</h3>
+          <h3 style="margin: 0 0 12px 0; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #0C1221; border-bottom: 2px solid #D4A55A; padding-bottom: 6px;">Artículos Solicitados</h3>
           
           <!-- Items Table -->
           <table style="width: 100%; border-collapse: collapse; margin-bottom: 25px;">
             <thead>
-              <tr style="background-color: #f8fafc;">
-                <th style="padding: 10px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b;">Artículo</th>
-                <th style="padding: 10px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; width: 60px;">Cant.</th>
-                <th style="padding: 10px; text-align: right; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; width: 80px;">Precio</th>
-                <th style="padding: 10px; text-align: right; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; width: 90px;">Subtotal</th>
+              <tr style="background-color: #0C1221; color: #E6BF76;">
+                <th style="padding: 10px; text-align: left; font-size: 11px; font-weight: 750; text-transform: uppercase; border-radius: 4px 0 0 4px; border: 1px solid #0C1221;">Artículo</th>
+                <th style="padding: 10px; text-align: center; font-size: 11px; font-weight: 750; text-transform: uppercase; width: 60px; border: 1px solid #0C1221;">Cant.</th>
+                <th style="padding: 10px; text-align: right; font-size: 11px; font-weight: 750; text-transform: uppercase; width: 80px; border: 1px solid #0C1221;">Precio</th>
+                <th style="padding: 10px; text-align: right; font-size: 11px; font-weight: 750; text-transform: uppercase; width: 90px; border-radius: 0 4px 4px 0; border: 1px solid #0C1221;">Subtotal</th>
               </tr>
             </thead>
             <tbody>
@@ -489,70 +494,69 @@ export function generateOrderCreatedEmailHtml(order: any, settings: any): { subj
             </tbody>
           </table>
 
-          <!-- Financial summary block -->
-          <div style="width: 280px; margin-left: auto; margin-bottom: 30px; border-top: 2px solid #f1f5f9; padding-top: 10px;">
+          <!-- Financial summary block in Gold/Bone palette -->
+          <div style="width: 290px; margin-left: auto; margin-bottom: 30px; background-color: #FAF9F6; border: 1.5px solid #E6BF76; padding: 16px; border-radius: 8px;">
             <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; color: #475569;">
               <span>Subtotal:</span>
-              <span style="color: #0f172a; font-weight: 500;">$${subtotal}</span>
+              <span style="color: #0f172a; font-weight: 600;">$${subtotal}</span>
             </div>
             ${discount > 0 ? `
-            <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; color: #e11d48; font-weight: 600;">
+            <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; color: #b91c1c; font-weight: bold;">
               <span>Descuento (Cupón: ${coupon}):</span>
               <span>-$${discount}</span>
             </div>
             ` : ""}
             <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; color: #475569;">
-              <span>Costo de Envío:</span>
-              <span style="color: #0f172a; font-weight: 500;">${shippingCost === 0 ? "Gratis" : `$${shippingCost}`}</span>
+              <span>Envío:</span>
+              <span style="color: #0f172a; font-weight: 600;">${shippingCost === 0 ? "Gratis" : `$${shippingCost}`}</span>
             </div>
-            <div style="display: flex; justify-content: space-between; padding: 10px 0; border-top: 1px dashed #cbd5e1; font-weight: 800; font-size: 17px; color: #4f46e5; margin-top: 5px;">
-              <span>Total Pagado:</span>
-              <span>$${total}</span>
+            <div style="display: flex; justify-content: space-between; padding: 10px 0; border-top: 1.5px solid #D4A55A; font-weight: 850; font-size: 18px; color: #0C1221; margin-top: 8px;">
+              <span>TOTAL NETO:</span>
+              <span style="color: #D4A55A;">$${total}</span>
             </div>
           </div>
 
-          <!-- Notes -->
+          <!-- Notes / Special Instructions block -->
           ${notes && notes.trim() && notes !== "Ninguna" ? `
-          <div style="margin-bottom: 25px; font-size: 13px; color: #475569; background-color: #fafafa; border-left: 3px solid #4f46e5; padding: 12px 15px; border-radius: 0 8px 8px 0;">
-            <strong style="color: #0f172a; display: block; margin-bottom: 3px;">Instrucciones de Despacho / Notas:</strong> 
+          <div style="margin-bottom: 25px; font-size: 13.5px; color: #0C1221; background-color: #FAF5EB; border-left: 4px solid #D4A55A; padding: 15px 18px; border-radius: 4px; box-shadow: 0 1px 3px rgba(12, 18, 33, 0.03);">
+            <strong style="color: #B45309; display: block; margin-bottom: 5px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Instrucciones para preparación / Notas de envío:</strong> 
             "${notes}"
           </div>
           ` : ""}
 
-          <!-- Instrucciones de Pago por Transferencia / Abitab / Redpagos -->
+          <!-- Payment instructions -->
           ${(function() {
             const rawPaymentMethod = String(order.paymentMethod || order.payment_method || "").toLowerCase();
-            const isTransfer = rawPaymentMethod.includes("transfer") || rawPaymentMethod.includes("banco");
+            const isTransfer = rawPaymentMethod.includes("transfer") || rawPaymentMethod.includes("banco") || rawPaymentMethod.includes("giro");
             if (!isTransfer) return "";
             
             const details = settings.transferDetails && settings.transferDetails.trim() 
               ? settings.transferDetails 
-              : "Realiza tu transferencia bancaria directa de forma rápida y segura desde BROU, Itaú, Santander, BBVA o cualquier banco de Uruguay. También aceptamos giros por Abitab y Redpagos. Al enviar tu pedido, indícanos por WhatsApp para facilitarte los datos de cuenta específicos o de giros.";
+              : "Por favor, efectúa tu transferencia bancaria directa desde tu home banking (BROU, Itaú, Santander, BBVA o Scotia) o a través de redes de cobranza (Abitab o Redpagos). Notifica tu comprobante de inmediato.";
 
             return `
-            <div style="margin-bottom: 25px; font-size: 13px; color: #1e1b4b; background-color: #f5f3ff; border: 1px solid #ddd6fe; padding: 18px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); text-align: left;">
+            <div style="margin-bottom: 25px; font-size: 13px; color: #0C1221; background-color: #FAF9F6; border: 1.5px solid #E6BF76; padding: 18px; border-radius: 8px; text-align: left;">
               <div style="display: flex; align-items: center; margin-bottom: 10px;">
-                <span style="font-size: 20px; margin-right: 8px;">🏦</span>
-                <strong style="color: #4f46e5; font-size: 14px;">Datos de Transferencia Bancaria y Redes de Cobranza (Abitab / Redpagos):</strong>
+                <span style="font-size: 18px; margin-right: 8px;">🏦</span>
+                <strong style="color: #0C1221; font-size: 13.5px; text-transform: uppercase; letter-spacing: 0.03em;">Datos de Cuenta para Transferencia & Giro:</strong>
               </div>
-              <p style="margin: 0; font-size: 12.5px; color: #4c1d95; line-height: 1.6; white-space: pre-wrap;">
+              <p style="margin: 0; font-size: 12.5px; color: #475569; line-height: 1.6; white-space: pre-wrap;">
                 ${details}
               </p>
-              <div style="margin-top: 12px; font-size: 11.5px; color: #6d28d9; font-weight: 500; font-style: italic; border-top: 1px dashed #ddd6fe; padding-top: 8px;">
-                💡 RECUERDA: Una vez hecho el pago o giro, envía el comprobante de pago respondiendo a este correo o vía WhatsApp para despachar de inmediato tu pedido.
+              <div style="margin-top: 12px; font-size: 11.5px; color: #B45309; font-weight: bold; border-top: 1px dashed #E6BF76; padding-top: 8px; font-style: italic;">
+                💡 RECUERDA: Una vez hecho el pago o giro, envía el comprobante de pago por correo o WhatsApp para armar y despachar de inmediato tu pedido.
               </div>
             </div>
             `;
           })()}
 
-
         </div>
 
-        <!-- Footer -->
-        <div style="background-color: #f8fafc; padding: 25px 30px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; line-height: 1.4;">
-          Este correo ha sido generado de forma automática por la plataforma de ventas de ${siteTitle}.
+        <!-- Cohesive Dark Footer with Gold accent -->
+        <div style="background-color: #0C1221; padding: 25px 30px; text-align: center; border-top: 3px solid #D4A55A; font-size: 11px; color: #FAF9F6; line-height: 1.5;">
+          Este correo ha sido generado de forma automática para la gestión del pedido del cliente y de la sucursal de ${siteTitle}.
           <br />
-          Si hay algún dato erróneo en tu facturación, ponte en contacto de inmediato con nuestro soporte.
+          Si hay algún dato a corregir, por favor contáctanos lo antes posible para evitar demoras en el armado.
         </div>
       </div>
     </div>
@@ -636,19 +640,19 @@ export function generateOrderShippedEmailHtml(order: any, settings: any): { subj
         
         <!-- Header -->
         ${settings.emailHeaderImageUrl ? `
-          <div style="background-color: #0c1221; text-align: center; border-bottom: 4px solid #f59e0b; overflow: hidden; line-height: 0;">
+          <div style="background-color: #0c1221; text-align: center; border-bottom: 4px solid #D4A55A; overflow: hidden; line-height: 0;">
             <img src="${settings.emailHeaderImageUrl}" alt="${siteTitle}" style="width: 100%; max-width: 600px; height: auto; display: block; margin: 0 auto; object-fit: cover;" />
           </div>
         ` : `
-          <div style="background-color: #10b981; padding: 35px 30px; text-align: center; color: #ffffff;">
+          <div style="background-color: #0C1221; padding: 35px 30px; text-align: center; color: #ffffff; border-bottom: 4px solid #D4A55A;">
             ${settings.logoType === "image" && settings.logoImageUrl ? `
               <div style="margin-bottom: 12px; text-align: center;">
-                <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 60px; max-width: 220px; object-fit: contain; display: inline-block; vertical-align: middle; border-radius: 8px; background-color: rgba(255, 255, 255, 0.15); padding: 4px;" />
+                <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 60px; max-width: 220px; object-fit: contain; display: inline-block; vertical-align: middle; border-radius: 4px; background-color: rgba(255, 255, 255, 0.1); padding: 4px;" />
               </div>
             ` : `
-              <h1 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.025em;">${siteTitle}</h1>
+               <h1 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.01em; color: #ffffff;">${siteTitle}</h1>
             `}
-            <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9; font-weight: 500;">¡Tu pedido va en camino! 🚚🚀</p>
+            <p style="margin: 8px 0 0 0; font-size: 14px; color: #E6BF76; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em;">¡Tu pedido va en camino! 🚚🚀</p>
           </div>
         `}
 
@@ -659,7 +663,7 @@ export function generateOrderShippedEmailHtml(order: any, settings: any): { subj
               <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 55px; max-width: 180px; object-fit: contain;" />
             </div>
           ` : ""}
-          <h2 style="margin: 0 0 15px 0; font-size: 18px; font-weight: 700; color: #064e3b; ${settings.emailHeaderImageUrl ? 'text-align: center;' : ''}">¡Hola, ${customerName}!</h2>
+          <h2 style="margin: 0 0 15px 0; font-size: 18px; font-weight: 700; color: #0C1221; ${settings.emailHeaderImageUrl ? 'text-align: center;' : ''}">¡Hola, ${customerName}!</h2>
           <p style="margin: 0 0 20px 0; font-size: 14px; color: #475569;">
             Te queremos informar que tu pedido <strong style="color: #0f172a;">#${orderId}</strong> ha sido enviado por nuestro equipo. Aquí dispones del detalle de tu despacho:
           </p>
@@ -758,19 +762,19 @@ export function generateOrderStatusChangedEmailHtml(params: {
         
         <!-- Header -->
         ${settings.emailHeaderImageUrl ? `
-          <div style="background-color: #0c1221; text-align: center; border-bottom: 4px solid #f59e0b; overflow: hidden; line-height: 0;">
+          <div style="background-color: #0c1221; text-align: center; border-bottom: 4px solid #D4A55A; overflow: hidden; line-height: 0;">
             <img src="${settings.emailHeaderImageUrl}" alt="${siteTitle}" style="width: 100%; max-width: 600px; height: auto; display: block; margin: 0 auto; object-fit: cover;" />
           </div>
         ` : `
-          <div style="background-color: #2563eb; padding: 30px; text-align: center; color: #ffffff;">
+          <div style="background-color: #0C1221; padding: 30px; text-align: center; color: #ffffff; border-bottom: 4px solid #D4A55A;">
             ${settings.logoType === "image" && settings.logoImageUrl ? `
               <div style="margin-bottom: 12px; text-align: center;">
-                <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 60px; max-width: 220px; object-fit: contain; display: inline-block; vertical-align: middle; border-radius: 8px; background-color: rgba(255, 255, 255, 0.15); padding: 4px;" />
+                <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 60px; max-width: 220px; object-fit: contain; display: inline-block; vertical-align: middle; border-radius: 4px; background-color: rgba(255, 255, 255, 0.1); padding: 4px;" />
               </div>
             ` : `
-              <h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.025em;">${siteTitle}</h1>
+              <h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.01em; color: #ffffff;">${siteTitle}</h1>
             `}
-            <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9;">¡El estado de tu pedido ha cambiado!</p>
+            <p style="margin: 8px 0 0 0; font-size: 14px; color: #E6BF76; font-weight: 600;">¡El estado de tu pedido ha cambiado!</p>
           </div>
         `}
 
@@ -781,7 +785,7 @@ export function generateOrderStatusChangedEmailHtml(params: {
               <img src="${settings.logoImageUrl}" alt="${siteTitle}" style="max-height: 55px; max-width: 180px; object-fit: contain;" />
             </div>
           ` : ""}
-          <h2 style="margin: 0 0 15px 0; font-size: 18px; font-weight: 700; ${settings.emailHeaderImageUrl ? 'text-align: center;' : ''}">Hola, ${customerName}</h2>
+          <h2 style="margin: 0 0 15px 0; font-size: 18px; font-weight: 700; color: #0C1221; ${settings.emailHeaderImageUrl ? 'text-align: center;' : ''}">Hola, ${customerName}</h2>
           <p style="margin: 0 0 25px 0; font-size: 14px; color: #475569; white-space: pre-wrap;">
             ${bodyText}
           </p>

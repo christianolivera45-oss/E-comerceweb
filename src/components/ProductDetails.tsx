@@ -19,6 +19,7 @@ interface ProductDetailsProps {
   allProducts?: Product[];
   dbCategories?: any[];
   onViewProduct?: (product: Product) => void;
+  isCartOpen?: boolean;
 }
 
 export default function ProductDetails({
@@ -28,9 +29,23 @@ export default function ProductDetails({
   settings,
   allProducts = [],
   dbCategories = [],
-  onViewProduct = () => {}
+  onViewProduct = () => {},
+  isCartOpen = false
 }: ProductDetailsProps) {
   const isThemeDark = settings.themeMode === "dark";
+
+  const optimizeImageUrlForDetail = (url: string, width: number = 800, customQual?: number) => {
+    if (!url) return "";
+    if (url.includes("unsplash.com")) {
+      let optimized = url.replace("auto=format", "fm=webp");
+      // Remove any existing width or quality params to prevent duplication
+      optimized = optimized.replace(/[&?]w=\d+/g, "").replace(/[&?]q=\d+/g, "");
+      const quality = customQual !== undefined ? customQual : 70;
+      return optimized + (optimized.includes("?") ? "&" : "?") + `w=${width}&q=${quality}`;
+    }
+    return url;
+  };
+
   const is3D = is3DProduct(product);
   const solvedDetailsCategory = dbCategories.find(c => String(c.id) === String(product.categoria_id)) || { nombre: product.category || "", id: product.categoria_id || "todos" };
   const solvedCategoryName = (solvedDetailsCategory?.nombre || product.category || "").toLowerCase();
@@ -98,6 +113,13 @@ export default function ProductDetails({
   const [quantity, setQuantity] = useState(1);
   const [addedMessage, setAddedMessage] = useState(false);
   const [copiedShare, setCopiedShare] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const optionsRef = useRef<HTMLDivElement>(null);
+
+  // Clear error message when options or product change
+  useEffect(() => {
+    setErrorMessage("");
+  }, [selectedSize, selectedColor, product.id]);
 
   // --- SIZE GUIDE / CHART INTEGRATION STATE ---
   const [showSizeChart, setShowSizeChart] = useState(false);
@@ -318,11 +340,15 @@ export default function ProductDetails({
 
   const handleAddToCart = () => {
     if (sizes.length > 0 && !selectedSize) {
-      alert(is3D ? "Por favor selecciona un material." : "Por favor selecciona un talle.");
+      const msg = is3D ? "Por favor selecciona un material." : "Por favor selecciona un talle.";
+      setErrorMessage(msg);
+      optionsRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
     if (colors.length > 0 && !selectedColor) {
-      alert("Por favor selecciona un color.");
+      const msg = "Por favor selecciona un color.";
+      setErrorMessage(msg);
+      optionsRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
     const colorToPass = colors.length > 0 ? selectedColor : undefined;
@@ -331,7 +357,7 @@ export default function ProductDetails({
     const maxQtyAllowed = is3D ? 99 : currentStock;
     const finalQty = Math.min(quantity, maxQtyAllowed);
     if (finalQty <= 0) {
-      alert("Lo sentimos, la cantidad seleccionada no es válida.");
+      setErrorMessage("Lo sentimos, la cantidad seleccionada no es válida.");
       return;
     }
 
@@ -477,7 +503,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
               <AnimatePresence mode="wait">
                 <motion.img
                   key={activeImgIndex}
-                  src={allImages[activeImgIndex] || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80"}
+                  src={optimizeImageUrlForDetail(allImages[activeImgIndex], 800, 75)}
                   alt={product.name}
                   initial={{ opacity: 0, scale: 0.97 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -485,6 +511,8 @@ Me gustaría coordinar stock, fabricación y envío.`;
                   transition={{ duration: 0.22, ease: "easeOut" }}
                   className="max-h-full max-w-full object-contain select-none transition-transform duration-300 group-hover/main-img:scale-[1.015]"
                   referrerPolicy="no-referrer"
+                  loading="eager"
+                  fetchPriority="high"
                 />
               </AnimatePresence>
 
@@ -545,7 +573,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
                       : "border-slate-205 bg-white hover:border-slate-350 opacity-85"
                   }`}
                 >
-                  <img src={imgUrl} alt={`${product.name} - Miniatura ${idx + 1}`} className="w-full h-full object-contain p-1" referrerPolicy="no-referrer" />
+                  <img src={optimizeImageUrlForDetail(imgUrl, 150, 65)} alt={`${product.name} - Miniatura ${idx + 1}`} className="w-full h-full object-contain p-1" referrerPolicy="no-referrer" loading="lazy" />
                 </button>
               ))}
             </div>
@@ -566,13 +594,12 @@ Me gustaría coordinar stock, fabricación y envío.`;
               </h2>
 
               {/* Row with Price, Quantity Selector and "Comprar" Button */}
-              <div className="flex items-center gap-3 sm:gap-4 mb-6 pb-3 flex-wrap sm:flex-nowrap border-b border-zinc-900/10 dark:border-zinc-800/30">
+              <div className="flex items-center justify-between md:justify-start gap-4 mb-6 pb-3 border-b border-zinc-900/10 dark:border-zinc-800/30">
                 <div className="flex flex-col">
                   <div className="flex items-baseline gap-1.5">
                     <span className="text-2xl sm:text-3xl font-extrabold text-[#E6BF76] tracking-tight">
                       ${Math.round(dynamicPrice)}
                     </span>
-
                   </div>
                   {/* Subtle Stock Label */}
                   <span className={`text-[9px] font-semibold mt-0.5 ${
@@ -612,11 +639,11 @@ Me gustaría coordinar stock, fabricación y envío.`;
                       </button>
                     </div>
 
-                    {/* Buy Button */}
+                    {/* Buy Button - hidden on mobile, visible from md up */}
                     <button
                       type="button"
                       onClick={handleAddToCart}
-                      className="flex items-center justify-center gap-1.5 py-2 px-3.5 sm:px-4 rounded-lg font-bold text-xs bg-[#D4A55A] hover:bg-[#E6BF76] text-[#050B1A] hover:bg-opacity-90 active:scale-95 tracking-wide shadow-md cursor-pointer transition select-none shrink-0"
+                      className="hidden md:flex items-center justify-center gap-1.5 py-2 px-3.5 sm:px-4 rounded-lg font-bold text-xs bg-[#D4A55A] hover:bg-[#E6BF76] text-[#050B1A] hover:bg-opacity-90 active:scale-95 tracking-wide shadow-md cursor-pointer transition select-none shrink-0"
                     >
                       <ShoppingCart className="h-3.5 w-3.5" />
                       <span>Comprar (${Math.round(dynamicPrice * quantity)})</span>
@@ -706,8 +733,16 @@ Me gustaría coordinar stock, fabricación y envío.`;
             {/* Subtle spacer instead of a separator line */}
             <div className="h-3" />
 
-            {/* Sizes selector matching design ovals */}
-            {sizes.length > 0 && (
+            <div ref={optionsRef} className="space-y-4">
+              {errorMessage && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-xs font-bold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                  <span>{errorMessage}</span>
+                </div>
+              )}
+
+              {/* Sizes selector matching design ovals */}
+              {sizes.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <h4 className={`text-[10px] font-bold tracking-[0.15em] uppercase ${
@@ -804,6 +839,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
               </div>
             )}
 
+          </div>
 
           </div>
 
@@ -947,7 +983,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
               <AnimatePresence mode="wait">
                 <motion.img
                   key={activeImgIndex}
-                  src={allImages[activeImgIndex] || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80"}
+                  src={optimizeImageUrlForDetail(allImages[activeImgIndex], 1200, 80)}
                   alt={product.name}
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -996,7 +1032,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
                         : "border-white/10 bg-black/40 hover:border-white/30 opacity-70 hover:opacity-100"
                     }`}
                   >
-                    <img src={imgUrl} alt={`${product.name} - Galería Completa ${idx + 1}`} className="w-full h-full object-contain p-0.5" referrerPolicy="no-referrer" />
+                    <img src={optimizeImageUrlForDetail(imgUrl, 120, 60)} alt={`${product.name} - Galería Completa ${idx + 1}`} className="w-full h-full object-contain p-0.5" referrerPolicy="no-referrer" loading="lazy" />
                   </button>
                 ))}
               </div>
@@ -1410,40 +1446,48 @@ Me gustaría coordinar stock, fabricación y envío.`;
       </AnimatePresence>
 
       {/* Sticky Bottom Quick Buy Ribbon for Mobile */}
-      {!showSizeChart && (
-        <div className="md:hidden fixed bottom-[60px] left-0 right-0 bg-[#0B1730]/95 backdrop-blur-md border-t border-[#D4A55A]/15 px-4 py-3 z-[60] flex items-center justify-between gap-3 shadow-2xl select-none">
-          <div className="flex items-center gap-2 min-w-0">
-            <img 
-              src={allImages[0] || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=150&q=80"}
-              alt={product.name}
-              className="w-10 h-10 rounded-lg object-contain bg-[#050B1A]/40 border border-[#D4A55A]/10 p-0.5 shrink-0"
-              referrerPolicy="no-referrer"
-            />
-            <div className="min-w-0">
-              <h4 className="text-[11px] font-bold text-[#F4EAD7] truncate">{product.name}</h4>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-xs font-semibold text-[#E6BF76]">
-                  ${Math.round(dynamicPrice)}
-                </span>
-                {(selectedSize || selectedColor) && (
-                  <span className="text-[9px] text-[#D4A55A]/80 font-medium font-sans truncate">
-                    ({[selectedSize, selectedColor].filter(Boolean).join(" / ")})
+      {!showSizeChart && !isCartOpen && (
+        <div className="md:hidden fixed bottom-[48px] left-0 right-0 bg-[#0B1730]/95 backdrop-blur-md border-t border-[#D4A55A]/15 px-4 py-3 z-[60] flex flex-col gap-2 shadow-2xl select-none">
+          {errorMessage && (
+            <div className="bg-red-500/15 border border-red-500/35 text-red-400 px-3 py-1.5 rounded-lg text-[9px] font-bold flex items-center gap-1.5 animate-pulse">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <img 
+                src={optimizeImageUrlForDetail(allImages[0], 120, 65)}
+                alt={product.name}
+                className="w-10 h-10 rounded-lg object-contain bg-[#050B1A]/40 border border-[#D4A55A]/10 p-0.5 shrink-0"
+                referrerPolicy="no-referrer"
+              />
+              <div className="min-w-0">
+                <h4 className="text-[11px] font-bold text-[#F4EAD7] truncate">{product.name}</h4>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-xs font-semibold text-[#E6BF76]">
+                    ${Math.round(dynamicPrice)}
                   </span>
-                )}
+                  {(selectedSize || selectedColor) && (
+                    <span className="text-[9px] text-[#D4A55A]/80 font-medium font-sans truncate">
+                      ({[selectedSize, selectedColor].filter(Boolean).join(" / ")})
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
-          <button
-            onClick={handleAddToCart}
-            className={`py-2 px-4 rounded-full text-[10px] font-sans font-extrabold uppercase tracking-widest shrink-0 cursor-pointer border ${
-              currentStock > 0
-                ? "bg-[#D4A55A] hover:bg-[#E6BF76] border-transparent text-[#050B1A]"
-                : "bg-transparent border-slate-700 text-slate-400 cursor-not-allowed"
-            }`}
-          >
-            {currentStock > 0 ? "Comprar" : "Sin Stock"}
-          </button>
+            <button
+              onClick={handleAddToCart}
+              className={`py-2 px-4 rounded-full text-[10px] font-sans font-extrabold uppercase tracking-widest shrink-0 cursor-pointer border ${
+                (currentStock > 0 || is3D)
+                  ? "bg-[#D4A55A] hover:bg-[#E6BF76] border-transparent text-[#050B1A]"
+                  : "bg-transparent border-slate-700 text-slate-400 cursor-not-allowed"
+              }`}
+            >
+              {(currentStock > 0 || is3D) ? "Comprar" : "Sin Stock"}
+            </button>
+          </div>
         </div>
       )}
     </div>

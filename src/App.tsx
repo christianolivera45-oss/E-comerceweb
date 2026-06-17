@@ -744,6 +744,12 @@ export default function App() {
   const [showAdminDevicePreview, setShowAdminDevicePreview] = useState(true);
   const [mobileAdminMenuOpen, setMobileAdminMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [tempSearchQuery, setTempSearchQuery] = useState("");
+  
+  useEffect(() => {
+    setTempSearchQuery(searchQuery);
+  }, [searchQuery]);
+
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isHeaderSearchOpen, setIsHeaderSearchOpen] = useState(false);
   const [bannerProductSearch, setBannerProductSearch] = useState("");
@@ -1084,6 +1090,36 @@ export default function App() {
   const [sendingTest, setSendingTest] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState("");
   const [emailLogsLoading, setEmailLogsLoading] = useState(false);
+
+  const [geminiAnalysis, setGeminiAnalysis] = useState("");
+  const [geminiLoading, setGeminiLoading] = useState(false);
+  const [geminiError, setGeminiError] = useState("");
+
+  const handleGeminiReview = async () => {
+    setGeminiLoading(true);
+    setGeminiError("");
+    try {
+      const activeToken = localStorage.getItem("apex_admin_token") || authToken;
+      const res = await fetch("/api/admin/gemini/review-emails", {
+        headers: { "Authorization": `Bearer ${activeToken}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.hasApiKey === false) {
+          setGeminiError(data.message);
+        } else {
+          setGeminiAnalysis(data.summary);
+        }
+      } else {
+        setGeminiError(data.message || "Error de respuesta de la API de Gemini.");
+      }
+    } catch (e) {
+      console.error("Error invoking Gemini email review:", e);
+      setGeminiError("Error de comunicación y conexión con el servidor.");
+    } finally {
+      setGeminiLoading(false);
+    }
+  };
 
   const fetchEmailLogs = async () => {
     setEmailLogsLoading(true);
@@ -2615,7 +2651,8 @@ export default function App() {
         
         {/* Logo and container */}
         <div className="flex items-center gap-2 md:gap-4 select-none">
-          <div 
+          <button 
+            type="button"
             onClick={() => {
               setSelectedProduct(null);
               setActiveTab("storefront");
@@ -2624,7 +2661,7 @@ export default function App() {
               setIsHeaderSearchOpen(false);
               window.scrollTo({ top: 0, behavior: "smooth" });
             }}
-            className="flex items-center gap-2 md:gap-4 shrink-0 cursor-pointer"
+            className="flex items-center gap-2 md:gap-4 shrink-0 cursor-pointer border-none bg-transparent text-left outline-none p-0"
           >
             {/* Elegant Circular Logo inspired by Juem logo from design HTML */}
             {store.settings.logoType === "image" && !!store.settings.logoImageUrl ? (
@@ -2644,7 +2681,7 @@ export default function App() {
                 <span>{store.settings.siteTitle}</span>
               </h1>
             </div>
-          </div>
+          </button>
         </div>
 
         {/* Modern Clean Individual Category Hover/Click Dropdowns (Only shown for activeTab === "storefront") */}
@@ -2785,14 +2822,12 @@ export default function App() {
                         setTimeout(() => {
                           document.getElementById("header-search-input")?.focus();
                         }, 100);
-                        // Scroll to catalog section if user is at the top
-                        const el = document.getElementById("catalog-view");
-                        if (el) el.scrollIntoView({ behavior: "smooth" });
                       } else {
                         // Close if empty, otherwise do nothing
-                        if (!searchQuery) {
+                        if (!tempSearchQuery) {
                           setIsHeaderSearchOpen(false);
                           setShowSuggestions(false);
+                          setSearchQuery("");
                         }
                       }
                     }}
@@ -2815,22 +2850,28 @@ export default function App() {
                           id="header-search-input"
                           type="text"
                           placeholder="Buscar..."
-                          value={searchQuery}
+                          value={tempSearchQuery}
                           onChange={(e) => {
-                            setSearchQuery(e.target.value);
+                            setTempSearchQuery(e.target.value);
                             setShowSuggestions(true);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              setSearchQuery(tempSearchQuery);
+                              setShowSuggestions(false);
+                              document.getElementById("catalog-view")?.scrollIntoView({ behavior: "smooth" });
+                            }
                           }}
                           onFocus={() => {
                             setShowSuggestions(true);
-                            const el = document.getElementById("catalog-view");
-                            if (el) el.scrollIntoView({ behavior: "smooth" });
                           }}
                           onBlur={() => setTimeout(() => setShowSuggestions(false), 250)}
                           className="w-full bg-transparent text-[#F4EAD7] placeholder-zinc-500 border-none outline-none ring-0 focus:ring-0 text-xs py-1 select-all"
                         />
-                        {searchQuery && (
+                        {tempSearchQuery && (
                           <button
                             onClick={() => {
+                              setTempSearchQuery("");
                               setSearchQuery("");
                               setShowSuggestions(false);
                             }}
@@ -2845,8 +2886,8 @@ export default function App() {
                 </motion.div>
 
                 {/* Float Autocomplete Suggestions right under Header Search */}
-                {isHeaderSearchOpen && showSuggestions && searchQuery.trim().length >= 2 && (() => {
-                  const normQ = normalizeText(searchQuery);
+                {isHeaderSearchOpen && showSuggestions && tempSearchQuery.trim().length >= 2 && (() => {
+                  const normQ = normalizeText(tempSearchQuery);
                   
                   // 1. Match categories
                   const matchingCats = (store.dbCategories || [])
@@ -2860,7 +2901,7 @@ export default function App() {
                     .filter(p => !p.paused && p.active !== false)
                     .map(p => ({
                       product: p,
-                      score: calculateRelevance(p, searchQuery, store.dbCategories, store.dbSubcategories)
+                      score: calculateRelevance(p, tempSearchQuery, store.dbCategories, store.dbSubcategories)
                     }))
                     .filter(item => item.score > 0)
                     .sort((a, b) => b.score - a.score)
@@ -2880,7 +2921,7 @@ export default function App() {
                         {!hasAnySuggestion ? (
                           <div className="p-4 text-center">
                             <p className="text-xs text-zinc-400">
-                              No hay sugerencias para "{searchQuery}"
+                              No hay sugerencias para "{tempSearchQuery}"
                             </p>
                           </div>
                         ) : (
@@ -2986,12 +3027,19 @@ export default function App() {
                               <span>Sugerido</span>
                               <button
                                 onClick={() => {
+                                  setSearchQuery(tempSearchQuery);
                                   setShowSuggestions(false);
                                   document.getElementById("catalog-view")?.scrollIntoView({ behavior: "smooth" });
                                 }}
                                 className="hover:underline font-bold bg-transparent border-0 cursor-pointer text-[#E6BF76]"
                               >
-                                Ver todos ({filteredProducts.length})
+                                Ver todos ({
+                                  store.products.filter(p => 
+                                    !p.paused && 
+                                    p.active !== false && 
+                                    calculateRelevance(p, tempSearchQuery, store.dbCategories, store.dbSubcategories) > 0
+                                  ).length
+                                })
                               </button>
                             </div>
                           </>
@@ -3102,6 +3150,7 @@ export default function App() {
                 window.history.pushState(null, "", `/producto/${generateSlug(p.name)}`);
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }}
+              isCartOpen={isCartOpen}
             />
           ) : (
             <>
@@ -3830,7 +3879,7 @@ export default function App() {
           </section>
 
           {/* Features highlight banner */}
-          <footer className={`py-10 sm:py-14 border-t mt-12 sm:mt-16 transition-all duration-300 relative overflow-hidden ${
+          <footer className={`py-10 sm:py-14 border-t mt-12 sm:mt-16 transition-colors duration-200 relative overflow-hidden ${
             store.settings.themeMode === "dark" 
               ? "bg-[#050B1A] border-[#D4A55A]/25 text-slate-300" 
               : "bg-[#FAF7F2] border-slate-200 text-slate-700"
@@ -3842,7 +3891,7 @@ export default function App() {
             
             <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6 lg:gap-10">
               {/* BRAND COLUMN / REDES SOCIALES */}
-              <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ${
+              <div className={`p-4 sm:p-5 rounded-2xl border transition-colors duration-200 ${
                 store.settings.themeMode === "dark"
                   ? "bg-[#0B1730]/40 border-[#D4A55A]/10 hover:border-[#D4A55A]/25"
                   : "bg-white border-slate-200 shadow-sm"
@@ -3867,7 +3916,7 @@ export default function App() {
                     href="https://instagram.com" 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className={`flex-1 p-2.5 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 text-xs font-bold border ${
+                    className={`flex-1 p-2.5 rounded-xl transition-colors duration-150 flex items-center justify-center gap-2 text-xs font-bold border ${
                       store.settings.themeMode === "dark"
                         ? "bg-[#0B1730] hover:bg-[#D4A55A]/15 border-[#D4A55A]/20 text-[#E6BF76]"
                         : "bg-white hover:bg-slate-100 border-slate-200 text-slate-800"
@@ -3880,7 +3929,7 @@ export default function App() {
                     href="https://facebook.com" 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className={`flex-1 p-2.5 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 text-xs font-bold border ${
+                    className={`flex-1 p-2.5 rounded-xl transition-colors duration-150 flex items-center justify-center gap-2 text-xs font-bold border ${
                       store.settings.themeMode === "dark"
                         ? "bg-[#0B1730] hover:bg-[#D4A55A]/15 border-[#D4A55A]/20 text-[#E6BF76]"
                         : "bg-white hover:bg-slate-100 border-slate-200 text-slate-800"
@@ -3893,7 +3942,7 @@ export default function App() {
               </div>
 
               {/* COLUMN 2 (Feature 1 - Compra Personalizada) */}
-              <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ${
+              <div className={`p-4 sm:p-5 rounded-2xl border transition-colors duration-200 ${
                 store.settings.themeMode === "dark"
                   ? "bg-[#0B1730]/40 border-[#D4A55A]/10 hover:border-[#D4A55A]/25"
                   : "bg-white border-slate-200 shadow-sm"
@@ -3914,7 +3963,7 @@ export default function App() {
               </div>
 
               {/* COLUMN 3 (Feature 2 - Calidad Asegurada) */}
-              <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ${
+              <div className={`p-4 sm:p-5 rounded-2xl border transition-colors duration-200 ${
                 store.settings.themeMode === "dark"
                   ? "bg-[#0B1730]/40 border-[#D4A55A]/10 hover:border-[#D4A55A]/25"
                   : "bg-white border-slate-200 shadow-sm"
@@ -3935,7 +3984,7 @@ export default function App() {
               </div>
 
               {/* COLUMN 4 (Google Maps / Ubicación Comercial) */}
-              <div id="footer-map" className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 flex flex-col justify-between ${
+              <div id="footer-map" className={`p-4 sm:p-5 rounded-2xl border transition-colors duration-200 flex flex-col justify-between ${
                 store.settings.themeMode === "dark"
                   ? "bg-[#0B1730]/40 border-[#D4A55A]/10 hover:border-[#D4A55A]/25"
                   : "bg-white border-slate-200 shadow-sm"
@@ -11115,6 +11164,56 @@ const resText = await uploadRes.text();
                         </div>
                       </div>
 
+                      {/* GEMINI EMAIL LOGS & PENDING ORDERS AUDITOR */}
+                      <div className="p-4 bg-slate-50 dark:bg-zinc-950/50 rounded-xl border border-dashed border-amber-500/30 space-y-3">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="h-4 w-4 text-amber-500 animate-pulse" />
+                            <span className="text-xs font-bold text-slate-800 dark:text-zinc-200">Asistente de Auditoría AI (Gemini 3.5 Flash)</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleGeminiReview}
+                            disabled={geminiLoading}
+                            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:bg-amber-500/50 text-white rounded-lg text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm shadow-amber-500/20 h-7"
+                          >
+                            {geminiLoading ? (
+                              <>
+                                <RefreshCw className="h-3 w-3 animate-spin" />
+                                <span>Analizando correos...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="h-3 w-3" />
+                                <span>Revisar Correos y Alertar Pedidos</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+
+                        {geminiError && (
+                          <div className="p-2.5 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 text-red-600 dark:text-red-400 text-[10px] rounded-lg">
+                            ⚠️ {geminiError}
+                          </div>
+                        )}
+
+                        {geminiAnalysis ? (
+                          <div className="p-3 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-left space-y-1">
+                            <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-2 flex items-center gap-1.5">
+                              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                              <span>Análisis de Bitácora & Notificación de Pedidos Activos:</span>
+                            </div>
+                            <div className="whitespace-pre-wrap text-[11.5px] leading-relaxed font-sans text-slate-700 dark:text-zinc-300">
+                              {geminiAnalysis}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-[10.5px] text-slate-500 text-left">
+                            Haz clic en <strong>Revisar Correos y Alertar Pedidos</strong> para que la Inteligencia Artificial revise los envíos de correos, compruebe si hay órdenes entrantes para armar y notifique si hay alguna acción que requiera tu atención inmediata.
+                          </p>
+                        )}
+                      </div>
+
                       {emailLogsLoading && emailLogs.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-8 text-slate-400">
                           <RefreshCw className="h-8 w-8 animate-spin text-indigo-500 mb-2" />
@@ -11608,7 +11707,8 @@ const resText = await uploadRes.text();
             >
               {/* Drawer Header */}
               <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#D4A55A]/15">
-                <div 
+                <button 
+                  type="button"
                   onClick={() => {
                     setSelectedProduct(null);
                     setActiveTab("storefront");
@@ -11618,7 +11718,7 @@ const resText = await uploadRes.text();
                     setIsMobileMenuOpen(false);
                     window.scrollTo({ top: 0, behavior: "smooth" });
                   }}
-                  className="flex items-center gap-2 cursor-pointer select-none"
+                  className="flex items-center gap-2 cursor-pointer select-none border-none bg-transparent text-left outline-none p-0 animate-none"
                 >
                   {store.settings.logoType === "image" && !!store.settings.logoImageUrl ? (
                     <img
@@ -11633,7 +11733,7 @@ const resText = await uploadRes.text();
                     </div>
                   )}
                   <span className="font-bold text-base tracking-tight font-serif text-[#F4EAD7]">{store.settings.siteTitle}</span>
-                </div>
+                </button>
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="p-2 rounded-xl transition cursor-pointer hover:bg-[#0B1730] text-[#E6BF76] hover:text-white"

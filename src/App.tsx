@@ -760,6 +760,7 @@ export default function App() {
   const [uploadingEmailHeader, setUploadingEmailHeader] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("todos");
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>("all");
+  const [showAllProductsFlat, setShowAllProductsFlat] = useState<boolean>(true);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [scrolled, setScrolled] = useState(false);
@@ -926,8 +927,17 @@ export default function App() {
     }
   };
 
-  const navigateToProductRoute = (category: string, subcategory: string) => {
+  const navigateToProductRoute = (category: string, subcategory: string, showFlat: boolean = false) => {
     setSelectedProduct(null);
+    setActiveTab("storefront");
+    setSearchQuery("");
+    if (category === "todos") {
+      setOnlyInStock(false);
+      setSortBy("featured");
+      setShowAllProductsFlat(showFlat);
+    } else {
+      setShowAllProductsFlat(false);
+    }
     let path = "/";
     if (category !== "todos") {
       const catObj = store.dbCategories?.find(c => c.nombre === category || c.id === category);
@@ -1012,6 +1022,7 @@ export default function App() {
     imageUrl: "",
     stock: 10,
     featured: false,
+    consultOnly: false,
     categorias_adicionales: [],
     subcategorias_adicionales: []
   });
@@ -2063,6 +2074,9 @@ export default function App() {
       imageUrl: newProduct.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80",
       stock: Math.floor(Number(newProduct.stock ?? 10)),
       featured: !!newProduct.featured,
+      is3D: !!newProduct.is3D,
+      hoursPerUnit: newProduct.hoursPerUnit,
+      consultOnly: !!newProduct.consultOnly,
       createdAt: new Date().toISOString(),
       sizes: newProduct.sizes || [],
       colors: newProduct.colors || [],
@@ -2097,6 +2111,7 @@ export default function App() {
       imageUrl: "",
       stock: 10,
       featured: false,
+      consultOnly: false,
       sizes: [],
       colors: []
     });
@@ -2949,7 +2964,6 @@ export default function App() {
                             if (e.key === "Enter") {
                               setSearchQuery(tempSearchQuery);
                               setShowSuggestions(false);
-                              document.getElementById("catalog-view")?.scrollIntoView({ behavior: "smooth" });
                             }
                           }}
                           onFocus={() => {
@@ -3032,7 +3046,6 @@ export default function App() {
                                         setSearchQuery("");
                                         setShowSuggestions(false);
                                         setIsHeaderSearchOpen(false);
-                                        document.getElementById("catalog-view")?.scrollIntoView({ behavior: "smooth" });
                                       }}
                                       className="w-full text-left px-2 py-1 rounded text-xs hover:bg-[#D4A55A]/10 text-[#F4EAD7] hover:text-[#E6BF76] transition-colors flex items-center justify-between cursor-pointer border-0 bg-transparent"
                                     >
@@ -3053,7 +3066,6 @@ export default function App() {
                                           setSearchQuery("");
                                           setShowSuggestions(false);
                                           setIsHeaderSearchOpen(false);
-                                          document.getElementById("catalog-view")?.scrollIntoView({ behavior: "smooth" });
                                         }}
                                         className="w-full text-left px-2 py-1 rounded text-xs hover:bg-[#D4A55A]/10 text-[#F4EAD7] hover:text-[#E6BF76] transition-colors flex items-center justify-between cursor-pointer border-0 bg-transparent"
                                       >
@@ -3119,7 +3131,6 @@ export default function App() {
                                 onClick={() => {
                                   setSearchQuery(tempSearchQuery);
                                   setShowSuggestions(false);
-                                  document.getElementById("catalog-view")?.scrollIntoView({ behavior: "smooth" });
                                 }}
                                 className="hover:underline font-bold bg-transparent border-0 cursor-pointer text-[#E6BF76]"
                               >
@@ -3349,35 +3360,11 @@ export default function App() {
               );
             })()}
 
-            {selectedCategory !== "todos" && (
-              <div className="flex flex-col md:flex-row md:items-center justify-end gap-6 mb-6 border-b pb-6 border-zinc-200/50 dark:border-zinc-850/50">
-                {/* Premium Search, Sorting & Stock Filter Bar */}
-                <div className="w-full md:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
-                  {/* Show elegant Filtros & Orden button */}
-                  <button
-                    id="btn-advanced-filters"
-                    onClick={() => setShowFiltersPanel(!showFiltersPanel)}
-                    className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-xs font-bold transition-all border cursor-pointer select-none ${
-                      showFiltersPanel || onlyInStock || sortBy !== "featured"
-                        ? "theme-btn-accent text-[#050B1A] border-transparent shadow-sm scale-102"
-                        : store.settings.themeMode === "dark"
-                        ? "bg-zinc-900 border-[#D4A55A]/30 text-[#E6BF76] hover:border-[#D4A55A]/60"
-                        : "bg-slate-100 border-slate-200 text-zinc-700 hover:bg-slate-200"
-                    }`}
-                  >
-                    <Sliders className="h-4 w-4" />
-                    <span>Filtros & Orden</span>
-                    {(onlyInStock || sortBy !== "featured") && (
-                      <span className="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
+            {/* Filtros & Orden buttons removed as per user request */}
 
             {/* Collapsible advanced filters panel - Desktop Only */}
             <AnimatePresence>
-              {selectedCategory !== "todos" && showFiltersPanel && (
+              {(selectedCategory !== "todos" || showAllProductsFlat) && showFiltersPanel && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: "auto", opacity: 1 }}
@@ -3461,7 +3448,7 @@ export default function App() {
 
             {/* Mobile Bottom Sheet Filters Panel - Mobile Only (Drawer slide up) */}
             <AnimatePresence>
-              {selectedCategory !== "todos" && showFiltersPanel && (
+              {(selectedCategory !== "todos" || showAllProductsFlat) && showFiltersPanel && (
                 <div className="fixed inset-0 z-50 md:hidden flex items-end justify-center pointer-events-none">
                   {/* Backdrop overlay */}
                   <motion.div
@@ -3566,7 +3553,7 @@ export default function App() {
                         <div className="flex flex-wrap gap-2">
                           <button
                             onClick={() => {
-                              navigateToProductRoute("todos", "all");
+                              navigateToProductRoute("todos", "all", true);
                             }}
                             className={`py-2 px-3.5 rounded-full text-xs font-bold border transition-all cursor-pointer ${
                               selectedCategory === "todos"
@@ -3670,7 +3657,7 @@ export default function App() {
                           onClick={() => {
                             setOnlyInStock(false);
                             setSortBy("featured");
-                            navigateToProductRoute("todos", "all");
+                            navigateToProductRoute("todos", "all", true);
                           }}
                           className="px-4 py-3 rounded-xl border border-red-500/30 text-red-500 hover:bg-red-500/10 text-xs font-bold transition-all shrink-0 cursor-pointer"
                         >
@@ -3690,7 +3677,7 @@ export default function App() {
             </AnimatePresence>
 
             {/* Clean current filters notification strip on non-panel view */}
-            {selectedCategory !== "todos" && !showFiltersPanel && (onlyInStock || sortBy !== "featured") && (
+            {(selectedCategory !== "todos" || showAllProductsFlat) && !showFiltersPanel && (onlyInStock || sortBy !== "featured") && (
               <div className="flex items-center justify-between gap-3 pb-4 border-b border-zinc-200/50 dark:border-zinc-805/50 mb-6 px-1">
                 <span className="text-[11px] text-[#E6BF76] font-semibold">✨ Filtro rápido activo para ordenar tu catálogo</span>
                 <button
@@ -3706,7 +3693,7 @@ export default function App() {
             )}
 
             {/* Featured Showcase if there are products marked featured */}
-            {featuredProducts.length > 0 && selectedCategory === "todos" && !searchQuery && (
+            {featuredProducts.length > 0 && selectedCategory === "todos" && !showAllProductsFlat && !searchQuery && (
               <div className="mb-12">
                 <div className="flex items-center gap-2 mb-6">
                   <div className="w-1.5 h-6 theme-btn-primary rounded-full"></div>
@@ -3726,7 +3713,7 @@ export default function App() {
             )}
 
             {/* If there's an active filter query, category, or custom sorting, show a single filtered/sorted grid view */}
-            {(selectedCategory !== "todos" || searchQuery || onlyInStock || sortBy !== "featured") ? (
+            {(selectedCategory !== "todos" || showAllProductsFlat || searchQuery || onlyInStock || sortBy !== "featured") ? (
               <>
                 <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
                   <div className="flex items-center gap-2">
@@ -3789,7 +3776,7 @@ export default function App() {
                     <p className="text-xs mt-1">Prueba a restablecer filtros o cambiar tu término de búsqueda e intenta nuevamente.</p>
                     <button
                       onClick={() => {
-                        navigateToProductRoute("todos", "all");
+                        navigateToProductRoute("todos", "all", true);
                         setSearchQuery("");
                         setOnlyInStock(false);
                         setSortBy("featured");
@@ -3981,9 +3968,9 @@ export default function App() {
             
             <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6 lg:gap-10">
               {/* BRAND COLUMN / REDES SOCIALES */}
-              <div className={`p-4 sm:p-5 rounded-2xl border transition-colors duration-200 ${
+              <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ${
                 store.settings.themeMode === "dark"
-                  ? "bg-[#0B1730]/40 border-[#D4A55A]/10 hover:border-[#D4A55A]/25"
+                  ? "bg-[#0B1730] border-[#D4A55A]/15 hover:border-[#D4A55A]/40 shadow-sm"
                   : "bg-white border-slate-200 shadow-sm"
               }`}>
                 <div className="flex items-center gap-2 mb-3">
@@ -4001,40 +3988,32 @@ export default function App() {
                   Sigue nuestras publicaciones, novedades del talle y promociones imperdibles agregadas diariamente.
                 </p>
 
-                <div className="flex items-center gap-2.5">
+                <div className="grid grid-cols-2 gap-2">
                   <a 
                     href="https://instagram.com" 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className={`flex-1 p-2.5 rounded-xl transition-colors duration-150 flex items-center justify-center gap-2 text-xs font-bold border ${
-                      store.settings.themeMode === "dark"
-                        ? "bg-[#0B1730] hover:bg-[#D4A55A]/15 border-[#D4A55A]/20 text-[#E6BF76]"
-                        : "bg-white hover:bg-slate-100 border-slate-200 text-slate-800"
-                    }`}
+                    className="p-2.5 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold bg-[#E1306C] hover:bg-[#C13584] text-white border-none shadow-sm transition-transform duration-100 active:scale-95 cursor-pointer"
                   >
-                    <Instagram className="h-4 w-4" />
+                    <Instagram className="h-4 w-4 shrink-0" />
                     <span>Instagram</span>
                   </a>
                   <a 
                     href="https://facebook.com" 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className={`flex-1 p-2.5 rounded-xl transition-colors duration-150 flex items-center justify-center gap-2 text-xs font-bold border ${
-                      store.settings.themeMode === "dark"
-                        ? "bg-[#0B1730] hover:bg-[#D4A55A]/15 border-[#D4A55A]/20 text-[#E6BF76]"
-                        : "bg-white hover:bg-slate-100 border-slate-200 text-slate-800"
-                    }`}
+                    className="p-2.5 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold bg-[#1877F2] hover:bg-[#165EAB] text-white border-none shadow-sm transition-transform duration-100 active:scale-95 cursor-pointer"
                   >
-                    <Facebook className="h-4 w-4" />
+                    <Facebook className="h-4 w-4 shrink-0" />
                     <span>Facebook</span>
                   </a>
                 </div>
               </div>
 
               {/* COLUMN 2 (Feature 1 - Compra Personalizada) */}
-              <div className={`p-4 sm:p-5 rounded-2xl border transition-colors duration-200 ${
+              <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ${
                 store.settings.themeMode === "dark"
-                  ? "bg-[#0B1730]/40 border-[#D4A55A]/10 hover:border-[#D4A55A]/25"
+                  ? "bg-[#0B1730] border-[#D4A55A]/15 hover:border-[#D4A55A]/40 shadow-sm"
                   : "bg-white border-slate-200 shadow-sm"
               }`}>
                 <div className="flex items-center gap-2 mb-3">
@@ -4053,9 +4032,9 @@ export default function App() {
               </div>
 
               {/* COLUMN 3 (Feature 2 - Calidad Asegurada) */}
-              <div className={`p-4 sm:p-5 rounded-2xl border transition-colors duration-200 ${
+              <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ${
                 store.settings.themeMode === "dark"
-                  ? "bg-[#0B1730]/40 border-[#D4A55A]/10 hover:border-[#D4A55A]/25"
+                  ? "bg-[#0B1730] border-[#D4A55A]/15 hover:border-[#D4A55A]/40 shadow-sm"
                   : "bg-white border-slate-200 shadow-sm"
               }`}>
                 <div className="flex items-center gap-2 mb-3">
@@ -4074,9 +4053,9 @@ export default function App() {
               </div>
 
               {/* COLUMN 4 (Google Maps / Ubicación Comercial) */}
-              <div id="footer-map" className={`p-4 sm:p-5 rounded-2xl border transition-colors duration-200 flex flex-col justify-between ${
+              <div id="footer-map" className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 flex flex-col justify-between ${
                 store.settings.themeMode === "dark"
-                  ? "bg-[#0B1730]/40 border-[#D4A55A]/10 hover:border-[#D4A55A]/25"
+                  ? "bg-[#0B1730] border-[#D4A55A]/15 hover:border-[#D4A55A]/40 shadow-sm"
                   : "bg-white border-slate-200 shadow-sm"
               }`}>
                 <div>
@@ -7095,6 +7074,20 @@ const resText = await uploadRes.text();
                           </div>
                         </div>
                       )}
+
+                      <div className="flex items-center gap-2 pt-1.5 border-t border-zinc-800/40">
+                        <input
+                          type="checkbox"
+                          id="newProductConsultOnly"
+                          checked={!!newProduct.consultOnly}
+                          onChange={(e) => setNewProduct({ ...newProduct, consultOnly: e.target.checked })}
+                          className="rounded border-zinc-700 bg-zinc-950 text-emerald-500 focus:ring-0 cursor-pointer h-4 w-4"
+                        />
+                        <label htmlFor="newProductConsultOnly" className="text-xs text-zinc-300 select-none cursor-pointer font-bold flex items-center gap-1.5 text-emerald-400">
+                          <Phone className="w-4 h-4 shrink-0" />
+                          <span>Sólo Consulta (Sustituye botón de Comprar por Consultar vía WhatsApp)</span>
+                        </label>
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -8231,6 +8224,20 @@ const resText = await uploadRes.text();
                           </div>
                         </div>
                       )}
+
+                      <div className="flex items-center gap-2 pt-1.5 border-t border-zinc-800/40">
+                        <input
+                          type="checkbox"
+                          id="editProductConsultOnly"
+                          checked={!!editingProduct.consultOnly}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, consultOnly: e.target.checked })}
+                          className="rounded border-zinc-700 bg-zinc-950 text-emerald-500 focus:ring-0 cursor-pointer h-4 w-4"
+                        />
+                        <label htmlFor="editProductConsultOnly" className="text-xs text-zinc-300 select-none cursor-pointer font-bold flex items-center gap-1.5 text-emerald-400">
+                          <Phone className="w-4 h-4 shrink-0" />
+                          <span>Sólo Consulta (Sustituye botón de Comprar por Consultar vía WhatsApp)</span>
+                        </label>
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -11857,7 +11864,7 @@ const resText = await uploadRes.text();
                     {/* All Catalog option */}
                     <button
                       onClick={() => {
-                        navigateToProductRoute("todos", "all");
+                        navigateToProductRoute("todos", "all", true);
                         setIsMobileMenuOpen(false);
                       }}
                       className={`w-full text-left flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${

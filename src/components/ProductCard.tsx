@@ -1,6 +1,6 @@
-import { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { Product, SiteSettings } from "../types";
-import { ShoppingCart, Eye, Tag } from "lucide-react";
+import { ShoppingCart, Eye, Tag, Phone } from "lucide-react";
 
 interface ProductCardProps {
   key?: string;
@@ -19,6 +19,16 @@ export default function ProductCard({
   layoutMode = "grid"
 }: ProductCardProps) {
   const [isHovered, setIsHovered] = useState<boolean>(false);
+
+  const waUrl = useMemo(() => {
+    const cleanPhone = (settings?.whatsappNumber || "").replace(/[^0-9]/g, "");
+    const text = `¡Hola! Me gustaría consultar por el tiempo de demora y disponibilidad de este artículo:
+*${product.name}*
+Precio: $${Math.round(product.price)}
+
+¡Muchas gracias!`;
+    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+  }, [product, settings?.whatsappNumber]);
 
   const isDiscounted = product.originalPrice && product.originalPrice > product.price;
   const discountPercent = isDiscounted
@@ -216,51 +226,74 @@ export default function ProductCard({
                   </span>
                 )}
               </div>
-              <span className="text-[7px] sm:text-[8px] text-[#25D366]/90 font-medium font-sans truncate tracking-tight uppercase flex items-center gap-0.5">
-                <span className="inline-block w-1 h-1 rounded-full bg-[#25D366] animate-pulse shrink-0"></span>
-                {product.stock > 0 ? "Entrega Inmediata" : "Bajo Pedido"}
-              </span>
+              {/* Entrega Inmediata / Bajo Pedido label removed as per user request */}
             </div>
 
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                if (product.stock > 0) {
-                  onAddToCart(product);
-                } else {
-                  onViewProduct(product);
-                }
-              }}
-              className={`py-1 px-2.5 sm:py-2 sm:px-4 rounded-full text-[8.5px] sm:text-[10px] font-sans font-extrabold uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-1 cursor-pointer border shrink-0 ${
-                product.stock > 0
-                  ? "bg-[#D4A55A] hover:bg-[#E6BF76] border-transparent text-[#050B1A] hover:scale-105 active:scale-95 shadow-md shadow-[#D4A55A]/10 font-bold"
-                  : "bg-transparent border-slate-700 text-[#D4A55A]/80 cursor-pointer"
-              }`}
-            >
-              <ShoppingCart className="h-2.5 w-2.5" />
-              <span>{product.stock > 0 ? "Comprar" : "Detalles"}</span>
-            </button>
+             {product.consultOnly ? (
+              <a
+                href={waUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="py-1 px-2.5 sm:py-2 sm:px-4 rounded-full text-[8.5px] sm:text-[10px] font-sans font-extrabold uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-1 cursor-pointer border shrink-0 bg-[#25D366] hover:bg-[#20ba59] border-transparent text-white hover:scale-105 active:scale-95 shadow-md shadow-[#25D366]/10"
+              >
+                <Phone className="h-2.5 w-2.5" />
+                <span>Consultar</span>
+              </a>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (product.stock > 0) {
+                    onAddToCart(product);
+                  } else {
+                    onViewProduct(product);
+                  }
+                }}
+                className={`py-1 px-2.5 sm:py-2 sm:px-4 rounded-full text-[8.5px] sm:text-[10px] font-sans font-extrabold uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-1 cursor-pointer border shrink-0 ${
+                  product.stock > 0
+                    ? "bg-[#D4A55A] hover:bg-[#E6BF76] border-transparent text-[#050B1A] hover:scale-105 active:scale-95 shadow-md shadow-[#D4A55A]/10 font-bold"
+                    : "bg-transparent border-slate-700 text-[#D4A55A]/80 cursor-pointer"
+                }`}
+              >
+                <ShoppingCart className="h-2.5 w-2.5" />
+                <span>{product.stock > 0 ? "Comprar" : "Detalles"}</span>
+              </button>
+            )}
           </div>
         ) : (
           <div className="mt-2 sm:mt-4 pt-1 sm:pt-1.5">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                if (product.stock > 0) {
-                  onAddToCart(product);
-                } else {
-                  onViewProduct(product);
-                }
-              }}
-              className={`w-full py-1.5 sm:py-2.5 px-2.5 sm:px-3 rounded-full text-[8.5px] sm:text-[10px] font-sans font-bold uppercase tracking-wider sm:tracking-widest transition-all duration-300 flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer border ${
-                product.stock > 0
-                  ? "bg-[#D4A55A] hover:bg-[#E6BF76] border-transparent text-[#050B1A] hover:scale-[1.02] active:scale-98 shadow-md shadow-[#D4A55A]/10"
-                  : "bg-transparent border-slate-700 text-slate-400 cursor-not-allowed"
-              }`}
-            >
-              <ShoppingCart className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-              <span>{product.stock > 0 ? "Comprar" : "Sin Stock"}</span>
-            </button>
+            {product.consultOnly ? (
+              <a
+                href={waUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="w-full py-1.5 sm:py-2.5 px-2.5 sm:px-3 rounded-full text-[8.5px] sm:text-[10px] font-sans font-bold uppercase tracking-wider sm:tracking-widest transition-all duration-300 flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer border bg-[#25D366] hover:bg-[#20ba59] border-transparent text-white hover:scale-[1.02] active:scale-98 shadow-md shadow-[#25D366]/10"
+              >
+                <Phone className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                <span>Consultar demora</span>
+              </a>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (product.stock > 0) {
+                    onAddToCart(product);
+                  } else {
+                    onViewProduct(product);
+                  }
+                }}
+                className={`w-full py-1.5 sm:py-2.5 px-2.5 sm:px-3 rounded-full text-[8.5px] sm:text-[10px] font-sans font-bold uppercase tracking-wider sm:tracking-widest transition-all duration-300 flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer border ${
+                  product.stock > 0
+                    ? "bg-[#D4A55A] hover:bg-[#E6BF76] border-transparent text-[#050B1A] hover:scale-[1.02] active:scale-98 shadow-md shadow-[#D4A55A]/10"
+                    : "bg-transparent border-slate-700 text-slate-400 cursor-not-allowed"
+                }`}
+              >
+                <ShoppingCart className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                <span>{product.stock > 0 ? "Comprar" : "Sin Stock"}</span>
+              </button>
+            )}
           </div>
         )}
       </div>

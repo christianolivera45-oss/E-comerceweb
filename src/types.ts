@@ -33,6 +33,7 @@ export interface Product {
   paused?: boolean; // Pause in eCommerce store front
   is3D?: boolean; // Is a 3D printed product with custom logic
   hoursPerUnit?: number; // Hours needed to 3D print one unit
+  consultOnly?: boolean; // Show 'Consultar por WhatsApp' instead of 'Comprar'
   sizeChartEnabled?: boolean;
   sizeChartShowSuperior?: boolean;
   sizeChartShowInferior?: boolean;
@@ -239,6 +240,7 @@ export interface CartItem {
 export function is3DProduct(product: Product): boolean {
   if (!product) return false;
   if (product.is3D === true) return true;
+  if (product.is3D === false) return false;
   
   const name = (product.name || "").toLowerCase();
   const desc = (product.description || "").toLowerCase();

@@ -369,9 +369,11 @@ export default function ProductDetails({
     }, 2000);
   };
 
-  const handleImmediateWhatsAppQuery = () => {
+  const whatsAppConsultUrl = useMemo(() => {
     let specText = "";
-    if (is3D) {
+    if (product.consultOnly) {
+      specText = `👉 Consulta: Tiempo de demora de fabricación y preparación\n${selectedSize ? `👉 Talle: ${selectedSize}\n` : ""}${selectedColor ? `👉 Color: ${selectedColor}\n` : ""}`;
+    } else if (is3D) {
       const immediateQty = Math.min(quantity, Math.max(0, currentStock));
       const onDemandQty = Math.max(0, quantity - currentStock);
       const delayDays = getDelayInDays(product);
@@ -386,14 +388,22 @@ ${onDemandQty > 0 ? `👉 Tiempo estimado de fabricación: ${totalDelayDays} ${t
       specText = `${selectedSize ? `👉 Talle seleccionado: ${selectedSize}\n` : ""}${selectedColor ? `👉 Color deseado: ${selectedColor}\n` : ""}`;
     }
 
-    const text = `Hola ${settings.siteTitle || "Ventas Juem"}! Me interesa obtener más información sobre este artículo:
+    const text = product.consultOnly 
+      ? `Hola ${settings.siteTitle || "Ventas Juem"}! Me gustaría consultar por el tiempo de demora y disponibilidad de este artículo:
+*${product.name}*
+${specText}Precio publicado: $${Math.round(dynamicPrice)}
+¿Podrían asesorarme? ¡Muchas gracias!`
+      : `Hola ${settings.siteTitle || "Ventas Juem"}! Me interesa obtener más información sobre este artículo:
 *${product.name}*
 ${specText}Precio actual: $${Math.round(dynamicPrice * quantity)}
 Me gustaría coordinar stock, fabricación y envío.`;
 
-    const cleanPhone = settings.whatsappNumber.replace(/[^0-9]/g, "");
-    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
-    window.open(waUrl, "_blank", "referrer");
+    const cleanPhone = (settings?.whatsappNumber || "5491123456789").replace(/[^0-9]/g, "");
+    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+  }, [product, settings, selectedSize, selectedColor, quantity, dynamicPrice, is3D, currentStock]);
+
+  const handleImmediateWhatsAppQuery = () => {
+    window.open(whatsAppConsultUrl, "_blank", "referrer");
   };
 
   const isDiscounted = product.originalPrice && product.originalPrice > dynamicPrice;
@@ -603,18 +613,34 @@ Me gustaría coordinar stock, fabricación y envío.`;
                   </div>
                   {/* Subtle Stock Label */}
                   <span className={`text-[9px] font-semibold mt-0.5 ${
-                    is3D 
-                      ? (currentStock > 0 ? "text-emerald-500 font-bold" : "text-amber-500 font-bold")
-                      : (currentStock > 0 ? (isThemeDark ? "text-zinc-400" : "text-zinc-500") : "text-red-500 font-bold")
+                    product.consultOnly
+                      ? "text-emerald-500 font-bold font-mono uppercase tracking-wider"
+                      : is3D 
+                        ? (currentStock > 0 ? "text-emerald-500 font-bold" : "text-amber-500 font-bold")
+                        : (currentStock > 0 ? (isThemeDark ? "text-zinc-400" : "text-zinc-500") : "text-red-500 font-bold")
                   }`}>
-                    {is3D 
-                      ? (currentStock > 0 ? `Stock inmediato: ${currentStock} un. (Fabricación bajo demanda disponible)` : "Sin stock inmediato (Fabricación a pedido)")
-                      : `Stock: ${currentStock > 0 ? `${currentStock} un.` : "Agotado"}`
+                    {product.consultOnly 
+                      ? "Artículo a pedido"
+                      : is3D 
+                        ? (currentStock > 0 ? `Stock inmediato: ${currentStock} un. (Fabricación bajo demanda disponible)` : "Sin stock inmediato (Fabricación a pedido)")
+                        : `Stock: ${currentStock > 0 ? `${currentStock} un.` : "Agotado"}`
                     }
                   </span>
                 </div>
 
-                {(currentStock > 0 || is3D) ? (
+                {product.consultOnly ? (
+                  <a
+                    href={whatsAppConsultUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 py-2.5 px-5 rounded-lg font-bold text-xs bg-[#25D366] hover:bg-[#20ba59] text-white active:scale-95 tracking-wide shadow-md cursor-pointer transition select-none shrink-0"
+                  >
+                    <svg className="h-4 w-4 fill-current" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.998h.003c4.368 0 7.927-3.558 7.93-7.926a7.86 7.86 0 0 0-2.33-5.596ZM7.994 14.52a6.57 6.57 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592m3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.73.73 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232"/>
+                    </svg>
+                    <span>Consultar por WhatsApp</span>
+                  </a>
+                ) : (currentStock > 0 || is3D) ? (
                   <div className="flex items-center gap-2">
                     {/* Quantity Selector immediately to the right of the price */}
                     <div className={`flex items-center rounded-lg border p-0.5 select-none ${
@@ -699,7 +725,9 @@ Me gustaría coordinar stock, fabricación y envío.`;
                             onClick={handleImmediateWhatsAppQuery}
                             className="flex items-center gap-2 text-xs text-[#25D366] hover:text-[#20ba59] active:scale-95 transition-all font-semibold outline-none focus:outline-none cursor-pointer"
                           >
-                            <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                            <svg className="h-3.5 w-3.5 shrink-0 fill-current" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.998h.003c4.368 0 7.927-3.558 7.93-7.926a7.86 7.86 0 0 0-2.33-5.596ZM7.994 14.52a6.57 6.57 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592m3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.73.73 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232"/>
+                            </svg>
                             <span>Para un tiempo más preciso, consulte por WhatsApp</span>
                           </button>
                         </div>
@@ -852,8 +880,8 @@ Me gustaría coordinar stock, fabricación y envío.`;
                 className="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 py-2.5 px-1 rounded-lg font-bold text-[10px] sm:text-xs uppercase tracking-wider bg-[#25D366] hover:bg-[#20ba56] text-white duration-200 shadow-xs select-none cursor-pointer transition-all shrink-0"
                 title="Consultar por WhatsApp"
               >
-                <svg className="h-4 w-4 shrink-0 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.513 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.725 1.45 5.234 0 9.492-4.254 9.495-9.489.002-2.536-.983-4.919-2.775-6.713C16.3 2.608 13.924 1.623 11.393 1.623c-5.239 0-9.5 4.255-9.502 9.49 0 1.651.436 3.262 1.262 4.694l-.99 3.614 3.7-.97c1.37.848 2.76 1.284 4.194 1.285zm12.524-7.23c-.104-.173-.388-.277-.813-.49-.425-.21-2.515-1.24-2.903-1.382-.388-.141-.672-.213-.956.213-.284.425-1.098 1.381-1.347 1.664-.25.282-.499.318-.924.106-.425-.212-1.79-.663-3.41-2.11-1.258-1.124-2.107-2.514-2.355-2.938-.247-.424-.026-.654.186-.865.19-.19.425-.495.637-.743.213-.248.284-.424.425-.707.142-.283.07-.531-.035-.743-.106-.212-.956-2.301-1.31-3.15-.345-.828-.696-.716-.957-.73-.248-.013-.531-.015-.814-.015-.283 0-.743.106-1.134.531-.39.424-1.488 1.454-1.488 3.546 0 2.093 1.524 4.11 1.737 4.393.213.284 3.001 4.581 7.271 6.425 1.015.439 1.808.7 2.425.897 1.02.324 1.95.278 2.684.17.818-.12 2.516-1.026 2.87-2.016.353-.99.353-1.84.247-2.017z" />
+                <svg className="h-4 w-4 shrink-0 fill-current" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.998h.003c4.368 0 7.927-3.558 7.93-7.926a7.86 7.86 0 0 0-2.33-5.596ZM7.994 14.52a6.57 6.57 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592m3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.73.73 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232"/>
                 </svg>
                 <span className="text-[9px] sm:text-[11px]">WhatsApp</span>
               </button>
@@ -1477,16 +1505,27 @@ Me gustaría coordinar stock, fabricación y envío.`;
               </div>
             </div>
 
-            <button
-              onClick={handleAddToCart}
-              className={`py-2 px-4 rounded-full text-[10px] font-sans font-extrabold uppercase tracking-widest shrink-0 cursor-pointer border ${
-                (currentStock > 0 || is3D)
-                  ? "bg-[#D4A55A] hover:bg-[#E6BF76] border-transparent text-[#050B1A]"
-                  : "bg-transparent border-slate-700 text-slate-400 cursor-not-allowed"
-              }`}
-            >
-              {(currentStock > 0 || is3D) ? "Comprar" : "Sin Stock"}
-            </button>
+            {product.consultOnly ? (
+              <a
+                href={whatsAppConsultUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="py-2 px-4 rounded-full text-[10px] font-sans font-extrabold uppercase tracking-widest shrink-0 cursor-pointer border bg-[#25D366] hover:bg-[#20ba59] border-transparent text-white active:scale-95 shadow-md shadow-[#25D366]/10"
+              >
+                Consultar
+              </a>
+            ) : (
+              <button
+                onClick={handleAddToCart}
+                className={`py-2 px-4 rounded-full text-[10px] font-sans font-extrabold uppercase tracking-widest shrink-0 cursor-pointer border ${
+                  (currentStock > 0 || is3D)
+                    ? "bg-[#D4A55A] hover:bg-[#E6BF76] border-transparent text-[#050B1A]"
+                    : "bg-transparent border-slate-700 text-slate-400 cursor-not-allowed"
+                }`}
+              >
+                {(currentStock > 0 || is3D) ? "Comprar" : "Sin Stock"}
+              </button>
+            )}
           </div>
         </div>
       )}

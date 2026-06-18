@@ -380,6 +380,48 @@ function hashPassword(password: string): string {
   return crypto.createHash("sha256").update(password + salt).digest("hex");
 }
 
+async function sendApprovalEmails(order: any, settings: any) {
+  try {
+    const completeOrderForEmail = {
+      id: order.id,
+      customerName: order.customerName,
+      customerEmail: order.customerEmail,
+      customerPhone: order.customerPhone,
+      subtotal: order.subtotal,
+      discountAmount: order.discountAmount,
+      shippingCost: order.shippingCost,
+      total: order.total,
+      couponCode: order.couponCode || null,
+      notes: order.notes,
+      items: order.items,
+      paymentMethod: order.paymentMethod
+    };
+
+    const { subject, html } = generateOrderCreatedEmailHtml(completeOrderForEmail, settings);
+    
+    // Send and log email to customer
+    await sendEmail({
+      settings: settings,
+      to: order.customerEmail,
+      subject,
+      html
+    });
+
+    // Always send a notification / copy of the order details sheet to the company email
+    const formattedOrderId = order.id.length > 8 ? order.id.substring(0, 6).toUpperCase() : order.id;
+    const companySubject = `[PAGO APROBADO MP] #${formattedOrderId} - ${order.customerName}`;
+    await sendEmail({
+      settings: settings,
+      to: "Juem.mvd@gmail.com",
+      subject: companySubject,
+      html
+    });
+    console.log(`[Email] Mails de aprobación enviados con éxito para Orden ${order.id}.`);
+  } catch (err) {
+    console.error(`[Email] Error enviando mails de aprobación para Orden ${order.id}:`, err);
+  }
+}
+
 async function approveOrderAndDeductStock(orderId: string, paymentId: string, verifiedPaymentAmount: number): Promise<string> {
   const pool = getDbPool();
   if (pool && !dbUnavailable) {
@@ -427,6 +469,14 @@ async function approveOrderAndDeductStock(orderId: string, paymentId: string, ve
       // Force state reload
       const dbState = await getDbState();
       currentStoreState = dbState;
+      
+      const order = dbState.orders?.find(o => o.id === orderId);
+      if (order) {
+        sendApprovalEmails(order, dbState.settings).catch(err => {
+          console.error("Error sending approval emails in postgres flow:", err);
+        });
+      }
+      
       return "approved_now";
     } catch (txErr) {
       await client.query("ROLLBACK;");
@@ -471,6 +521,14 @@ async function approveOrderAndDeductStock(orderId: string, paymentId: string, ve
       if (!alreadyApproved) {
         try {
           fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+          
+          const order = currentStoreState.orders?.find(o => o.id === orderId);
+          if (order) {
+            sendApprovalEmails(order, currentStoreState.settings).catch(err => {
+              console.error("Error sending approval emails in fallback flow:", err);
+            });
+          }
+          
           return "approved_now";
         } catch (fsErr) {
           console.error("Error writing updated local order & stock to store file:", fsErr);
@@ -574,7 +632,7 @@ async function getDbState(): Promise<ShopState> {
     // 6. Fetch products where active = true (logical soft delete)
     const prodRes = await pool.query(`
       SELECT id, name, price, stock, category, featured, image_url, created_at, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors, is_3d, hours_per_unit,
-             size_chart_enabled, size_chart_show_superior, size_chart_show_inferior, size_chart_show_calzado, size_chart_show_recommender, size_chart_data 
+             size_chart_enabled, size_chart_show_superior, size_chart_show_inferior, size_chart_show_calzado, size_chart_show_recommender, size_chart_data, consult_only 
       FROM public.products 
       WHERE active = true 
       ORDER BY id DESC;
@@ -647,7 +705,8 @@ async function getDbState(): Promise<ShopState> {
         sizeChartShowInferior: row.size_chart_show_inferior !== false,
         sizeChartShowCalzado: row.size_chart_show_calzado !== false,
         sizeChartShowRecommender: row.size_chart_show_recommender !== false,
-        sizeChartData: row.size_chart_data || undefined
+        sizeChartData: row.size_chart_data || undefined,
+        consultOnly: row.consult_only === true
       };
     });
 
@@ -827,20 +886,22 @@ async function saveDbState(state: ShopState): Promise<boolean> {
       const sizeChartShowCalzadoVal = prod.sizeChartShowCalzado !== false;
       const sizeChartShowRecommenderVal = prod.sizeChartShowRecommender !== false;
       const sizeChartDataVal = prod.sizeChartData ? JSON.stringify(prod.sizeChartData) : null;
+      const consultOnlyVal = !!prod.consultOnly;
 
       let prodId: number;
       if (isNew) {
         const insertRes = await pool.query(`
           INSERT INTO public.products (
             name, price, stock, category, featured, image_url, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors, is_3d, hours_per_unit,
-            size_chart_enabled, size_chart_show_superior, size_chart_show_inferior, size_chart_show_calzado, size_chart_show_recommender, size_chart_data
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+            size_chart_enabled, size_chart_show_superior, size_chart_show_inferior, size_chart_show_calzado, size_chart_show_recommender, size_chart_data, consult_only
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
           RETURNING id;
         `, [
           prod.name, priceVal, stockVal, prod.category, featuredVal, prod.imageUrl,
           prod.description || "", prod.categoria_id, originalPriceVal, prod.subcategoria_id,
           pausedVal, sizesVal, colorsVal, is3DVal, hoursPerUnitVal,
-          sizeChartEnabledVal, sizeChartShowSuperiorVal, sizeChartShowInferiorVal, sizeChartShowCalzadoVal, sizeChartShowRecommenderVal, sizeChartDataVal
+          sizeChartEnabledVal, sizeChartShowSuperiorVal, sizeChartShowInferiorVal, sizeChartShowCalzadoVal, sizeChartShowRecommenderVal, sizeChartDataVal,
+          consultOnlyVal
         ]);
         prodId = insertRes.rows[0].id;
         prod.id = String(prodId);
@@ -851,13 +912,15 @@ async function saveDbState(state: ShopState): Promise<boolean> {
             name = $1, price = $2, stock = $3, category = $4, featured = $5, image_url = $6, description = $7,
             categoria_id = $8, original_price = $9, subcategoria_id = $10, active = true, paused = $11, sizes = $12, colors = $13,
             is_3d = $14, hours_per_unit = $15,
-            size_chart_enabled = $16, size_chart_show_superior = $17, size_chart_show_inferior = $18, size_chart_show_calzado = $19, size_chart_show_recommender = $20, size_chart_data = $21
-          WHERE id = $22;
+            size_chart_enabled = $16, size_chart_show_superior = $17, size_chart_show_inferior = $18, size_chart_show_calzado = $19, size_chart_show_recommender = $20, size_chart_data = $21,
+            consult_only = $22
+          WHERE id = $23;
         `, [
           prod.name, priceVal, stockVal, prod.category, featuredVal, prod.imageUrl,
           prod.description || "", prod.categoria_id, originalPriceVal, prod.subcategoria_id,
           pausedVal, sizesVal, colorsVal, is3DVal, hoursPerUnitVal,
           sizeChartEnabledVal, sizeChartShowSuperiorVal, sizeChartShowInferiorVal, sizeChartShowCalzadoVal, sizeChartShowRecommenderVal, sizeChartDataVal,
+          consultOnlyVal,
           prodId
         ]);
       }
@@ -987,6 +1050,7 @@ async function initPostgresStore(): Promise<ShopState | null> {
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS size_chart_show_calzado BOOLEAN DEFAULT true;
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS size_chart_show_recommender BOOLEAN DEFAULT true;
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS size_chart_data JSONB;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS consult_only BOOLEAN DEFAULT false;
     `);
 
     // Create product_images table if not exists
@@ -1982,42 +2046,46 @@ async function startServer() {
       }
 
       // Automatic email notification
-      try {
-        const completeOrderForEmail = {
-          id: orderId,
-          customerName: sanitizedName,
-          customerEmail: sanitizedEmail,
-          customerPhone: sanitizedPhone,
-          subtotal: serverSubtotal,
-          discountAmount: serverDiscountAmount,
-          shippingCost: verifiedShippingCost,
-          total: serverTotal,
-          couponCode: couponCode || null,
-          notes: sanitizedNotes,
-          items: verifiedItems,
-          paymentMethod: sanitizedPaymentMethod
-        };
-        const { subject, html } = generateOrderCreatedEmailHtml(completeOrderForEmail, currentStoreState.settings);
-        
-        // Send and log email to customer
-        sendEmail({
-          settings: currentStoreState.settings,
-          to: sanitizedEmail,
-          subject,
-          html
-        }).catch(err => console.error("Error in sendEmail for created order:", err));
+      const isMercadoPago = String(sanitizedPaymentMethod || "").toLowerCase().includes("mercadopago") || String(sanitizedPaymentMethod || "").toLowerCase().includes("mercado_pago");
+      
+      if (!isMercadoPago) {
+        try {
+          const completeOrderForEmail = {
+            id: orderId,
+            customerName: sanitizedName,
+            customerEmail: sanitizedEmail,
+            customerPhone: sanitizedPhone,
+            subtotal: serverSubtotal,
+            discountAmount: serverDiscountAmount,
+            shippingCost: verifiedShippingCost,
+            total: serverTotal,
+            couponCode: couponCode || null,
+            notes: sanitizedNotes,
+            items: verifiedItems,
+            paymentMethod: sanitizedPaymentMethod
+          };
+          const { subject, html } = generateOrderCreatedEmailHtml(completeOrderForEmail, currentStoreState.settings);
+          
+          // Send and log email to customer
+          sendEmail({
+            settings: currentStoreState.settings,
+            to: sanitizedEmail,
+            subject,
+            html
+          }).catch(err => console.error("Error in sendEmail for created order:", err));
 
-        // Always send a notification / copy of the order details sheet to the company email
-        const formattedOrderId = orderId.length > 8 ? orderId.substring(0, 6).toUpperCase() : orderId;
-        const companySubject = `[NUEVO PEDIDO] #${formattedOrderId} - ${sanitizedName}`;
-        sendEmail({
-          settings: currentStoreState.settings,
-          to: "Juem.mvd@gmail.com",
-          subject: companySubject,
-          html
-        }).catch(err => console.error("Error sending order notification copy to Juem.mvd@gmail.com:", err));
-      } catch (emailErr) {
-        console.error("Error preparing auto email for created order:", emailErr);
+          // Always send a notification / copy of the order details sheet to the company email
+          const formattedOrderId = orderId.length > 8 ? orderId.substring(0, 6).toUpperCase() : orderId;
+          const companySubject = `[NUEVO PEDIDO] #${formattedOrderId} - ${sanitizedName}`;
+          sendEmail({
+            settings: currentStoreState.settings,
+            to: "Juem.mvd@gmail.com",
+            subject: companySubject,
+            html
+          }).catch(err => console.error("Error sending order notification copy to Juem.mvd@gmail.com:", err));
+        } catch (emailErr) {
+          console.error("Error preparing auto email for created order:", emailErr);
+        }
       }
 
       res.status(201).json({ success: true, orderId });

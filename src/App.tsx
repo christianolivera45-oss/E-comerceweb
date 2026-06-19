@@ -1013,6 +1013,7 @@ export default function App() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
   // Form states for Admin panel
+  const [adminProductSearchQuery, setAdminProductSearchQuery] = useState("");
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isNewProductMode, setIsNewProductMode] = useState(false);
   const [newProduct, setNewProduct] = useState<Partial<Product>>({
@@ -1044,6 +1045,27 @@ export default function App() {
   const [editingSubcategory, setEditingSubcategory] = useState<Subcategory | null>(null);
   const [subToDeleteId, setSubToDeleteId] = useState<string | null>(null);
   const [adminToast, setAdminToast] = useState<{ text: string; type: "success" | "error" | "neutral" } | null>(null);
+
+  const filteredAdminProducts = useMemo(() => {
+    if (!adminProductSearchQuery.trim()) return store.products;
+    const q = adminProductSearchQuery.toLowerCase().trim();
+    return store.products.filter(p => {
+      const codeMatch = p.codigo ? p.codigo.toLowerCase().includes(q) : false;
+      const nameMatch = !!p.name?.toLowerCase().includes(q);
+      const categoryMatch = !!p.category?.toLowerCase().includes(q);
+      const descMatch = !!p.description?.toLowerCase().includes(q);
+      const additionalCatsMatch = !!p.categorias_adicionales?.some(catId => {
+        const cat = (store.dbCategories || []).find(c => c.id === catId);
+        return cat?.nombre?.toLowerCase().includes(q);
+      });
+      const subcatsMatch = !!(p.subcategoria_id && (store.dbSubcategories || []).find(s => s.id === p.subcategoria_id)?.nombre?.toLowerCase().includes(q));
+      const additionalSubcatsMatch = !!p.subcategorias_adicionales?.some(subId => {
+        const subcat = (store.dbSubcategories || []).find(s => s.id === subId);
+        return subcat?.nombre?.toLowerCase().includes(q);
+      });
+      return codeMatch || nameMatch || categoryMatch || descMatch || additionalCatsMatch || subcatsMatch || additionalSubcatsMatch;
+    });
+  }, [store.products, adminProductSearchQuery, store.dbCategories, store.dbSubcategories]);
 
   const showAdminToast = (text: string, type: "success" | "error" | "neutral" = "success") => {
     setAdminToast({ text, type });
@@ -2064,6 +2086,7 @@ export default function App() {
 
     const created: Product = {
       id: "prod-" + Date.now(),
+      codigo: newProduct.codigo || "",
       name: newProduct.name!.trim(),
       description: newProduct.description || "",
       price: Number(newProduct.price),
@@ -2101,6 +2124,7 @@ export default function App() {
     
     // Reset form
     setNewProduct({
+      codigo: "",
       name: "",
       description: "",
       price: undefined,
@@ -5800,8 +5824,43 @@ export default function App() {
                         <span className="text-[10px] font-mono text-zinc-400">Total: {store.products.length} productos</span>
                       </div>
 
+                      {/* Search Bar for Admin Catalog */}
+                      <div className="p-4 bg-slate-50 dark:bg-zinc-900/40 border-b border-slate-100 dark:border-zinc-800 flex flex-col sm:flex-row gap-3 items-center justify-between">
+                        <div className="relative w-full sm:max-w-md">
+                          <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                            <Search className="h-4 w-4 text-slate-400" />
+                          </span>
+                          <input
+                            type="text"
+                            value={adminProductSearchQuery}
+                            onChange={(e) => setAdminProductSearchQuery(e.target.value)}
+                            placeholder="Buscar por nombre, categoría, descripción..."
+                            className="block w-full pl-9 pr-8 py-1.5 text-xs bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-slate-900 dark:text-zinc-100 placeholder-slate-450 focus:outline-none focus:ring-1 focus:ring-[#5346ff] focus:border-[#5346ff]"
+                          />
+                          {adminProductSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setAdminProductSearchQuery("")}
+                              className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 cursor-pointer"
+                            >
+                              <span className="text-xs">✕</span>
+                            </button>
+                          )}
+                        </div>
+                        {adminProductSearchQuery && (
+                          <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">
+                            Encontrados: {filteredAdminProducts.length} de {store.products.length} envíos
+                          </span>
+                        )}
+                      </div>
+
                       <div className="divide-y divide-slate-100 dark:divide-zinc-800">
-                        {store.products.map((p) => (
+                        {filteredAdminProducts.length === 0 ? (
+                          <div className="p-8 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                            No se encontraron artículos que coincidan con la búsqueda.
+                          </div>
+                        ) : (
+                          filteredAdminProducts.map((p) => (
                           <div key={p.id} className="p-4 flex gap-4 items-center justify-between hover:bg-slate-50 dark:hover:bg-zinc-900/40 transition">
                             <img
                               src={p.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80"}
@@ -5811,6 +5870,11 @@ export default function App() {
                             
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
+                                {p.codigo && (
+                                  <span className="bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-200 rounded text-[9px] font-black uppercase px-2 py-0.5 tracking-wider font-mono">
+                                    {p.codigo}
+                                  </span>
+                                )}
                                 <h5 className="font-semibold text-xs truncate text-slate-900 dark:text-zinc-200">{p.name}</h5>
                                 {p.paused && (
                                   <span className="bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded text-[9px] font-extrabold uppercase px-1.5 py-0.5 tracking-wider font-mono">
@@ -5871,7 +5935,7 @@ export default function App() {
                               </button>
                             </div>
                           </div>
-                        ))}
+                        )))}
                       </div>
                     </div>
                   </div>
@@ -5903,6 +5967,20 @@ export default function App() {
                     )}
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                          <span>Código / SKU</span>
+                          <span className="text-zinc-400 text-[8px] lowercase">opcional</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={newProduct.codigo || ""}
+                          onChange={(e) => setNewProduct({ ...newProduct, codigo: e.target.value.toUpperCase() })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-[#5346ff] text-slate-900 dark:text-white transition-all"
+                          placeholder="p.ej. J001"
+                        />
+                      </div>
+
                       <div>
                         <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
                           <span>Nombre del Producto *</span>
@@ -7147,6 +7225,16 @@ const resText = await uploadRes.text();
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Código / SKU (Opcional)</label>
+                        <input
+                          type="text"
+                          value={editingProduct.codigo || ""}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, codigo: e.target.value.toUpperCase() })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-semibold"
+                          placeholder="p.ej. J001"
+                        />
+                      </div>
                       <div>
                         <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Nombre del Producto *</label>
                         <input

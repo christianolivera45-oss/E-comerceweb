@@ -12,6 +12,7 @@ export interface ProductVariant {
 
 export interface Product {
   id: string;
+  codigo?: string; // Product code / SKU matching spreadsheet code (e.g., J001)
   name: string;
   description: string;
   price: number;

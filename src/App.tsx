@@ -2793,13 +2793,14 @@ export default function App() {
         {activeTab === "storefront" && (
           <div className="hidden lg:flex items-center flex-wrap gap-1.5 sm:gap-3 md:gap-4 py-1 relative z-50 overflow-visible justify-center">
             {(store.dbCategories || [])
+              .filter(c => c.active !== false)
               .sort((a, b) => (a.orden || 0) - (b.orden || 0))
               .map((catObj) => {
                 const displayName = catObj.nombre;
                 const isCatActive = selectedCategory === catObj.nombre;
                 
                 // Get dynamic subcategories nested under this category
-                const dbSubs = (store.dbSubcategories || []).filter(sub => sub.categoria_id === catObj.id);
+                const dbSubs = (store.dbSubcategories || []).filter(sub => sub.categoria_id === catObj.id && sub.active !== false);
                 // Define complete menu subcategories list, starting with full collection explorer option
                 const itemSubcategories = [
                   { id: "all", name: `Ver todo ${catObj.nombre}` },
@@ -11882,10 +11883,11 @@ const resText = await uploadRes.text();
 
                     {/* Main Categories list */}
                     {(store.dbCategories || [])
+                      .filter(c => c.active !== false)
                       .sort((a, b) => (a.orden || 0) - (b.orden || 0))
                       .map((catObj) => {
                         const isCatActive = selectedCategory === catObj.nombre;
-                        const dbSubs = (store.dbSubcategories || []).filter(sub => sub.categoria_id === catObj.id);
+                        const dbSubs = (store.dbSubcategories || []).filter(sub => sub.categoria_id === catObj.id && sub.active !== false);
                         
                         return (
                           <div key={catObj.id} className="space-y-1">

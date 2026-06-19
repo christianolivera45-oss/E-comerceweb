@@ -683,59 +683,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
                 )}
               </div>
 
-              {/* 3D printed customization block */}
-              {is3D && (
-                <div className={`p-4 rounded-2xl border text-xs space-y-2.5 mb-6 ${
-                  isThemeDark ? "bg-[#0B1730]/60 border-[#D4A55A]/20 text-zinc-300" : "bg-slate-50 border-slate-100 text-zinc-700"
-                }`}>
-                  <div className="flex items-center gap-1.5 font-extrabold text-[#E6BF76] text-[10px] uppercase tracking-wider mb-2">
-                    <Cpu className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: "3s" }} />
-                    <span>Sincronización de Producción 3D</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="flex flex-col p-2.5 rounded-xl bg-black/5 dark:bg-zinc-900/50">
-                      <span className="text-[9px] text-zinc-500 font-semibold uppercase">Entrega Inmediata</span>
-                      <span className="text-sm font-extrabold text-[#25D366]">
-                        {Math.min(quantity, Math.max(0, currentStock))} un.
-                      </span>
-                    </div>
-                    <div className="flex flex-col p-2.5 rounded-xl bg-black/5 dark:bg-zinc-900/50">
-                      <span className="text-[9px] text-zinc-500 font-semibold uppercase">A Fabricar</span>
-                      <span className="text-sm font-extrabold text-[#E6BF76]">
-                        {Math.max(0, quantity - currentStock)} un.
-                      </span>
-                    </div>
-                  </div>
 
-                  {quantity > currentStock && (() => {
-                    const delayInDays = getDelayInDays(product);
-                    const totalDelayDays = Math.max(0, quantity - currentStock) * delayInDays;
-                    return (
-                      <div className="mt-3.5 pt-3.5 border-t border-zinc-500/10 space-y-2 text-zinc-500 dark:text-zinc-400">
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-amber-500 shrink-0" />
-                          <span>Fabricación Estimada: <strong className="text-zinc-800 dark:text-zinc-200">{totalDelayDays} {totalDelayDays === 1 ? "Día" : "Días"}</strong> ({totalDelayDays === 1 ? "Día hábil" : "Días hábiles"} de producción)</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-4 h-4 text-emerald-500 shrink-0" />
-                          <span>Fecha estimada de entrega: <strong className="text-zinc-800 dark:text-zinc-200">{getEstimatedDeliveryString(totalDelayDays)}</strong></span>
-                        </div>
-                        <div className="pt-1.5 flex items-center">
-                          <button
-                            onClick={handleImmediateWhatsAppQuery}
-                            className="flex items-center gap-2 text-xs text-[#25D366] hover:text-[#20ba59] active:scale-95 transition-all font-semibold outline-none focus:outline-none cursor-pointer"
-                          >
-                            <svg className="h-3.5 w-3.5 shrink-0 fill-current" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-                              <path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.998h.003c4.368 0 7.927-3.558 7.93-7.926a7.86 7.86 0 0 0-2.33-5.596ZM7.994 14.52a6.57 6.57 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592m3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.73.73 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232"/>
-                            </svg>
-                            <span>Para un tiempo más preciso, consulte por WhatsApp</span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
 
               {/* Description Details Block */}
               <h4 className={`text-[10px] font-bold tracking-[0.18em] uppercase mb-2 ${

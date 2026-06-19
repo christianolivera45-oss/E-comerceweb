@@ -22,7 +22,7 @@ export default function ProductCard({
 
   const waUrl = useMemo(() => {
     const cleanPhone = (settings?.whatsappNumber || "").replace(/[^0-9]/g, "");
-    const text = `¡Hola! Me gustaría consultar por el tiempo de demora y disponibilidad de este artículo:
+    const text = `¡Hola! Me gustaría consultar por la entrega y disponibilidad de este artículo:
 *${product.name}*
 Precio: $${Math.round(product.price)}
 
@@ -149,8 +149,8 @@ Precio: $${Math.round(product.price)}
 
         {/* Stock warning */}
         {product.stock <= lowStockThreshold && product.stock > 0 && (
-          <div className="absolute top-1.5 right-1.5 sm:top-3 sm:right-3 bg-[#E6BF76] text-[#050B1A] font-sans text-[7px] sm:text-[9.5px] font-bold px-1.5 py-0.5 rounded-full tracking-wider shadow-md z-10 uppercase">
-            {product.stock} u
+          <div className="absolute top-2 right-2 bg-gradient-to-r from-amber-500 to-yellow-400 text-[#050B1A] font-sans text-[8px] sm:text-[9.5px] font-black px-1.5 py-0.5 rounded-full tracking-wider shadow-lg z-30 uppercase pointer-events-none border border-black/10">
+            {product.stock === 1 ? "¡Última!" : `¡Últimas ${product.stock}!`}
           </div>
         )}
 
@@ -186,11 +186,7 @@ Precio: $${Math.round(product.price)}
             onTouchEnd={() => setIsHovered(false)}
           >
             <h3 
-              className={`text-[11px] sm:text-sm font-semibold text-[#F4EAD7] tracking-wide leading-snug group-hover:text-[#E6BF76] transition-colors cursor-pointer select-none block w-full ${
-                layoutMode === "list"
-                  ? "line-clamp-2"
-                  : isHovered ? "whitespace-normal break-words" : "truncate"
-              }`}
+              className="text-[11px] sm:text-sm font-semibold text-[#F4EAD7] tracking-wide leading-snug group-hover:text-[#E6BF76] transition-colors cursor-pointer select-none block w-full line-clamp-2"
               title={product.name}
             >
               {product.name}
@@ -269,10 +265,10 @@ Precio: $${Math.round(product.price)}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="w-full py-1.5 sm:py-2.5 px-2.5 sm:px-3 rounded-full text-[8.5px] sm:text-[10px] font-sans font-bold uppercase tracking-wider sm:tracking-widest transition-all duration-300 flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer border bg-[#25D366] hover:bg-[#20ba59] border-transparent text-white hover:scale-[1.02] active:scale-98 shadow-md shadow-[#25D366]/10"
+                className="w-full py-1.5 sm:py-2.5 px-2.5 sm:px-3 rounded-full text-[8.5px] sm:text-[10px] font-sans font-bold uppercase tracking-wider sm:tracking-widest transition-all duration-300 flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer border bg-[#25D366] hover:bg-[#20ba59] border-transparent text-white hover:scale-[1.02] active:scale-98 shadow-md shadow-[#25D366]/10 overflow-hidden"
               >
-                <Phone className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
-                <span>Consultar demora</span>
+                <Phone className="h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0" />
+                <span className="whitespace-nowrap truncate">Consultar entrega</span>
               </a>
             ) : (
               <button

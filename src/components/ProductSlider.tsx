@@ -119,7 +119,7 @@ export default function ProductSlider({
       {canScrollLeft && (
         <button
           onClick={() => scroll("left")}
-          className={`absolute left-2 top-[35%] -translate-y-1/2 z-30 flex items-center justify-center w-10 h-10 rounded-full shadow-lg border backdrop-blur-sm transition-all duration-300 pointer-events-auto cursor-pointer ${
+          className={`absolute left-2 top-[35%] -translate-y-1/2 z-30 hidden sm:flex items-center justify-center w-10 h-10 rounded-full shadow-lg border backdrop-blur-sm transition-all duration-300 pointer-events-auto cursor-pointer ${
             settings.themeMode === "dark"
               ? "bg-zinc-900/95 border-zinc-800 text-white hover:bg-zinc-800"
               : "bg-white/95 border-slate-200 text-slate-800 hover:bg-slate-50"
@@ -135,7 +135,7 @@ export default function ProductSlider({
       {canScrollRight && (
         <button
           onClick={() => scroll("right")}
-          className={`absolute right-2 top-[35%] -translate-y-1/2 z-30 flex items-center justify-center w-10 h-10 rounded-full shadow-lg border backdrop-blur-sm transition-all duration-300 pointer-events-auto cursor-pointer ${
+          className={`absolute right-2 top-[35%] -translate-y-1/2 z-30 hidden sm:flex items-center justify-center w-10 h-10 rounded-full shadow-lg border backdrop-blur-sm transition-all duration-300 pointer-events-auto cursor-pointer ${
             settings.themeMode === "dark"
               ? "bg-zinc-900/95 border-zinc-800 text-white hover:bg-zinc-800"
               : "bg-white/95 border-slate-200 text-slate-800 hover:bg-slate-50"
@@ -147,24 +147,39 @@ export default function ProductSlider({
         </button>
       )}
 
-      {/* Scrollable Products Container */}
+      {/* Desktop/Tablet: Scrollable Products Container */}
       <div 
         ref={containerRef}
-        className="overflow-x-auto scrollbar-none flex gap-3 sm:gap-6 pb-4 pt-1 snap-x snap-mandatory"
+        className="hidden sm:flex overflow-x-auto scrollbar-none gap-6 pb-4 pt-1 snap-x snap-mandatory"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
         {displayedProducts.map((p) => (
           <div 
             key={p.id} 
-            className="flex-shrink-0 w-[155px] sm:w-[220px] md:w-[285px] snap-start"
+            className="flex-shrink-0 w-[220px] md:w-[285px] snap-start z-10"
           >
             <ProductCard
               product={p}
+              layoutMode="grid"
               settings={settings}
               onAddToCart={onAddToCart}
               onViewProduct={onViewProduct}
             />
           </div>
+        ))}
+      </div>
+
+      {/* Mobile Grid layout (sections in 2 columns on cellphone, as requested by user) */}
+      <div className="grid sm:hidden grid-cols-2 gap-3 pb-1">
+        {displayedProducts.slice(0, 6).map((p) => (
+          <ProductCard
+            key={p.id}
+            product={p}
+            layoutMode="grid"
+            settings={settings}
+            onAddToCart={onAddToCart}
+            onViewProduct={onViewProduct}
+          />
         ))}
       </div>
     </div>

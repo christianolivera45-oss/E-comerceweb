@@ -372,7 +372,7 @@ export default function ProductDetails({
   const whatsAppConsultUrl = useMemo(() => {
     let specText = "";
     if (product.consultOnly) {
-      specText = `👉 Consulta: Tiempo de demora de fabricación y preparación\n${selectedSize ? `👉 Talle: ${selectedSize}\n` : ""}${selectedColor ? `👉 Color: ${selectedColor}\n` : ""}`;
+      specText = `👉 Consulta: Tiempo de entrega y disponibilidad\n${selectedSize ? `👉 Talle: ${selectedSize}\n` : ""}${selectedColor ? `👉 Color: ${selectedColor}\n` : ""}`;
     } else if (is3D) {
       const immediateQty = Math.min(quantity, Math.max(0, currentStock));
       const onDemandQty = Math.max(0, quantity - currentStock);
@@ -389,7 +389,7 @@ ${onDemandQty > 0 ? `👉 Tiempo estimado de fabricación: ${totalDelayDays} ${t
     }
 
     const text = product.consultOnly 
-      ? `Hola ${settings.siteTitle || "Ventas Juem"}! Me gustaría consultar por el tiempo de demora y disponibilidad de este artículo:
+      ? `Hola ${settings.siteTitle || "Ventas Juem"}! Me gustaría consultar por la entrega y disponibilidad de este artículo:
 *${product.name}*
 ${specText}Precio publicado: $${Math.round(dynamicPrice)}
 ¿Podrían asesorarme? ¡Muchas gracias!`
@@ -612,20 +612,38 @@ Me gustaría coordinar stock, fabricación y envío.`;
                     </span>
                   </div>
                   {/* Subtle Stock Label */}
-                  <span className={`text-[9px] font-semibold mt-0.5 ${
-                    product.consultOnly
-                      ? "text-emerald-500 font-bold font-mono uppercase tracking-wider"
-                      : is3D 
-                        ? (currentStock > 0 ? "text-emerald-500 font-bold" : "text-amber-500 font-bold")
-                        : (currentStock > 0 ? (isThemeDark ? "text-zinc-400" : "text-zinc-500") : "text-red-500 font-bold")
-                  }`}>
-                    {product.consultOnly 
-                      ? "Artículo a pedido"
-                      : is3D 
-                        ? (currentStock > 0 ? `Stock inmediato: ${currentStock} un. (Fabricación bajo demanda disponible)` : "Sin stock inmediato (Fabricación a pedido)")
-                        : `Stock: ${currentStock > 0 ? `${currentStock} un.` : "Agotado"}`
-                    }
-                  </span>
+                  {(() => {
+                    const threshold = typeof settings?.lowStockThreshold === 'number' ? settings.lowStockThreshold : 5;
+                    const isLowStock = currentStock > 0 && currentStock <= threshold;
+                    return (
+                      <span className={`text-[9px] font-semibold mt-0.5 ${
+                        product.consultOnly
+                          ? "text-emerald-500 font-bold font-mono uppercase tracking-wider"
+                          : is3D 
+                            ? (currentStock > 0 ? (isLowStock ? "text-amber-500 font-bold" : "text-emerald-500 font-bold") : "text-amber-500/80 font-bold")
+                            : (currentStock > 0 ? (isLowStock ? "text-amber-500 font-bold" : (isThemeDark ? "text-zinc-400" : "text-zinc-500")) : "text-red-500 font-bold")
+                      }`}>
+                        {product.consultOnly 
+                          ? "Artículo a pedido"
+                          : is3D 
+                            ? (currentStock > 0 
+                                ? (isLowStock 
+                                    ? `¡Últimas ${currentStock} unidades! (Fabricación bajo demanda también disponible)` 
+                                    : "Disponible (Fabricación bajo demanda disponible)"
+                                  )
+                                : "Fabricación bajo demanda / A pedido"
+                              )
+                            : (currentStock > 0 
+                                ? (isLowStock 
+                                    ? `¡Sólo quedan ${currentStock} unidades!` 
+                                    : "Disponible (En stock)"
+                                  )
+                                : "Agotado"
+                              )
+                        }
+                      </span>
+                    );
+                  })()}
                 </div>
 
                 {product.consultOnly ? (

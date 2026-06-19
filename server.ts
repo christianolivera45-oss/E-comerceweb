@@ -632,7 +632,8 @@ async function getDbState(): Promise<ShopState> {
     // 6. Fetch products where active = true (logical soft delete)
     const prodRes = await pool.query(`
       SELECT id, name, price, stock, category, featured, image_url, created_at, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors, is_3d, hours_per_unit,
-             size_chart_enabled, size_chart_show_superior, size_chart_show_inferior, size_chart_show_calzado, size_chart_show_recommender, size_chart_data, consult_only 
+             size_chart_enabled, size_chart_show_superior, size_chart_show_inferior, size_chart_show_calzado, size_chart_show_recommender, size_chart_data, consult_only,
+             categorias_adicionales, subcategorias_adicionales
       FROM public.products 
       WHERE active = true 
       ORDER BY id DESC;
@@ -696,6 +697,8 @@ async function getDbState(): Promise<ShopState> {
         paused: row.paused === true,
         sizes: Array.isArray(row.sizes) ? row.sizes : [],
         colors: Array.isArray(row.colors) ? row.colors : [],
+        categorias_adicionales: Array.isArray(row.categorias_adicionales) ? row.categorias_adicionales : [],
+        subcategorias_adicionales: Array.isArray(row.subcategorias_adicionales) ? row.subcategorias_adicionales : [],
         imagenes: productImagesMap[pid] || [],
         variants: productVariantsMap[pid] || [],
         is3D: row.is_3d === true,
@@ -889,19 +892,25 @@ async function saveDbState(state: ShopState): Promise<boolean> {
       const consultOnlyVal = !!prod.consultOnly;
 
       let prodId: number;
+      const catAdicionales = Array.isArray(prod.categorias_adicionales) ? prod.categorias_adicionales : [];
+      const subcatAdicionales = Array.isArray(prod.subcategorias_adicionales) ? prod.subcategorias_adicionales : [];
+
       if (isNew) {
         const insertRes = await pool.query(`
           INSERT INTO public.products (
             name, price, stock, category, featured, image_url, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors, is_3d, hours_per_unit,
-            size_chart_enabled, size_chart_show_superior, size_chart_show_inferior, size_chart_show_calzado, size_chart_show_recommender, size_chart_data, consult_only
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+            size_chart_enabled, size_chart_show_superior, size_chart_show_inferior, size_chart_show_calzado, size_chart_show_recommender, size_chart_data, consult_only,
+            categorias_adicionales, subcategorias_adicionales
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
           RETURNING id;
         `, [
           prod.name, priceVal, stockVal, prod.category, featuredVal, prod.imageUrl,
           prod.description || "", prod.categoria_id, originalPriceVal, prod.subcategoria_id,
           pausedVal, sizesVal, colorsVal, is3DVal, hoursPerUnitVal,
           sizeChartEnabledVal, sizeChartShowSuperiorVal, sizeChartShowInferiorVal, sizeChartShowCalzadoVal, sizeChartShowRecommenderVal, sizeChartDataVal,
-          consultOnlyVal
+          consultOnlyVal,
+          catAdicionales,
+          subcatAdicionales
         ]);
         prodId = insertRes.rows[0].id;
         prod.id = String(prodId);
@@ -913,14 +922,18 @@ async function saveDbState(state: ShopState): Promise<boolean> {
             categoria_id = $8, original_price = $9, subcategoria_id = $10, active = true, paused = $11, sizes = $12, colors = $13,
             is_3d = $14, hours_per_unit = $15,
             size_chart_enabled = $16, size_chart_show_superior = $17, size_chart_show_inferior = $18, size_chart_show_calzado = $19, size_chart_show_recommender = $20, size_chart_data = $21,
-            consult_only = $22
-          WHERE id = $23;
+            consult_only = $22,
+            categorias_adicionales = $23,
+            subcategorias_adicionales = $24
+          WHERE id = $25;
         `, [
           prod.name, priceVal, stockVal, prod.category, featuredVal, prod.imageUrl,
           prod.description || "", prod.categoria_id, originalPriceVal, prod.subcategoria_id,
           pausedVal, sizesVal, colorsVal, is3DVal, hoursPerUnitVal,
           sizeChartEnabledVal, sizeChartShowSuperiorVal, sizeChartShowInferiorVal, sizeChartShowCalzadoVal, sizeChartShowRecommenderVal, sizeChartDataVal,
           consultOnlyVal,
+          catAdicionales,
+          subcatAdicionales,
           prodId
         ]);
       }
@@ -1051,6 +1064,8 @@ async function initPostgresStore(): Promise<ShopState | null> {
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS size_chart_show_recommender BOOLEAN DEFAULT true;
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS size_chart_data JSONB;
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS consult_only BOOLEAN DEFAULT false;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS categorias_adicionales TEXT[] DEFAULT '{}';
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS subcategorias_adicionales TEXT[] DEFAULT '{}';
     `);
 
     // Create product_images table if not exists

@@ -6825,10 +6825,15 @@ export default function App() {
                               for (const col of colorsList) {
                                 const exists = (newProduct.variants || []).some(v => v.size === sz && v.color === col);
                                 if (!exists) {
+                                  const baseCode = newProduct.codigo || "PROD";
+                                  const sizePart = sz === 'Único' ? '' : `-${sz}`;
+                                  const colorPart = col === 'General' ? '' : `-${col}`;
+                                  const generatedSku = `${baseCode}${sizePart}${colorPart}`.toUpperCase();
                                   generated.push({
                                     size: sz,
                                     color: col,
                                     colorCode: col === "Negro" ? "#000000" : col === "Blanco" ? "#ffffff" : col === "Rojo" ? "#ef4444" : col === "Azul" ? "#3b82f6" : col === "Verde" ? "#22c55e" : col === "Gris" ? "#6b7280" : col === "Beige" ? "#f5f5dc" : col === "Rosa" ? "#f472b6" : "#9ca3af",
+                                    sku: generatedSku,
                                     stock: Math.floor(Number(newProduct.stock || 5)),
                                     priceDelta: 0
                                   });
@@ -6842,7 +6847,7 @@ export default function App() {
                               variants: combined,
                               stock: combined.reduce((sum, v) => sum + v.stock, 0)
                             });
-                            showAdminToast(`Se autogeneraron ${generated.length} combinaciones.`, "success");
+                            showAdminToast(`Se autogeneraron ${generated.length} combinaciones con códigos sugeridos.`, "success");
                           }}
                           className="text-[9px] px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded shadow transition-all cursor-pointer self-start sm:self-center"
                         >
@@ -6850,7 +6855,7 @@ export default function App() {
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-100/30 dark:bg-zinc-950 p-2.5 rounded-lg border border-slate-200 dark:border-zinc-800">
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 bg-slate-100/30 dark:bg-zinc-950 p-2.5 rounded-lg border border-slate-200 dark:border-zinc-800">
                         <div>
                           <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Talle</label>
                           <select id="new-var-size" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold text-zinc-800 dark:text-zinc-200">
@@ -6868,6 +6873,10 @@ export default function App() {
                           </select>
                         </div>
                         <div>
+                          <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Código / SKU Variant</label>
+                          <input id="new-var-sku" type="text" placeholder="p.ej. J001-N-M" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold font-mono text-zinc-800 dark:text-zinc-200 uppercase" />
+                        </div>
+                        <div>
                           <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Stock Físico</label>
                           <input id="new-var-stock" type="number" defaultValue="5" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-mono font-bold" />
                         </div>
@@ -6877,11 +6886,13 @@ export default function App() {
                             onClick={() => {
                               const szEl = document.getElementById('new-var-size') as HTMLSelectElement;
                               const colEl = document.getElementById('new-var-color') as HTMLSelectElement;
+                              const skuEl = document.getElementById('new-var-sku') as HTMLInputElement;
                               const stkEl = document.getElementById('new-var-stock') as HTMLInputElement;
                               
                               if (szEl && colEl && stkEl) {
                                 const sz = szEl.value;
                                 const col = colEl.value;
+                                const sku = skuEl ? skuEl.value.trim().toUpperCase() : "";
                                 const stk = Math.floor(Number(stkEl.value || 0));
                                 
                                 const current = newProduct.variants || [];
@@ -6894,6 +6905,7 @@ export default function App() {
                                   size: sz,
                                   color: col,
                                   colorCode: col === "Negro" ? "#000000" : col === "Blanco" ? "#ffffff" : col === "Rojo" ? "#ef4444" : col === "Azul" ? "#3b82f6" : col === "Verde" ? "#22c55e" : col === "Gris" ? "#6b7280" : col === "Beige" ? "#f5f5dc" : col === "Rosa" ? "#f472b6" : "#9ca3af",
+                                  sku: sku,
                                   stock: stk,
                                   priceDelta: 0
                                 };
@@ -6903,6 +6915,7 @@ export default function App() {
                                   variants: updated,
                                   stock: updated.reduce((sum, v) => sum + v.stock, 0)
                                 });
+                                if (skuEl) skuEl.value = "";
                                 showAdminToast("Combinación añadida", "success");
                               }
                             }}
@@ -6920,6 +6933,7 @@ export default function App() {
                               <tr className="bg-slate-100 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-800 text-[10px] text-zinc-400 font-extrabold uppercase">
                                 <th className="p-2">Talle</th>
                                 <th className="p-2">Color / Tono</th>
+                                <th className="p-2">Código / SKU Variant</th>
                                 <th className="p-2">Stock Disponible</th>
                                 <th className="p-2">Precio Diferente (Opcional)</th>
                                 <th className="p-2">Foto URL (Opcional)</th>
@@ -6933,6 +6947,22 @@ export default function App() {
                                   <td className="p-2 flex items-center gap-2">
                                     <span className="w-3.5 h-3.5 rounded-full border border-zinc-300 dark:border-zinc-800 shadow-sm" style={{ backgroundColor: v.colorCode || '#666' }}></span>
                                     <span>{v.color}</span>
+                                  </td>
+                                  <td className="p-2 font-mono">
+                                    <input
+                                      type="text"
+                                      placeholder="Código / SKU"
+                                      value={v.sku || ""}
+                                      onChange={(e) => {
+                                        const nextArr = JSON.parse(JSON.stringify(newProduct.variants || []));
+                                        nextArr[i].sku = e.target.value.toUpperCase();
+                                        setNewProduct({
+                                          ...newProduct,
+                                          variants: nextArr
+                                        });
+                                      }}
+                                      className="w-28 px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none uppercase text-zinc-800 dark:text-zinc-200 focus:ring-1 focus:ring-[#5346ff]"
+                                    />
                                   </td>
                                   <td className="p-2">
                                     <input
@@ -7985,10 +8015,15 @@ const resText = await uploadRes.text();
                               for (const col of colorsList) {
                                 const exists = (editingProduct.variants || []).some(v => v.size === sz && v.color === col);
                                 if (!exists) {
+                                  const baseCode = editingProduct.codigo || "PROD";
+                                  const sizePart = sz === 'Único' ? '' : `-${sz}`;
+                                  const colorPart = col === 'General' ? '' : `-${col}`;
+                                  const generatedSku = `${baseCode}${sizePart}${colorPart}`.toUpperCase();
                                   generated.push({
                                     size: sz,
                                     color: col,
                                     colorCode: col === "Negro" ? "#000000" : col === "Blanco" ? "#ffffff" : col === "Rojo" ? "#ef4444" : col === "Azul" ? "#3b82f6" : col === "Verde" ? "#22c55e" : col === "Gris" ? "#6b7280" : col === "Beige" ? "#f5f5dc" : col === "Rosa" ? "#f472b6" : "#9ca3af",
+                                    sku: generatedSku,
                                     stock: Math.floor(Number(editingProduct.stock || 5)),
                                     priceDelta: 0
                                   });
@@ -8002,7 +8037,7 @@ const resText = await uploadRes.text();
                               variants: combined,
                               stock: combined.reduce((sum, v) => sum + v.stock, 0)
                             });
-                            showAdminToast(`Se autogeneraron ${generated.length} combinaciones.`, "success");
+                            showAdminToast(`Se autogeneraron ${generated.length} combinaciones con códigos sugeridos.`, "success");
                           }}
                           className="text-[9px] px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded shadow transition-all cursor-pointer self-start sm:self-center"
                         >
@@ -8010,7 +8045,7 @@ const resText = await uploadRes.text();
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-100/30 dark:bg-zinc-950 p-2.5 rounded-lg border border-slate-200 dark:border-zinc-800">
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 bg-slate-100/30 dark:bg-zinc-950 p-2.5 rounded-lg border border-slate-200 dark:border-zinc-800">
                         <div>
                           <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Talle</label>
                           <select id="edit-var-size" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold text-zinc-800 dark:text-zinc-200">
@@ -8028,6 +8063,10 @@ const resText = await uploadRes.text();
                           </select>
                         </div>
                         <div>
+                          <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Código / SKU Variant</label>
+                          <input id="edit-var-sku" type="text" placeholder="p.ej. J001-N-M" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold font-mono text-zinc-800 dark:text-zinc-200 uppercase" />
+                        </div>
+                        <div>
                           <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Stock Físico</label>
                           <input id="edit-var-stock" type="number" defaultValue="5" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-mono font-bold" />
                         </div>
@@ -8037,11 +8076,13 @@ const resText = await uploadRes.text();
                             onClick={() => {
                               const szEl = document.getElementById('edit-var-size') as HTMLSelectElement;
                               const colEl = document.getElementById('edit-var-color') as HTMLSelectElement;
+                              const skuEl = document.getElementById('edit-var-sku') as HTMLInputElement;
                               const stkEl = document.getElementById('edit-var-stock') as HTMLInputElement;
                               
                               if (szEl && colEl && stkEl) {
                                 const sz = szEl.value;
                                 const col = colEl.value;
+                                const sku = skuEl ? skuEl.value.trim().toUpperCase() : "";
                                 const stk = Math.floor(Number(stkEl.value || 0));
                                 
                                 const current = editingProduct.variants || [];
@@ -8054,6 +8095,7 @@ const resText = await uploadRes.text();
                                   size: sz,
                                   color: col,
                                   colorCode: col === "Negro" ? "#000000" : col === "Blanco" ? "#ffffff" : col === "Rojo" ? "#ef4444" : col === "Azul" ? "#3b82f6" : col === "Verde" ? "#22c55e" : col === "Gris" ? "#6b7280" : col === "Beige" ? "#f5f5dc" : col === "Rosa" ? "#f472b6" : "#9ca3af",
+                                  sku: sku,
                                   stock: stk,
                                   priceDelta: 0
                                 };
@@ -8063,6 +8105,7 @@ const resText = await uploadRes.text();
                                   variants: updated,
                                   stock: updated.reduce((sum, v) => sum + v.stock, 0)
                                 });
+                                if (skuEl) skuEl.value = "";
                                 showAdminToast("Combinación añadida", "success");
                               }
                             }}
@@ -8080,6 +8123,7 @@ const resText = await uploadRes.text();
                               <tr className="bg-slate-100 dark:bg-zinc-900/60 border-b border-slate-200 dark:border-zinc-800 text-[10px] text-zinc-400 font-extrabold uppercase">
                                 <th className="p-2">Talle</th>
                                 <th className="p-2">Color / Tono</th>
+                                <th className="p-2">Código / SKU Variant</th>
                                 <th className="p-2">Stock Disponible</th>
                                 <th className="p-2">Precio Diferente (Opcional)</th>
                                 <th className="p-2">Foto URL (Opcional)</th>
@@ -8093,6 +8137,22 @@ const resText = await uploadRes.text();
                                   <td className="p-2 flex items-center gap-2">
                                     <span className="w-3.5 h-3.5 rounded-full border border-zinc-300 dark:border-zinc-800 shadow-sm" style={{ backgroundColor: v.colorCode || '#666' }}></span>
                                     <span>{v.color}</span>
+                                  </td>
+                                  <td className="p-2 font-mono">
+                                    <input
+                                      type="text"
+                                      placeholder="Código / SKU"
+                                      value={v.sku || ""}
+                                      onChange={(e) => {
+                                        const nextArr = JSON.parse(JSON.stringify(editingProduct.variants || []));
+                                        nextArr[i].sku = e.target.value.toUpperCase();
+                                        setEditingProduct({
+                                          ...editingProduct,
+                                          variants: nextArr
+                                        });
+                                      }}
+                                      className="w-28 px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none uppercase text-zinc-800 dark:text-zinc-200 focus:ring-1 focus:ring-[#5346ff]"
+                                    />
                                   </td>
                                   <td className="p-2">
                                     <input

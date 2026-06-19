@@ -239,6 +239,27 @@ export default function CartDrawer({
                                 </div>
                               )}
 
+                              {(() => {
+                                const p = item.product;
+                                let activeSku = p.codigo || "";
+                                if (p.variants && p.variants.length > 0 && item.selectedSize) {
+                                  const exactMatch = item.selectedColor 
+                                    ? p.variants.find(v => v.size === item.selectedSize && v.color === item.selectedColor)
+                                    : null;
+                                  const sizeMatch = p.variants.find(v => v.size === item.selectedSize);
+                                  const match = exactMatch || sizeMatch;
+                                  if (match && match.sku) {
+                                    activeSku = match.sku;
+                                  }
+                                }
+                                if (!activeSku) return null;
+                                return (
+                                  <div className="mt-1 font-mono text-[10px] text-zinc-400 select-all">
+                                    Cód: {activeSku}
+                                  </div>
+                                );
+                              })()}
+
                               <div className="flex items-center justify-between mt-3">
                                 {/* Stepper */}
                                 <div className="flex items-center rounded-lg border text-sm border-[#D4A55A]/25 bg-[#050B1A]" onClick={(e) => e.stopPropagation()}>

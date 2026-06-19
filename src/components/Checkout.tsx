@@ -1419,6 +1419,24 @@ export default function Checkout({
           if (item.selectedColor) {
             options.push(`Color: ${item.selectedColor}`);
           }
+          
+          const p = item.product;
+          let activeSku = p.codigo || "";
+          if (p.variants && p.variants.length > 0 && item.selectedSize) {
+            const exactMatch = item.selectedColor 
+              ? p.variants.find(v => v.size === item.selectedSize && v.color === item.selectedColor)
+              : null;
+            const sizeMatch = p.variants.find(v => v.size === item.selectedSize);
+            const match = exactMatch || sizeMatch;
+            if (match && match.sku) {
+              activeSku = match.sku;
+            }
+          }
+          
+          if (activeSku) {
+            options.push(`Código: ${activeSku}`);
+          }
+          
           const optionsStr = options.length > 0 ? ` (${options.join(", ")})` : "";
           const itemPrice = getItemPrice(item);
           

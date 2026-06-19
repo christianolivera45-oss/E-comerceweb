@@ -81,6 +81,22 @@ export default function AddToCartModal({
     }
   };
 
+  const activeSku = React.useMemo(() => {
+    if (!product) return "";
+    let sku = product.codigo || "";
+    if (product.variants && product.variants.length > 0 && selectedSize) {
+      const exactMatch = selectedColor 
+        ? product.variants.find(v => v.size === selectedSize && v.color === selectedColor)
+        : null;
+      const sizeMatch = product.variants.find(v => v.size === selectedSize);
+      const match = exactMatch || sizeMatch;
+      if (match && match.sku) {
+        sku = match.sku;
+      }
+    }
+    return sku;
+  }, [product, selectedSize, selectedColor]);
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -128,11 +144,16 @@ export default function AddToCartModal({
                 className="w-14 h-14 rounded-lg object-contain bg-[#050B1A]/40 shrink-0 border border-[#D4A55A]/10 p-0.5"
                 referrerPolicy="no-referrer"
               />
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 font-sans">
                 <h4 className="text-sm font-black truncate text-[#F4EAD7] dark:text-white">
                   {product.name}
                 </h4>
-                <div className="flex items-center gap-2 mt-1 text-xs opacity-75">
+                {activeSku && (
+                  <p className="text-[10px] font-mono font-bold text-indigo-400 mt-0.5 tracking-wider">
+                    Cód: {activeSku}
+                  </p>
+                )}
+                <div className="flex items-center gap-2 mt-1 text-[11px] opacity-75">
                   <span className="font-medium text-slate-400 dark:text-zinc-400">Cant: {quantity}</span>
                   {(selectedSize || selectedColor) && <span className="opacity-40 text-slate-400">•</span>}
                   {selectedSize && <span className="font-medium text-slate-400 dark:text-zinc-400">Talle: {selectedSize}</span>}

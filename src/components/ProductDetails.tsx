@@ -597,11 +597,23 @@ Me gustaría coordinar stock, fabricación y envío.`;
           <div className="space-y-4">
             <div>
               {/* Title */}
-              <h2 className={`text-2xl sm:text-3xl font-extrabold font-sans tracking-tight mb-3 leading-tight ${
+              <h2 className={`text-2xl sm:text-3xl font-extrabold font-sans tracking-tight mb-1.5 leading-tight ${
                 isThemeDark ? "text-white" : "text-zinc-900"
               }`}>
                 {product.name}
               </h2>
+
+              {/* Unique Code / SKU */}
+              {(matchedVariant?.sku || product.codigo) && (
+                <div className="mb-3 flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-extrabold tracking-wider uppercase text-zinc-450 dark:text-zinc-500">
+                    CÓDIGO ÚNICO:
+                  </span>
+                  <span className="px-2.5 py-0.5 bg-slate-100 dark:bg-[#121214] border border-slate-200 dark:border-zinc-800 rounded font-mono text-[11px] font-black text-indigo-500 dark:text-indigo-400 tracking-wider select-all shadow-sm">
+                    {matchedVariant?.sku || product.codigo}
+                  </span>
+                </div>
+              )}
 
               {/* Row with Price, Quantity Selector and "Comprar" Button */}
               <div className="flex items-center justify-between md:justify-start gap-4 mb-6 pb-3 border-b border-zinc-900/10 dark:border-zinc-800/30">

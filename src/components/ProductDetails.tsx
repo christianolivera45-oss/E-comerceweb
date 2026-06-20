@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { X, ShoppingCart, MessageSquare, ShieldCheck, Truck, RefreshCw, ChevronLeft, ChevronRight, AlertCircle, Share2, Maximize2, Cpu, Wrench, Clock, Calendar, Home, Ruler } from "lucide-react";
+import { X, ShoppingCart, MessageSquare, ShieldCheck, Truck, RefreshCw, ChevronLeft, ChevronRight, AlertCircle, Share2, Maximize2, Cpu, Wrench, Clock, Calendar, Home, Ruler, Palette, Sun } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Product, SiteSettings, is3DProduct } from "../types";
 import ProductCard from "./ProductCard";
@@ -304,6 +304,8 @@ export default function ProductDetails({
 
   const [activeImgIndex, setActiveImgIndex] = useState(0);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [imageBgMode, setImageBgMode] = useState<"default" | "light" | "gold" | "contrast">("default");
+  const [imageExposureMode, setImageExposureMode] = useState<"normal" | "boosted">("normal");
 
   // Touch Swiping state for Mobiles
   const [swipeStartX, setSwipeStartX] = useState<number | null>(null);
@@ -548,11 +550,100 @@ Me gustaría coordinar stock, fabricación y envío.`;
           <div 
             onTouchStart={handleSwipeStart}
             onTouchEnd={handleSwipeEnd}
-            className={`relative w-full h-[280px] sm:h-[360px] md:h-[460px] rounded-[24px] flex items-center justify-center p-4 sm:p-5 select-none overflow-hidden ${
-              isThemeDark ? "bg-[#0c0c0e]/30" : "bg-[#fcfbfc]"
+            className={`relative w-full h-[280px] sm:h-[360px] md:h-[460px] rounded-[24px] flex items-center justify-center p-4 sm:p-5 select-none overflow-hidden transition-all duration-500 ${
+              imageBgMode === "light"
+                ? "bg-[#efeff2]"
+                : imageBgMode === "contrast"
+                ? "bg-white shadow-inner border border-slate-200/60"
+                : imageBgMode === "gold"
+                ? (isThemeDark ? "bg-gradient-to-br from-[#121c2c] via-[#050b1a] to-[#04060c] border border-[#D4A55A]/25" : "bg-gradient-to-br from-amber-50/60 via-slate-50 to-[#fcfaf4] border border-amber-200/50")
+                : (isThemeDark ? "bg-[#0c0c0e]/30 border border-zinc-800/40" : "bg-[#fcfbfc] border border-slate-100")
             }`}
           >
             
+            {/* Ambient centered lighting glow for Studio Glow effect */}
+            {imageBgMode === "gold" && (
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(212,165,90,0.14)_0%,transparent_75%)] pointer-events-none select-none animate-pulse duration-[6000ms]" />
+            )}
+
+            {/* Floating interactive helper controls in top-left */}
+            <div className="absolute top-3 left-3 flex items-center gap-1.5 z-20 select-none">
+              {/* Backdrop Switcher menu */}
+              <div className="relative group/opt">
+                <button 
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const modes: ("default" | "light" | "gold" | "contrast")[] = ["default", "light", "gold", "contrast"];
+                    const currIdx = modes.indexOf(imageBgMode);
+                    const nextMode = modes[(currIdx + 1) % modes.length];
+                    setImageBgMode(nextMode);
+                  }}
+                  className="p-1.5 sm:p-2 rounded-full bg-black/65 hover:bg-black/85 backdrop-blur-md text-[#E6BF76] hover:scale-[1.05] active:scale-95 transition-all flex items-center gap-1 shadow-lg border border-white/10"
+                  title="Cambiar fondo del producto"
+                >
+                  <Palette className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline text-[9px] font-black uppercase tracking-wider pr-0.5">Fondo</span>
+                </button>
+                <div className="absolute left-0 mt-1.5 hidden group-hover/opt:flex flex-col bg-zinc-950/95 backdrop-blur-lg border border-zinc-800 rounded-xl p-1 shadow-2xl min-w-[125px] gap-0.5 z-[20]">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setImageBgMode("default"); }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-2 transition ${
+                      imageBgMode === "default" ? "text-[#E6BF76] bg-white/10" : "text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-zinc-700"></span>
+                    Original
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setImageBgMode("light"); }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-2 transition ${
+                      imageBgMode === "light" ? "text-[#E6BF76] bg-white/10" : "text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-zinc-400"></span>
+                    Fondo Gris
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setImageBgMode("contrast"); }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-2 transition ${
+                      imageBgMode === "contrast" ? "text-[#E6BF76] bg-white/10" : "text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-white"></span>
+                    Fondo Blanco
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setImageBgMode("gold"); }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-2 transition ${
+                      imageBgMode === "gold" ? "text-[#E6BF76] bg-white/10" : "text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                    Estudio Glow
+                  </button>
+                </div>
+              </div>
+
+              {/* Exposure boost toggle button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setImageExposureMode(prev => prev === "normal" ? "boosted" : "normal");
+                }}
+                className={`p-1.5 sm:p-2 rounded-full backdrop-blur-md hover:scale-[1.05] active:scale-95 transition-all flex items-center gap-1 shadow-lg border ${
+                  imageExposureMode === "boosted"
+                    ? "bg-amber-500 text-[#050B1A] border-amber-400 font-bold"
+                    : "bg-black/65 text-zinc-300 border-white/10 hover:text-[#E6BF76]"
+                }`}
+                title="Aumentar brillo para revelar texturas"
+              >
+                <Sun className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline text-[9px] font-black uppercase tracking-wider pr-0.5">Iluminar</span>
+              </button>
+            </div>
+
             <div 
               onClick={() => setIsLightboxOpen(true)}
               className="relative w-full h-full flex items-center justify-center overflow-hidden cursor-zoom-in group/main-img"
@@ -567,7 +658,12 @@ Me gustaría coordinar stock, fabricación y envío.`;
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 1.03 }}
                   transition={{ duration: 0.22, ease: "easeOut" }}
-                  className="max-h-full max-w-full object-contain select-none transition-transform duration-300 group-hover/main-img:scale-[1.015]"
+                  style={{
+                    filter: imageExposureMode === "boosted"
+                      ? "brightness(1.18) contrast(1.08) saturate(1.03)"
+                      : "none"
+                  }}
+                  className="max-h-full max-w-full object-contain select-none transition-transform duration-300 group-hover/main-img:scale-[1.025]"
                   referrerPolicy="no-referrer"
                   loading="eager"
                   fetchPriority="high"

@@ -125,74 +125,82 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({ store, onUpdat
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         
         {/* Metric 1 */}
-        <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm flex items-center justify-between">
+        <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider">Ventas Monetarias Aprobadas</span>
+            <div className="p-2 bg-emerald-500/10 text-emerald-500 rounded-lg">
+              <DollarSign className="h-4.5 w-4.5" />
+            </div>
+          </div>
           <div>
-            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Ingresos Totales (Cuyo Pago es Aprobado)</p>
-            <h3 className="text-2xl font-bold text-slate-900 dark:text-zinc-100 mt-1 font-mono">
+            <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-zinc-50 font-mono">
               $ {totalVolumeUYU.toLocaleString("es-AR")} UYU
             </h3>
-            <p className="text-[10px] text-emerald-500 font-semibold mt-0.5">Sincronizado vía Mercado Pago Uruguay</p>
-          </div>
-          <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
-            <DollarSign className="h-5 w-5" />
+            <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-extrabold mt-1">Transacciones Mercado Pago Uruguay</p>
           </div>
         </div>
 
         {/* Metric 2 */}
-        <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm flex items-center justify-between">
+        <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider">Órdenes Pagadas</span>
+            <div className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg">
+              <CheckCircle className="h-4.5 w-4.5" />
+            </div>
+          </div>
           <div>
-            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Pedidos Aprobados</p>
-            <h3 className="text-2xl font-bold text-slate-900 dark:text-zinc-100 mt-1 font-mono">
+            <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-zinc-50 font-mono">
               {approvedOrders.length}
             </h3>
-            <p className="text-[10px] text-zinc-400 mt-0.5">De un total de {totalOrdersCount} registrados</p>
-          </div>
-          <div className="p-3 bg-indigo-500/10 text-indigo-500 rounded-xl">
-            <CheckCircle className="h-5 w-5" />
+            <p className="text-[10px] text-slate-600 dark:text-zinc-300 font-semibold mt-1">De {totalOrdersCount} transacciones registradas</p>
           </div>
         </div>
 
         {/* Metric 3 */}
-        <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm flex items-center justify-between">
+        <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider">Leads & Pagos Pendientes</span>
+            <div className="p-2 bg-amber-500/10 text-amber-500 rounded-lg">
+              <Clock className="h-4.5 w-4.5" />
+            </div>
+          </div>
           <div>
-            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Leads y Pagos Pendientes</p>
-            <h3 className="text-2xl font-bold text-slate-900 dark:text-zinc-100 mt-1 font-mono">
+            <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-zinc-50 font-mono">
               {pendingOrders.length}
             </h3>
-            <p className="text-[10px] text-zinc-400 mt-0.5">Requieren seguimiento / coordinación</p>
-          </div>
-          <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
-            <Clock className="h-5 w-5" />
+            <p className="text-[10px] text-slate-600 dark:text-zinc-300 font-semibold mt-1">Consultas que requieren seguimiento</p>
           </div>
         </div>
 
         {/* Metric 4 */}
-        <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm flex items-center justify-between">
+        <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider">Órdenes Rechazadas</span>
+            <div className="p-2 bg-rose-500/10 text-rose-500 rounded-lg">
+              <XCircle className="h-4.5 w-4.5" />
+            </div>
+          </div>
           <div>
-            <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Pedidos Rechazados</p>
-            <h3 className="text-2xl font-bold text-rose-600 dark:text-rose-455 mt-1 font-mono">
+            <h3 className="text-xl sm:text-2xl font-bold text-rose-600 dark:text-rose-400 font-mono">
               {rejectedOrders.length}
             </h3>
-            <p className="text-[10px] text-rose-500 mt-0.5">Cancelados o denegados por tarjeta</p>
-          </div>
-          <div className="p-3 bg-rose-500/10 text-rose-500 rounded-xl">
-            <XCircle className="h-5 w-5" />
+            <p className="text-[10px] text-slate-600 dark:text-zinc-300 font-semibold mt-1">Operaciones denegadas o canceladas</p>
           </div>
         </div>
 
       </div>
 
       {/* FILTER & CONTAINER HEADER */}
-      <div className="bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-850 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm overflow-hidden">
         
         {/* Controls bar */}
-        <div className="p-5 border-b border-slate-100 dark:border-zinc-850 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="p-5 border-b border-slate-100 dark:border-zinc-800/80 flex flex-col md:flex-row justify-between items-center gap-4">
           
           {/* Status Tabs Navigation */}
-          <div className="flex flex-wrap gap-1 w-full md:w-auto">
+          <div className="flex flex-wrap gap-1.5 w-full md:w-auto">
             <button
               onClick={() => setStatusFilter("all")}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 statusFilter === "all"
                   ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 font-extrabold"
                   : "bg-slate-50 dark:bg-zinc-900 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
@@ -202,7 +210,7 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({ store, onUpdat
             </button>
             <button
               onClick={() => setStatusFilter("aprobado")}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 statusFilter === "aprobado"
                   ? "bg-emerald-500 text-white font-extrabold"
                   : "bg-slate-50 dark:bg-zinc-900 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
@@ -212,7 +220,7 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({ store, onUpdat
             </button>
             <button
               onClick={() => setStatusFilter("pendiente")}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 statusFilter === "pendiente"
                   ? "bg-amber-500 text-zinc-950 font-extrabold"
                   : "bg-slate-50 dark:bg-zinc-900 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
@@ -222,13 +230,13 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({ store, onUpdat
             </button>
             <button
               onClick={() => setStatusFilter("rechazado")}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 statusFilter === "rechazado"
                   ? "bg-rose-500 text-white font-extrabold"
                   : "bg-slate-50 dark:bg-zinc-900 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
               }`}
             >
-              ✗ Rechazados ({rejectedOrders.length})
+              ✗ Cancelados ({rejectedOrders.length})
             </button>
           </div>
 
@@ -237,7 +245,7 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({ store, onUpdat
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
             <input
               type="text"
-              placeholder="Buscar por cliente, ID, cupón o tel..."
+              placeholder="Buscar por cliente, ID, cupón o teléfono..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-4 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
@@ -251,20 +259,20 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({ store, onUpdat
           <div className="p-12 text-center">
             <ShoppingBag className="h-10 w-10 text-zinc-300 dark:text-zinc-700 mx-auto mb-3" />
             <p className="text-zinc-500 dark:text-zinc-400 text-sm font-semibold">No se encontraron pedidos registrados con los filtros actuales.</p>
-            <p className="text-zinc-400 dark:text-zinc-500 text-[11px] mt-1">Los pedidos aparecerán inmediatamente una vez que los clientes avancen en su proceso de checkout o Mercado Pago.</p>
+            <p className="text-zinc-400 dark:text-zinc-500 text-[11px] mt-1">Los pedidos aparecerán de forma automática una vez que los clientes completen el formulario de compra o inicien la consulta de WhatsApp.</p>
           </div>
         ) : (
           <div className="overflow-x-auto max-h-[550px] overflow-y-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50/50 dark:bg-zinc-900/30 border-b border-slate-100 dark:border-zinc-850">
-                  <th className="p-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Pedido ID</th>
-                  <th className="p-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Fecha</th>
-                  <th className="p-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Cliente</th>
-                  <th className="p-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Contacto / Envío</th>
-                  <th className="p-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest text-right">Monto</th>
-                  <th className="p-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Estado Real</th>
-                  <th className="p-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest text-center">Acciones</th>
+                <tr className="bg-slate-50/50 dark:bg-zinc-900/30 border-b border-slate-100 dark:border-zinc-800">
+                  <th className="p-4 text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">ID de Pedido</th>
+                  <th className="p-4 text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Fecha / Hora</th>
+                  <th className="p-4 text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Cliente</th>
+                  <th className="p-4 text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Datos de Contacto</th>
+                  <th className="p-4 text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider text-right">Monto Total</th>
+                  <th className="p-4 text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Estado del Pedido</th>
+                  <th className="p-4 text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider text-center">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-zinc-850">

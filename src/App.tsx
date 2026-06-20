@@ -1014,6 +1014,13 @@ export default function App() {
 
   // Form states for Admin panel
   const [adminProductSearchQuery, setAdminProductSearchQuery] = useState("");
+  const [adminProductCategoryFilter, setAdminProductCategoryFilter] = useState("all");
+  const [adminProductStockFilter, setAdminProductStockFilter] = useState("all"); // 'all', 'instock', 'outofstock'
+  const [adminProductStatusFilter, setAdminProductStatusFilter] = useState("all"); // 'all', 'active', 'paused'
+
+  const [newProductStep, setNewProductStep] = useState(1);
+  const [editingProductStep, setEditingProductStep] = useState(1);
+
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isNewProductMode, setIsNewProductMode] = useState(false);
   const [newProduct, setNewProduct] = useState<Partial<Product>>({
@@ -1030,6 +1037,7 @@ export default function App() {
     subcategorias_adicionales: []
   });
   const [newProductErrors, setNewProductErrors] = useState<Record<string, string>>({});
+  const [editProductErrors, setEditProductErrors] = useState<Record<string, string>>({});
 
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryIcon, setNewCategoryIcon] = useState("Shirt");
@@ -1047,9 +1055,34 @@ export default function App() {
   const [adminToast, setAdminToast] = useState<{ text: string; type: "success" | "error" | "neutral" } | null>(null);
 
   const filteredAdminProducts = useMemo(() => {
-    if (!adminProductSearchQuery.trim()) return store.products;
+    let filtered = store.products;
+
+    if (adminProductCategoryFilter !== "all") {
+      filtered = filtered.filter(p => p.categoria_id === adminProductCategoryFilter || p.categorias_adicionales?.includes(adminProductCategoryFilter));
+    }
+
+    if (adminProductStockFilter === "instock") {
+      filtered = filtered.filter(p => {
+        // If there are variants with stock, it might count. But p.stock has physical total.
+        const st = p.stock ?? 0;
+        return st > 0;
+      });
+    } else if (adminProductStockFilter === "outofstock") {
+      filtered = filtered.filter(p => {
+        const st = p.stock ?? 0;
+        return st === 0;
+      });
+    }
+
+    if (adminProductStatusFilter === "active") {
+      filtered = filtered.filter(p => !p.paused);
+    } else if (adminProductStatusFilter === "paused") {
+      filtered = filtered.filter(p => !!p.paused);
+    }
+
+    if (!adminProductSearchQuery.trim()) return filtered;
     const q = adminProductSearchQuery.toLowerCase().trim();
-    return store.products.filter(p => {
+    return filtered.filter(p => {
       const codeMatch = p.codigo ? p.codigo.toLowerCase().includes(q) : false;
       const nameMatch = !!p.name?.toLowerCase().includes(q);
       const categoryMatch = !!p.category?.toLowerCase().includes(q);
@@ -1063,9 +1096,22 @@ export default function App() {
         const subcat = (store.dbSubcategories || []).find(s => s.id === subId);
         return subcat?.nombre?.toLowerCase().includes(q);
       });
-      return codeMatch || nameMatch || categoryMatch || descMatch || additionalCatsMatch || subcatsMatch || additionalSubcatsMatch;
+      const variantsMatch = !!p.variants?.some(v => 
+        (v.sku && v.sku.toLowerCase().includes(q)) || 
+        (v.color && v.color.toLowerCase().includes(q)) || 
+        (v.size && v.size.toLowerCase().includes(q))
+      );
+      return codeMatch || nameMatch || categoryMatch || descMatch || additionalCatsMatch || subcatsMatch || additionalSubcatsMatch || variantsMatch;
     });
-  }, [store.products, adminProductSearchQuery, store.dbCategories, store.dbSubcategories]);
+  }, [
+    store.products, 
+    adminProductSearchQuery, 
+    adminProductCategoryFilter, 
+    adminProductStockFilter, 
+    adminProductStatusFilter, 
+    store.dbCategories, 
+    store.dbSubcategories
+  ]);
 
   const showAdminToast = (text: string, type: "success" | "error" | "neutral" = "success") => {
     setAdminToast({ text, type });
@@ -1993,8 +2039,8 @@ export default function App() {
   };
 
   // Send whole storage state update to Server
-  const saveStateToServer = async (updatedStore: ShopState) => {
-    if (!authToken) return;
+  const saveStateToServer = async (updatedStore: ShopState): Promise<boolean> => {
+    if (!authToken) return false;
     setSyncStatus("syncing");
     setSaving(true);
     try {
@@ -2022,17 +2068,73 @@ export default function App() {
         setStore(updatedStore);
       }
       setSyncStatus("synced");
+      return true;
     } catch (err: any) {
       console.error(err);
       setSyncStatus("error");
       alert(err.message || "Error al sincronizar con el servidor. Por favor, reintenta.");
+      return false;
     } finally {
       setSaving(false);
     }
   };
 
+  const checkDuplicateSKU = (product: Product, isNew: boolean): string | null => {
+    const baseCode = product.codigo?.trim().toUpperCase();
+    const otherProducts = isNew ? store.products : store.products.filter(p => p.id !== product.id);
+    
+    // Map occupied codes with their owner's reference
+    const occupied = new Map<string, string>();
+    otherProducts.forEach(p => {
+      const pCode = p.codigo?.trim().toUpperCase();
+      if (pCode) {
+        occupied.set(pCode, p.name);
+      }
+      if (p.variants) {
+        p.variants.forEach(v => {
+          const vSku = v.sku?.trim().toUpperCase();
+          if (vSku) {
+            occupied.set(vSku, `${p.name} (Variante: ${v.size !== "Único" ? v.size : ""} ${v.color !== "General" ? v.color : ""}`.trim() + ")");
+          }
+        });
+      }
+    });
+
+    // 1. Check if product's main code duplicates other products
+    if (baseCode && occupied.has(baseCode)) {
+      return `El código único "${baseCode}" ya está en uso por el producto "${occupied.get(baseCode)}".`;
+    }
+
+    // 2. Check if product's variants duplicate other products
+    if (product.variants) {
+      for (const v of product.variants) {
+        const vSku = v.sku?.trim().toUpperCase();
+        if (vSku && occupied.has(vSku)) {
+          return `El código de variante "${vSku}" ya está en uso por el producto "${occupied.get(vSku)}".`;
+        }
+      }
+    }
+
+    // 3. Check internal duplicates (within the current product's variants list)
+    const selfVariantSKUs = new Set<string>();
+
+    if (product.variants) {
+      for (const v of product.variants) {
+        const vSku = v.sku?.trim().toUpperCase();
+        if (vSku) {
+          if (selfVariantSKUs.has(vSku)) {
+            return `Código de variante duplicado "${vSku}" detectado en múltiples variantes de este producto.`;
+          }
+          selfVariantSKUs.add(vSku);
+        }
+      }
+    }
+
+    return null;
+  };
+
   // CRUD handlers - Products
-  const handleCreateProduct = (e: FormEvent) => {
+  const handleCreateProduct = async (e: FormEvent) => {
     e.preventDefault();
     const errors: Record<string, string> = {};
 
@@ -2116,36 +2218,61 @@ export default function App() {
       }
     };
 
+    // Validate unique SKU/codigo
+    const skuConflict = checkDuplicateSKU(created, true);
+    if (skuConflict) {
+      showAdminToast(skuConflict, "error");
+      setNewProductErrors({ codigo: skuConflict });
+      return;
+    }
+
     const updatedProducts = [created, ...store.products];
     const updatedState = { ...store, products: updatedProducts };
     
-    saveStateToServer(updatedState);
-    setIsNewProductMode(false);
-    
-    // Reset form
-    setNewProduct({
-      codigo: "",
-      name: "",
-      description: "",
-      price: undefined,
-      originalPrice: undefined,
-      category: (store.dbCategories || [])[0]?.nombre || "",
-      categoria_id: (store.dbCategories || [])[0]?.id || "",
-      subcategoria_id: "all",
-      categorias_adicionales: [],
-      subcategorias_adicionales: [],
-      imageUrl: "",
-      stock: 10,
-      featured: false,
-      consultOnly: false,
-      sizes: [],
-      colors: []
-    });
+    const success = await saveStateToServer(updatedState);
+    if (success) {
+      showAdminToast("¡Producto creado con éxito! 🚀", "success");
+      setIsNewProductMode(false);
+      
+      // Reset form
+      setNewProduct({
+        codigo: "",
+        name: "",
+        description: "",
+        price: undefined,
+        originalPrice: undefined,
+        category: (store.dbCategories || [])[0]?.nombre || "",
+        categoria_id: (store.dbCategories || [])[0]?.id || "",
+        subcategoria_id: "all",
+        categorias_adicionales: [],
+        subcategorias_adicionales: [],
+        imageUrl: "",
+        stock: 10,
+        featured: false,
+        consultOnly: false,
+        sizes: [],
+        colors: []
+      });
+    } else {
+      showAdminToast("Error al guardar el nuevo producto.", "error");
+    }
   };
 
-  const handleUpdateProduct = (e: FormEvent) => {
+  const handleUpdateProduct = async (e: FormEvent) => {
     e.preventDefault();
     if (!editingProduct) return;
+
+    if (!editingProduct.name || !editingProduct.name.trim()) {
+      showAdminToast("El nombre del producto es obligatorio.", "error");
+      return;
+    }
+
+    // Validate unique SKU/codigo
+    const skuConflict = checkDuplicateSKU(editingProduct, false);
+    if (skuConflict) {
+      showAdminToast(skuConflict, "error");
+      return;
+    }
 
     const updatedProducts = store.products.map((p) => {
       if (p.id === editingProduct.id) {
@@ -2155,8 +2282,13 @@ export default function App() {
     });
 
     const updatedState = { ...store, products: updatedProducts };
-    saveStateToServer(updatedState);
-    setEditingProduct(null);
+    const success = await saveStateToServer(updatedState);
+    if (success) {
+      showAdminToast("¡Modificaciones guardadas correctamente! 💾", "success");
+      setEditingProduct(null);
+    } else {
+      showAdminToast("Error al guardar las modificaciones del producto.", "error");
+    }
   };
 
   const handleDeleteProduct = (productId: string) => {
@@ -4264,288 +4396,287 @@ export default function App() {
             {/* Contenido colapsable en celular, auto expandido en escritorio */}
             <div className={`${mobileAdminMenuOpen ? "flex" : "hidden"} md:flex flex-col flex-grow min-h-0`}>
               <nav className="p-4 space-y-1">
-              <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-4 px-3">
-                Operaciones Comerciales
-              </div>
-
-               <button
-                onClick={() => navigateAdminSection("dashboard")}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-colors ${
-                  adminSection === "dashboard"
-                    ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
-                    : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                }`}
-              >
-                <TrendingUp className="h-4 w-4" />
-                <span>Dashboard Principal</span>
-              </button>
-
-
-              {/* Category Group 1 - Operaciones */}
-              <div className="space-y-1.5 pt-2">
-                <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-2 px-3">
-                  Operaciones de Venta
+                <div className="text-[10px] uppercase tracking-widest text-zinc-505 font-extrabold mb-4 px-3 select-none">
+                  Operaciones Comerciales
                 </div>
 
                 <button
-                  onClick={() => navigateAdminSection("sales")}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
-                    adminSection === "sales"
-                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
-                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
+                  onClick={() => navigateAdminSection("dashboard")}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                    adminSection === "dashboard"
+                      ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
+                      : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <CartIcon className="h-4 w-4" />
-                    <span>Control de Pedidos</span>
+                  <TrendingUp className="h-4 w-4" />
+                  <span>Dashboard Principal</span>
+                </button>
+
+                {/* Category Group 1 - Operaciones */}
+                <div className="space-y-1.5 pt-4">
+                  <div className="text-[10px] uppercase tracking-widest text-zinc-505 font-extrabold mb-2 px-3 select-none">
+                    Operaciones de Venta
                   </div>
-                  {store.orders && store.orders.filter(o => o.status === "pedido_iniciado" || o.status === "pago_pendiente").length > 0 && (
-                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-blue-550 text-white animate-pulse">
-                      {store.orders.filter(o => o.status === "pedido_iniciado" || o.status === "pago_pendiente").length}
+
+                  <button
+                    onClick={() => navigateAdminSection("sales")}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                      adminSection === "sales"
+                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
+                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <CartIcon className="h-4 w-4" />
+                      <span>Control de Pedidos</span>
+                    </div>
+                    {store.orders && store.orders.filter(o => o.status === "pedido_iniciado" || o.status === "pago_pendiente").length > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-blue-550 text-white animate-pulse">
+                        {store.orders.filter(o => o.status === "pedido_iniciado" || o.status === "pago_pendiente").length}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => navigateAdminSection("stock")}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                      adminSection === "stock"
+                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
+                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Box className="h-4 w-4" />
+                      <span>Inventario & Stock</span>
+                    </div>
+                    {totalStockAlerts > 0 && (
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold shrink-0 ${
+                        outOfStockProducts.length > 0
+                          ? "bg-red-500 text-white"
+                          : "bg-amber-500 text-zinc-950"
+                      }`}>
+                        {totalStockAlerts}
+                      </span>
+                    )}
+                  </button>
+                </div>
+                
+                {/* Category Group 2 - Catálogo */}
+                <div className="space-y-1.5 pt-4">
+                  <div className="text-[10px] uppercase tracking-widest text-zinc-505 font-extrabold mb-2 px-3 select-none">
+                    Catálogo
+                  </div>
+
+                  <button
+                    onClick={() => navigateAdminSection("products")}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                      adminSection === "products"
+                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
+                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Grid className="h-4 w-4 text-zinc-400" />
+                      <span>Mis Productos</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-zinc-300 bg-zinc-800 px-1.5 py-0.5 rounded">
+                      {store.products.length}
                     </span>
-                  )}
-                </button>
+                  </button>
 
-                <button
-                  onClick={() => navigateAdminSection("stock")}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
-                    adminSection === "stock"
-                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
-                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Box className="h-4 w-4" />
-                    <span>Inventario & Stock</span>
+                  <button
+                    onClick={() => navigateAdminSection("categories")}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                      adminSection === "categories"
+                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
+                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <Sliders className="h-4 w-4 text-zinc-400" />
+                    <span>Categorías & Menús</span>
+                  </button>
+
+                  <button
+                    onClick={() => navigateAdminSection("promos")}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                      adminSection === "promos"
+                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
+                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <Tag className="h-4 w-4 text-zinc-400" />
+                    <span>Cupones & Descuentos</span>
+                  </button>
+                </div>
+
+                {/* Category Group 3 - Personalización */}
+                <div className="space-y-1.5 pt-4">
+                  <div className="text-[10px] uppercase tracking-widest text-zinc-505 font-extrabold mb-2 px-3 select-none">
+                    Visuales y Portada
                   </div>
-                  {totalStockAlerts > 0 && (
-                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold shrink-0 ${
-                      outOfStockProducts.length > 0
-                        ? "bg-red-500 text-white"
-                        : "bg-amber-500 text-zinc-950"
-                    }`}>
-                      {totalStockAlerts}
-                    </span>
-                  )}
-                </button>
-              </div>
-              
-              {/* Category Group 2 - Catálogo */}
-              <div className="space-y-1.5 pt-2">
-                <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-2 px-3">
-                  Catálogo
+
+                  <button
+                    onClick={() => navigateAdminSection("general")}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                      adminSection === "general"
+                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
+                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <Palette className="h-4 w-4 text-zinc-400" />
+                    <span>Marca & Identidad</span>
+                  </button>
+
+                  <button
+                    onClick={() => navigateAdminSection("banner")}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                      adminSection === "banner"
+                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
+                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <Image className="h-4 w-4 text-zinc-400" />
+                    <span>Banners & Carrusel</span>
+                  </button>
+
+                  <button
+                    onClick={() => navigateAdminSection("footer")}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                      adminSection === "footer"
+                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
+                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <Layout className="h-4 w-4 text-zinc-400" />
+                    <span>Pie de Página (Footer)</span>
+                  </button>
                 </div>
 
-                <button
-                  onClick={() => navigateAdminSection("products")}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
-                    adminSection === "products"
-                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
-                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Grid className="h-4 w-4 text-zinc-400" />
-                    <span>Mis Productos</span>
+                {/* Category Group 4 - Configuración */}
+                <div className="space-y-1.5 pt-4">
+                  <div className="text-[10px] uppercase tracking-widest text-zinc-505 font-extrabold mb-2 px-3 select-none">
+                    Configuración de Tienda
                   </div>
-                  <span className="text-[10px] font-mono text-zinc-400 bg-zinc-800 px-1.5 py-0.5 rounded">
-                    {store.products.length}
-                  </span>
-                </button>
 
-                <button
-                  onClick={() => navigateAdminSection("categories")}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
-                    adminSection === "categories"
-                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
-                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  <Sliders className="h-4 w-4 text-zinc-400" />
-                  <span>Categorías & Menús</span>
-                </button>
+                  <button
+                    onClick={() => navigateAdminSection("checkout_config")}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                      adminSection === "checkout_config"
+                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
+                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <ShoppingCart className="h-4 w-4 text-zinc-400" />
+                    <span>Carrito & Envíos</span>
+                  </button>
 
-                <button
-                  onClick={() => navigateAdminSection("promos")}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
-                    adminSection === "promos"
-                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
-                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  <Tag className="h-4 w-4 text-zinc-400" />
-                  <span>Cupones & Descuentos</span>
-                </button>
-              </div>
+                  <button
+                    onClick={() => navigateAdminSection("payments")}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                      adminSection === "payments"
+                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
+                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <CreditCard className="h-4 w-4 text-zinc-400" />
+                    <span>Métodos de Pago</span>
+                  </button>
 
-              {/* Category Group 3 - Personalización */}
-              <div className="space-y-1.5 pt-2">
-                <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-2 px-3">
-                  Visuales y Portada
+                  <button
+                    onClick={() => navigateAdminSection("reviews")}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                      adminSection === "reviews"
+                        ? "bg-[#4285F4]/15 text-[#4285F4] dark:text-blue-400 border-l-2 border-[#4285F4] font-bold"
+                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <Globe className="h-4 w-4 text-[#4285F4]" />
+                    <span>Google Integraciones</span>
+                  </button>
                 </div>
 
-                <button
-                  onClick={() => navigateAdminSection("general")}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
-                    adminSection === "general"
-                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
-                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  <Palette className="h-4 w-4 text-zinc-400" />
-                  <span>Marca & Identidad</span>
-                </button>
-
-                <button
-                  onClick={() => navigateAdminSection("banner")}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
-                    adminSection === "banner"
-                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
-                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  <Image className="h-4 w-4 text-zinc-400" />
-                  <span>Banners & Carrusel</span>
-                </button>
-
-                <button
-                  onClick={() => navigateAdminSection("footer")}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
-                    adminSection === "footer"
-                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
-                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  <Layout className="h-4 w-4 text-zinc-400" />
-                  <span>Pie de Página (Footer)</span>
-                </button>
-              </div>
-
-              {/* Category Group 4 - Configuración */}
-              <div className="space-y-1.5 pt-2">
-                <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-2 px-3">
-                  Configuración de Tienda
-                </div>
-
-                <button
-                  onClick={() => navigateAdminSection("checkout_config")}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
-                    adminSection === "checkout_config"
-                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
-                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  <ShoppingCart className="h-4 w-4 text-zinc-400" />
-                  <span>Carrito & Envíos</span>
-                </button>
-
-                <button
-                  onClick={() => navigateAdminSection("payments")}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
-                    adminSection === "payments"
-                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
-                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  <CreditCard className="h-4 w-4 text-zinc-400" />
-                  <span>Métodos de Pago</span>
-                </button>
-
-                <button
-                  onClick={() => navigateAdminSection("reviews")}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
-                    adminSection === "reviews"
-                      ? "bg-[#4285F4]/15 text-[#4285F4] dark:text-blue-400 border-l-2 border-[#4285F4] font-bold"
-                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  <Globe className="h-4 w-4 text-[#4285F4]" />
-                  <span>Google Integraciones</span>
-                </button>
-              </div>
-
-              <div className="space-y-1.5 pt-2">
-                <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold mb-2 px-3">
-                  Soporte & Seguridad
-                </div>
-
-                <button
-                  onClick={() => navigateAdminSection("emails")}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
-                    adminSection === "emails"
-                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
-                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  <Mail className="h-4 w-4 text-zinc-400" />
-                  <span>Emails de Soporte</span>
-                </button>
-
-                <button
-                  onClick={() => navigateAdminSection("security")}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all ${
-                    adminSection === "security"
-                      ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500 font-bold"
-                      : "hover:bg-zinc-800 text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  <Lock className="h-4 w-4 text-zinc-400" />
-                  <span>Seguridad de Acceso</span>
-                </button>
-              </div>
-            </nav>
-
-            {/* Support Terminal Status Card */}
-            <div className="mt-auto p-4 border-t border-zinc-800 bg-zinc-950/20">
-              <div className="p-3 bg-zinc-900/40 rounded-xl border border-zinc-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-extrabold uppercase tracking-widest text-zinc-400">Terminal Activo</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[10px] text-zinc-300 font-extrabold uppercase font-sans">
-                    JU
+                <div className="space-y-1.5 pt-4">
+                  <div className="text-[10px] uppercase tracking-widest text-zinc-505 font-extrabold mb-2 px-3 select-none">
+                    Soporte & Seguridad
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] text-zinc-200 truncate font-semibold">Admin Principal</p>
-                    <p className="text-[9px] text-zinc-400 truncate">PostgreSQL Online</p>
+
+                  <button
+                    onClick={() => navigateAdminSection("emails")}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                      adminSection === "emails"
+                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
+                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <Mail className="h-4 w-4 text-zinc-400" />
+                    <span>Emails de Soporte</span>
+                  </button>
+
+                  <button
+                    onClick={() => navigateAdminSection("security")}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                      adminSection === "security"
+                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
+                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <Lock className="h-4 w-4 text-zinc-400" />
+                    <span>Seguridad de Acceso</span>
+                  </button>
+                </div>
+              </nav>
+
+              {/* Support Terminal Status Card */}
+              <div className="mt-auto p-4 border-t border-zinc-800 bg-zinc-950/20">
+                <div className="p-3 bg-zinc-900/40 rounded-xl border border-zinc-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-extrabold uppercase tracking-widest text-zinc-400">Terminal Activo</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[10px] text-zinc-300 font-extrabold uppercase font-sans">
+                      JU
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] text-zinc-200 truncate font-semibold">Admin Principal</p>
+                      <p className="text-[9px] text-zinc-400 truncate">Sincronización online</p>
+                    </div>
+                  </div>
+                  <div className="border-t border-zinc-800/65 pt-2 shrink-0">
+                    <div className="flex items-center justify-between text-[10px] text-zinc-500 mb-1 font-mono">
+                      <span>Espacio de Datos</span>
+                      <span className="text-[9.5px] font-semibold text-indigo-400 uppercase">Activo</span>
+                    </div>
+                    <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
+                      <div className="w-1/4 h-full bg-indigo-500"></div>
+                    </div>
+                    <p className="text-[9.5px] text-zinc-400 mt-1 font-mono">
+                      14.5 KB / 1.0 GB
+                    </p>
                   </div>
                 </div>
-                <div className="border-t border-zinc-800/65 pt-2 shrink-0">
-                  <div className="flex items-center justify-between text-[10px] text-zinc-500 mb-1 font-mono">
-                    <span>Espacio de Datos</span>
-                    <span className="text-[9.5px] font-semibold text-blue-400 uppercase">Activo</span>
-                  </div>
-                  <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
-                    <div className="w-1/4 h-full bg-blue-500"></div>
-                  </div>
-                  <p className="text-[9.5px] text-zinc-400 mt-1 font-mono">
-                    14.5 KB / 1.0 GB
-                  </p>
-                </div>
               </div>
-            </div>
             </div> {/* Closing mobile wrapper */}
           </aside>
 
           {/* Main admin Workspace workspace */}
-          <main className="flex-1 flex flex-col p-6 gap-6 bg-slate-100 dark:bg-zinc-900 border-zinc-800 overflow-y-auto">
+          <main className="flex-1 flex flex-col p-6 gap-6 bg-slate-100 dark:bg-zinc-900 border-zinc-805 overflow-y-auto">
             
             {/* Header control summary */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-3 shrink-0">
               <div>
                 <h2 className="text-2xl font-bold font-sans text-slate-900 dark:text-white">
-                  {adminSection === "dashboard" && "Resumen de Métricas & Dashboard de Negocio"}
-                  {adminSection === "general" && "Identidad de Marca, Tipografías & Colores"}
-                  {adminSection === "banner" && "Control del Slider y Banners Principales"}
-                  {adminSection === "footer" && "Configuración de Columnas del Pie de Página"}
+                  {adminSection === "dashboard" && "Dashboard General y Métricas"}
+                  {adminSection === "general" && "Diseño, Tipos y Colores de Marca"}
+                  {adminSection === "banner" && "Carrusel de Portada y Banners"}
+                  {adminSection === "footer" && "Configuración de Columnas del Footer"}
                   {adminSection === "products" && "Catálogo General de Productos"}
-                  {adminSection === "categories" && "Configuración de Categorías de Tienda"}
-                  {adminSection === "promos" && "Cupones y Descuentos"}
-                  {adminSection === "security" && "Seguridad y Control de Acceso"}
-                  {adminSection === "stock" && "Control y Alertas de Stock Bajo"}
-                  {adminSection === "payments" && "Administración de Métodos de Pago (Uruguay)"}
-                  {adminSection === "reviews" && "Integraciones de Google (Analytics, Maps y Opiniones)"}
+                  {adminSection === "categories" && "Gestión de Categorías y Subcategorías"}
+                  {adminSection === "promos" && "Herramientas de Cupones y Descuentos"}
+                  {adminSection === "security" && "Configuración y Seguridad de Acceso"}
+                  {adminSection === "stock" && "Nivel de Inventario y Alertas de Stock"}
+                  {adminSection === "payments" && "Administración de Métodos de Pago"}
+                  {adminSection === "reviews" && "Sincronización con Google e Integraciones"}
                 </h2>
                 <p className="text-slate-600 dark:text-zinc-400 text-xs flex flex-col sm:flex-row sm:items-center gap-3 mt-1.5 leading-relaxed">
                   <span>Modifica los contenidos de tu tienda en tiempo real. Los cambios se sincronizarán directamente con tu base de datos central sin tocar código.</span>
@@ -5824,34 +5955,90 @@ export default function App() {
                         <span className="text-[10px] font-mono text-zinc-400">Total: {store.products.length} productos</span>
                       </div>
 
-                      {/* Search Bar for Admin Catalog */}
-                      <div className="p-4 bg-slate-50 dark:bg-zinc-900/40 border-b border-slate-100 dark:border-zinc-800 flex flex-col sm:flex-row gap-3 items-center justify-between">
-                        <div className="relative w-full sm:max-w-md">
-                          <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                            <Search className="h-4 w-4 text-slate-400" />
-                          </span>
-                          <input
-                            type="text"
-                            value={adminProductSearchQuery}
-                            onChange={(e) => setAdminProductSearchQuery(e.target.value)}
-                            placeholder="Buscar por nombre, categoría, descripción..."
-                            className="block w-full pl-9 pr-8 py-1.5 text-xs bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-slate-900 dark:text-zinc-100 placeholder-slate-450 focus:outline-none focus:ring-1 focus:ring-[#5346ff] focus:border-[#5346ff]"
-                          />
-                          {adminProductSearchQuery && (
+                      {/* Search Bar & Advanced Filters for Admin Catalog */}
+                      <div className="p-4 bg-slate-50 dark:bg-zinc-900/40 border-b border-slate-100 dark:border-zinc-800 space-y-3">
+                        <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
+                          <div className="relative w-full md:max-w-md">
+                            <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                              <Search className="h-4 w-4 text-slate-400" />
+                            </span>
+                            <input
+                              type="text"
+                              value={adminProductSearchQuery}
+                              onChange={(e) => setNewProductErrors({}) || setAdminProductSearchQuery(e.target.value)}
+                              placeholder="Buscar por nombre, código base, descripción o SKU de variante..."
+                              className="block w-full pl-9 pr-8 py-1.5 text-xs bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-slate-900 dark:text-zinc-100 placeholder-slate-450 focus:outline-none focus:ring-1 focus:ring-[#5346ff]"
+                            />
+                            {adminProductSearchQuery && (
+                              <button
+                                type="button"
+                                onClick={() => setAdminProductSearchQuery("")}
+                                className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-400 hover:text-zinc-650 cursor-pointer"
+                              >
+                                <span className="text-[10px]">✕ Llimpiar</span>
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="text-[10px] text-zinc-400 font-semibold font-mono self-end">
+                            Mostrando: <span className="text-white bg-zinc-805 dark:bg-zinc-800 px-1.5 py-0.5 rounded">{filteredAdminProducts.length}</span> de {store.products.length} productos
+                          </div>
+                        </div>
+
+                        {/* Dropdown Filters Row */}
+                        <div className="flex flex-wrap gap-2.5 items-center">
+                          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest shrink-0">Filtrar por:</span>
+                          
+                          {/* Category Filter */}
+                          <select
+                            value={adminProductCategoryFilter}
+                            onChange={(e) => setAdminProductCategoryFilter(e.target.value)}
+                            className="bg-white dark:bg-zinc-950 text-[11px] font-semibold border border-slate-250 dark:border-zinc-800 rounded px-2.5 py-1 text-slate-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-[#5346ff]"
+                          >
+                            <option value="all">Todas las Categorías</option>
+                            {(store.dbCategories || []).map(c => (
+                              <option key={c.id} value={c.id}>{c.nombre}</option>
+                            ))}
+                          </select>
+
+                          {/* Stock Status Filter */}
+                          <select
+                            value={adminProductStockFilter}
+                            onChange={(e) => setAdminProductStockFilter(e.target.value)}
+                            className="bg-white dark:bg-zinc-950 text-[11px] font-semibold border border-slate-250 dark:border-zinc-800 rounded px-2.5 py-1 text-slate-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-[#5346ff]"
+                          >
+                            <option value="all">Stock: Todos</option>
+                            <option value="instock">Con Stock disponible</option>
+                            <option value="outofstock">Sin Stock (Agotados)</option>
+                          </select>
+
+                          {/* Publication Status Filter */}
+                          <select
+                            value={adminProductStatusFilter}
+                            onChange={(e) => setAdminProductStatusFilter(e.target.value)}
+                            className="bg-white dark:bg-zinc-950 text-[11px] font-semibold border border-slate-250 dark:border-zinc-800 rounded px-2.5 py-1 text-slate-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-[#5346ff]"
+                          >
+                            <option value="all">Estado: Todos</option>
+                            <option value="active">Activos / Visibles</option>
+                            <option value="paused">Pausados / Ocultos</option>
+                          </select>
+
+                          {/* Reset filters button if any filter active */}
+                          {(adminProductCategoryFilter !== "all" || adminProductStockFilter !== "all" || adminProductStatusFilter !== "all" || adminProductSearchQuery) && (
                             <button
                               type="button"
-                              onClick={() => setAdminProductSearchQuery("")}
-                              className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 cursor-pointer"
+                              onClick={() => {
+                                setAdminProductCategoryFilter("all");
+                                setAdminProductStockFilter("all");
+                                setAdminProductStatusFilter("all");
+                                setAdminProductSearchQuery("");
+                              }}
+                              className="text-[10px] text-red-500 font-bold hover:underline py-1 px-2 hover:bg-red-550/5 rounded transition-all flex items-center gap-1 cursor-pointer"
                             >
-                              <span className="text-xs">✕</span>
+                              <span>✕ Limpiar todos los filtros</span>
                             </button>
                           )}
                         </div>
-                        {adminProductSearchQuery && (
-                          <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">
-                            Encontrados: {filteredAdminProducts.length} de {store.products.length} envíos
-                          </span>
-                        )}
                       </div>
 
                       <div className="divide-y divide-slate-100 dark:divide-zinc-800">
@@ -5920,7 +6107,10 @@ export default function App() {
                                 {p.paused ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
                               </button>
                               <button
-                                onClick={() => setEditingProduct(p)}
+                                onClick={() => {
+                                  setEditingProduct(p);
+                                  setEditingProductStep(1);
+                                }}
                                 className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 hover:text-white text-zinc-300 transition cursor-pointer"
                                 title="Editar"
                               >
@@ -5947,40 +6137,65 @@ export default function App() {
                     <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3 mb-2">
                       <div className="flex items-center gap-2">
                         <Plus className="h-4 w-4 text-emerald-400" />
-                        <h3 className="font-bold text-sm text-slate-900 dark:text-white">Nuevo Artículo de Catálogo</h3>
+                        <h3 className="font-bold text-sm text-slate-900 dark:text-white">Nuevo Artículo (Paso a Paso)</h3>
                       </div>
                       <button
                         type="button"
-                        onClick={() => setIsNewProductMode(false)}
+                        onClick={() => setIsNewProductMode(false) || setNewProductStep(1)}
                         className="text-xs text-zinc-400 hover:text-white underline"
                       >
                         Cancelar
                       </button>
                     </div>
 
+                    {/* Form Step-by-Step progress tabs */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/80 p-1 rounded-xl gap-1">
+                      {[
+                        { step: 1, label: "Info Básica", icon: "📋" },
+                        { step: 2, label: "Precios y Fotos", icon: "💰" },
+                        { step: 3, label: "Variantes", icon: "✨" },
+                        { step: 4, label: "Inventario y Envío", icon: "⚙️" }
+                      ].map((s) => (
+                        <button
+                          key={s.step}
+                          type="button"
+                          onClick={() => {
+                            // Validate previous steps lightly
+                            if (s.step > 1 && (!newProduct.name || !newProduct.name.trim())) {
+                              setNewProductErrors({ name: "El nombre es obligatorio antes de avanzar." });
+                              setNewProductStep(1);
+                              return;
+                            }
+                            if (s.step > 1 && !newProduct.categoria_id) {
+                              setNewProductErrors({ category: "La categoría es obligatoria." });
+                              setNewProductStep(1);
+                              return;
+                            }
+                            setNewProductStep(s.step);
+                          }}
+                          className={`flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg text-[11px] font-bold transition duration-200 cursor-pointer ${
+                            newProductStep === s.step
+                              ? "bg-blue-600 text-white shadow-sm"
+                              : "text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-850"
+                          }`}
+                        >
+                          <span className="font-mono text-xs">{s.icon}</span>
+                          <span>{s.label}</span>
+                        </button>
+                      ))}
+                    </div>
+
                     {/* Global Form Validation Info Banner */}
                     {Object.keys(newProductErrors).length > 0 && (
                       <div className="p-3 bg-red-100 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded-lg text-red-700 dark:text-red-400 text-xs font-semibold flex items-center gap-2">
                         <span className="flex h-2 w-2 rounded-full bg-red-500 animate-pulse shrink-0"></span>
-                        <span>Por favor corrige los campos marcados en rojo antes de guardar el artículo.</span>
+                        <span>Corrige los avisos antes de avanzar: {Object.values(newProductErrors).join(" | ")}</span>
                       </div>
                     )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
-                          <span>Código / SKU</span>
-                          <span className="text-zinc-400 text-[8px] lowercase">opcional</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={newProduct.codigo || ""}
-                          onChange={(e) => setNewProduct({ ...newProduct, codigo: e.target.value.toUpperCase() })}
-                          className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-[#5346ff] text-slate-900 dark:text-white transition-all"
-                          placeholder="p.ej. J001"
-                        />
-                      </div>
-
+                    {newProductStep === 1 && (
+                      <div className="space-y-4 animate-fade-in unique-step-one">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
                           <span>Nombre del Producto *</span>
@@ -6009,6 +6224,44 @@ export default function App() {
                         {newProductErrors.name && (
                           <p className="text-[10px] text-red-505 dark:text-red-400 mt-1 font-semibold flex items-center gap-1">
                             <span>⚠</span> {newProductErrors.name}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                          <span className="flex items-center gap-1">
+                            <span>Código Único / SKU Base (Opcional)</span>
+                            <span className="px-1 py-0.2 bg-zinc-500/10 text-zinc-500 text-[8px] font-mono rounded font-extrabold">OPCIONAL</span>
+                          </span>
+                        </label>
+                        <input
+                          type="text"
+                          value={newProduct.codigo || ""}
+                          onChange={(e) => {
+                            setNewProduct({ ...newProduct, codigo: e.target.value.toUpperCase() });
+                            if (newProductErrors.codigo) {
+                              setNewProductErrors(prev => {
+                                const copy = { ...prev };
+                                delete copy.codigo;
+                                return copy;
+                              });
+                            }
+                          }}
+                          className={`w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border rounded-lg text-xs outline-none focus:ring-1 focus:ring-[#5346ff] text-slate-900 dark:text-white transition-all font-mono uppercase font-bold placeholder-zinc-400 ${
+                            newProductErrors.codigo 
+                              ? "border-red-500 dark:border-red-650 ring-1 ring-red-500/30" 
+                              : "border-slate-200 dark:border-zinc-800"
+                          }`}
+                          placeholder="p.ej. REMERA-SLIM"
+                        />
+                        {newProductErrors.codigo ? (
+                          <p className="text-[10px] text-red-505 dark:text-red-400 mt-1 font-semibold flex items-center gap-1">
+                            <span>⚠</span> {newProductErrors.codigo}
+                          </p>
+                        ) : (
+                          <p className="text-[9px] text-zinc-400 dark:text-zinc-500 mt-1 leading-normal">
+                            Para productos simples, este es el código que verá el cliente. Para variantes de talles/colores, sirva de referencia, o déjelo vacío si cada variante tiene su código propio.
                           </p>
                         )}
                       </div>
@@ -6211,144 +6464,122 @@ export default function App() {
                         </div>
                       </div>
                     </div>
+                  </div>
+                )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <div>
-                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Precio de Lista / Antes</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={newProduct.originalPrice === undefined ? "" : newProduct.originalPrice}
-                          onChange={(e) => {
-                            const val = e.target.value === "" ? undefined : Number(e.target.value);
-                            setNewProduct({ ...newProduct, originalPrice: val });
-                          }}
-                          className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono"
-                          placeholder="ej. 99.99"
+                {newProductStep === 1 && (
+                      <div className="space-y-2 uniq-desc">
+                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1">Descripción Detallada</label>
+                        <textarea
+                          value={newProduct.description}
+                          onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
+                          rows={3}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white resize-none"
+                          placeholder="Escribe detalles del producto..."
                         />
                       </div>
-                      <div>
-                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Descuento (%)</label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            min="0"
-                            max="99"
-                            value={
-                              newProduct.originalPrice && newProduct.price && newProduct.originalPrice > newProduct.price
-                                ? Math.round(((newProduct.originalPrice - newProduct.price) / newProduct.originalPrice) * 100)
-                                : ""
-                            }
-                            onChange={(e) => {
-                              const pct = e.target.value === "" ? 0 : Number(e.target.value);
-                              if (pct >= 0 && pct < 100) {
-                                if (newProduct.originalPrice) {
-                                  const computedPrice = Number((newProduct.originalPrice * (1 - pct / 100)).toFixed(2));
-                                  setNewProduct({ ...newProduct, price: computedPrice });
-                                } else if (newProduct.price) {
-                                  const computedOriginal = Number((newProduct.price / (1 - pct / 100)).toFixed(2));
-                                  setNewProduct({ ...newProduct, originalPrice: computedOriginal });
+                    )}
+
+                    {newProductStep === 2 && (
+                      <div className="space-y-4 animate-fade-in unique-step-two">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Precio de Lista / Antes</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={newProduct.originalPrice === undefined ? "" : newProduct.originalPrice}
+                              onChange={(e) => {
+                                const val = e.target.value === "" ? undefined : Number(e.target.value);
+                                setNewProduct({ ...newProduct, originalPrice: val });
+                              }}
+                              className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono"
+                              placeholder="ej. 99.99"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Descuento (%)</label>
+                            <div className="relative">
+                              <input
+                                type="number"
+                                min="0"
+                                max="99"
+                                value={
+                                  newProduct.originalPrice && newProduct.price && newProduct.originalPrice > newProduct.price
+                                    ? Math.round(((newProduct.originalPrice - newProduct.price) / newProduct.originalPrice) * 100)
+                                    : ""
                                 }
-                              }
-                            }}
-                            className="w-full px-3 py-2 pr-8 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold text-indigo-500 dark:text-indigo-400"
-                            placeholder="Calculado"
-                          />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">%</span>
+                                onChange={(e) => {
+                                  const pct = e.target.value === "" ? 0 : Number(e.target.value);
+                                  if (pct >= 0 && pct < 100) {
+                                    if (newProduct.originalPrice) {
+                                      const computedPrice = Number((newProduct.originalPrice * (1 - pct / 100)).toFixed(2));
+                                      setNewProduct({ ...newProduct, price: computedPrice });
+                                    } else if (newProduct.price) {
+                                      const computedOriginal = Number((newProduct.price / (1 - pct / 100)).toFixed(2));
+                                      setNewProduct({ ...newProduct, originalPrice: computedOriginal });
+                                    }
+                                  }
+                                }}
+                                className="w-full px-3 py-2 pr-8 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold text-indigo-500 dark:text-indigo-400"
+                                placeholder="Calculado"
+                              />
+                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">%</span>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                              <span>Precio de Venta ($) *</span>
+                              {newProductErrors.price && <span className="text-red-500 text-[9px] font-semibold lowercase">inválido</span>}
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={newProduct.price === undefined ? "" : newProduct.price}
+                              onChange={(e) => {
+                                const val = e.target.value === "" ? undefined : Number(e.target.value);
+                                setNewProduct({ ...newProduct, price: val });
+                                if (newProductErrors.price) {
+                                  setNewProductErrors(prev => {
+                                    const copy = { ...prev };
+                                    delete copy.price;
+                                    return copy;
+                                  });
+                                }
+                              }}
+                              className={`w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white transition-all font-mono ${
+                                newProductErrors.price
+                                  ? "border-red-500 dark:border-red-650 ring-1 ring-red-500/30"
+                                  : "border-slate-200 dark:border-zinc-800"
+                              }`}
+                              placeholder="69.99"
+                            />
+                            {newProductErrors.price && (
+                              <p className="text-[10px] text-red-550 dark:text-red-400 mt-1 font-semibold flex items-center gap-1">
+                                <span>⚠</span> {newProductErrors.price}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
-                          <span>Precio de Venta ($) *</span>
-                          {newProductErrors.price && <span className="text-red-500 text-[9px] font-semibold lowercase">inválido</span>}
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={newProduct.price === undefined ? "" : newProduct.price}
-                          onChange={(e) => {
-                            const val = e.target.value === "" ? undefined : Number(e.target.value);
-                            setNewProduct({ ...newProduct, price: val });
-                            if (newProductErrors.price) {
-                              setNewProductErrors(prev => {
-                                const copy = { ...prev };
-                                delete copy.price;
-                                return copy;
-                              });
-                            }
+
+                        <ImageGalleryEditor
+                          images={[newProduct.imageUrl || "", ...(newProduct.imagenes || [])].filter(Boolean)}
+                          onChange={(updatedImages) => {
+                            setNewProduct({
+                              ...newProduct,
+                              imageUrl: updatedImages[0] || "",
+                              imagenes: updatedImages.slice(1)
+                            });
                           }}
-                          className={`w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white transition-all font-mono ${
-                            newProductErrors.price
-                              ? "border-red-500 dark:border-red-650 ring-1 ring-red-500/30"
-                              : "border-slate-200 dark:border-zinc-800"
-                          }`}
-                          placeholder="69.99"
+                          isThemeDark={store.settings.themeMode === "dark"}
                         />
-                        {newProductErrors.price && (
-                          <p className="text-[10px] text-red-550 dark:text-red-400 mt-1 font-semibold flex items-center gap-1">
-                            <span>⚠</span> {newProductErrors.price}
-                          </p>
-                        )}
                       </div>
-                      <div>
-                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
-                          <span>Stock Físico Real *</span>
-                          {newProductErrors.stock && <span className="text-red-500 text-[9px] font-semibold lowercase">inválido</span>}
-                        </label>
-                        <input
-                          type="number"
-                          value={newProduct.stock === undefined ? "" : newProduct.stock}
-                          onChange={(e) => {
-                            const val = e.target.value === "" ? undefined : Number(e.target.value);
-                            setNewProduct({ ...newProduct, stock: val });
-                            if (newProductErrors.stock) {
-                              setNewProductErrors(prev => {
-                                const copy = { ...prev };
-                                delete copy.stock;
-                                return copy;
-                              });
-                            }
-                          }}
-                          className={`w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white transition-all font-mono ${
-                            newProductErrors.stock
-                              ? "border-red-500 dark:border-red-650 ring-1 ring-red-500/30"
-                              : "border-slate-200 dark:border-zinc-800"
-                          }`}
-                          placeholder="15"
-                        />
-                        {newProductErrors.stock && (
-                          <p className="text-[10px] text-red-550 dark:text-red-400 mt-1 font-semibold flex items-center gap-1">
-                            <span>⚠</span> {newProductErrors.stock}
-                          </p>
-                        )}
-                      </div>
-                    </div>
+                    )}
 
-                    <ImageGalleryEditor
-                      images={[newProduct.imageUrl || "", ...(newProduct.imagenes || [])].filter(Boolean)}
-                      onChange={(updatedImages) => {
-                        setNewProduct({
-                          ...newProduct,
-                          imageUrl: updatedImages[0] || "",
-                          imagenes: updatedImages.slice(1)
-                        });
-                      }}
-                      isThemeDark={store.settings.themeMode === "dark"}
-                    />
-
-                    <div>
-                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Descripción Detallada</label>
-                      <textarea
-                        value={newProduct.description}
-                        onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
-                        rows={3}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white resize-none"
-                        placeholder="Escribe detalles del producto..."
-                      />
-                    </div>
-
-                    {/* Talles y Colores Configuration Panel */}
-                    <div className="flex flex-col gap-6 border border-indigo-500/10 p-4 rounded-xl bg-slate-50/50 dark:bg-zinc-900/40">
+                    {newProductStep === 3 && (
+                      <div className="space-y-4 animate-fade-in unique-step-three">
+                        {/* Talles y Colores Configuration Panel */}
+                        <div className="flex flex-col gap-6 border border-indigo-500/10 p-4 rounded-xl bg-slate-50/50 dark:bg-zinc-900/40">
                       <div>
                         {newProduct.is3D || is3DProduct(newProduct as Product) ? (
                           <div>
@@ -6961,7 +7192,7 @@ export default function App() {
                                           variants: nextArr
                                         });
                                       }}
-                                      className="w-28 px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none uppercase text-zinc-800 dark:text-zinc-200 focus:ring-1 focus:ring-[#5346ff]"
+                                      className="w-44 px-2 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none uppercase text-zinc-800 dark:text-zinc-200 focus:ring-1 focus:ring-[#5346ff]"
                                     />
                                   </td>
                                   <td className="p-2">
@@ -7150,21 +7381,57 @@ const resText = await uploadRes.text();
                         </div>
                       ) : (
                         <div className="p-3 text-center text-zinc-500 text-[11px] bg-slate-100/30 dark:bg-zinc-950 rounded-lg border border-dashed border-slate-200 dark:border-zinc-800">
-                          Sin combinaciones registradas. Se usará el stock físico general definido arriba. Puedes autogenerarlas o añadirlas manualmente.
+                           Sin combinaciones registradas. Se usará el stock físico general definido arriba. Puedes autogenerarlas o añadirlas manualmente.
                         </div>
                       )}
                     </div>
+                  </div>
+                )}
 
-                      <div className="flex flex-col gap-3.5 p-4 rounded-xl bg-zinc-900/60 border border-zinc-800">
+                {newProductStep === 4 && (
+                  <div className="space-y-4 animate-fade-in unique-step-four">
+                    {/* General Stock Input moved to step 4 */}
+                    <div className="p-4 bg-slate-50 dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 rounded-xl space-y-2">
+                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest flex items-center justify-between">
+                        <span>Stock Físico General *</span>
+                        {newProductErrors.stock && <span className="text-red-500 text-[9px] font-semibold lowercase">el stock es obligatorio</span>}
+                      </label>
+                      <input
+                        type="number"
+                        value={newProduct.stock === undefined ? "" : newProduct.stock}
+                        onChange={(e) => {
+                          const val = e.target.value === "" ? undefined : Number(e.target.value);
+                          setNewProduct({ ...newProduct, stock: val });
+                          if (newProductErrors.stock) {
+                            setNewProductErrors(prev => {
+                              const copy = { ...prev };
+                              delete copy.stock;
+                              return copy;
+                            });
+                          }
+                        }}
+                        className={`w-full max-w-sm px-3 py-1.5 bg-slate-100 dark:bg-zinc-950 border rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-905 dark:text-white transition-all font-mono ${
+                          newProductErrors.stock
+                            ? "border-red-500 dark:border-red-650 ring-1 ring-red-500/30"
+                            : "border-slate-200 dark:border-zinc-800"
+                        }`}
+                        placeholder="ej. 15"
+                      />
+                      <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-sans leading-normal">
+                        Este inventario general de respaldo se utilizará para productos simples. Si creaste variantes en el Paso 3, el stock real del artículo se calculará de forma sumatoria y automatizada.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col gap-3.5 p-4 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-805">
                       <div className="flex items-center gap-2">
                         <input
                           type="checkbox"
                           id="newProductIs3D"
                           checked={!!newProduct.is3D}
                           onChange={(e) => setNewProduct({ ...newProduct, is3D: e.target.checked, hoursPerUnit: e.target.checked ? (newProduct.hoursPerUnit || 1) : undefined })}
-                          className="rounded border-zinc-700 bg-zinc-950 text-indigo-500 focus:ring-0 cursor-pointer h-4 w-4"
+                          className="rounded border-slate-350 bg-white dark:bg-zinc-950 text-indigo-500 focus:ring-0 cursor-pointer h-4 w-4"
                         />
-                        <label htmlFor="newProductIs3D" className="text-xs text-zinc-300 select-none cursor-pointer font-bold flex items-center gap-1.5 text-indigo-400">
+                        <label htmlFor="newProductIs3D" className="text-xs text-slate-700 dark:text-zinc-300 select-none cursor-pointer font-bold flex items-center gap-1.5 text-indigo-400">
                           <Cpu className="w-4 h-4 shrink-0" />
                           <span>Habilitar Fabricación y Stock 3D Bajo Demanda</span>
                         </label>
@@ -7172,7 +7439,7 @@ const resText = await uploadRes.text();
 
                       {newProduct.is3D && (
                         <div className="pl-6 animate-fade-in space-y-2">
-                          <label htmlFor="newProductHours" className="block text-[10px] font-extrabold uppercase text-zinc-400 tracking-wider">
+                          <label htmlFor="newProductHours" className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 tracking-wider">
                             Demora de fabricación estimada por unidad (en días):
                           </label>
                           <div className="flex items-center gap-2.5">
@@ -7183,22 +7450,22 @@ const resText = await uploadRes.text();
                               max="100"
                               value={newProduct.hoursPerUnit || 1}
                               onChange={(e) => setNewProduct({ ...newProduct, hoursPerUnit: Math.max(1, Number(e.target.value)) })}
-                              className="w-24 px-2.5 py-1.5 rounded bg-zinc-950 text-white border border-zinc-800 text-xs font-mono font-bold focus:outline-none focus:ring-1 focus:ring-[#5346ff]"
+                              className="w-24 px-2.5 py-1.5 rounded bg-white dark:bg-zinc-950 text-slate-900 dark:text-white border border-slate-200 dark:border-zinc-800 text-xs font-mono font-bold focus:outline-none focus:ring-1 focus:ring-[#5346ff]"
                             />
                             <span className="text-[11px] text-zinc-500">día(s) de demora.</span>
                           </div>
                         </div>
                       )}
 
-                      <div className="flex items-center gap-2 pt-1.5 border-t border-zinc-800/40">
+                      <div className="flex items-center gap-2 pt-1.5 border-t border-slate-100 dark:border-zinc-800/40">
                         <input
                           type="checkbox"
                           id="newProductConsultOnly"
                           checked={!!newProduct.consultOnly}
                           onChange={(e) => setNewProduct({ ...newProduct, consultOnly: e.target.checked })}
-                          className="rounded border-zinc-700 bg-zinc-950 text-emerald-500 focus:ring-0 cursor-pointer h-4 w-4"
+                          className="rounded border-slate-350 bg-white dark:bg-zinc-950 text-emerald-500 focus:ring-0 cursor-pointer h-4 w-4"
                         />
-                        <label htmlFor="newProductConsultOnly" className="text-xs text-zinc-300 select-none cursor-pointer font-bold flex items-center gap-1.5 text-emerald-400">
+                        <label htmlFor="newProductConsultOnly" className="text-xs text-slate-700 dark:text-zinc-300 select-none cursor-pointer font-bold flex items-center gap-1.5 text-emerald-400">
                           <Phone className="w-4 h-4 shrink-0" />
                           <span>Sólo Consulta (Sustituye botón de Comprar por Consultar vía WhatsApp)</span>
                         </label>
@@ -7211,29 +7478,76 @@ const resText = await uploadRes.text();
                         id="newProductFeatured"
                         checked={!!newProduct.featured}
                         onChange={(e) => setNewProduct({ ...newProduct, featured: e.target.checked })}
-                        className="rounded border-zinc-700 bg-zinc-900 text-indigo-500 focus:ring-0 cursor-pointer h-4 w-4"
+                        className="rounded border-slate-350 bg-white dark:bg-zinc-950 text-indigo-500 focus:ring-0 cursor-pointer h-4 w-4"
                       />
-                      <label htmlFor="newProductFeatured" className="text-xs text-zinc-300 select-none cursor-pointer font-semibold">
-                        Marcar este producto como "Destacado" (aparece primero en portada)
+                      <label htmlFor="newProductFeatured" className="text-xs text-slate-700 dark:text-zinc-300 select-none cursor-pointer font-semibold">
+                         Marcar este producto como "Destacado" (aparece primero en portada)
                       </label>
                     </div>
+                  </div>
+                )}
 
-                    <div className="pt-2 flex justify-end gap-3">
+                {/* Step Wizard Action Buttons */}
+                <div className="pt-2 border-t border-slate-100 dark:border-zinc-850 flex justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsNewProductMode(false);
+                      setNewProductStep(1);
+                    }}
+                    className="px-4 py-2 bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-400 rounded-lg text-xs font-semibold cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+
+                  <div className="flex items-center gap-2">
+                    {newProductStep > 1 && (
                       <button
                         type="button"
-                        onClick={() => setIsNewProductMode(false)}
-                        className="px-4 py-2 bg-zinc-800 hover:bg-zinc-705 text-zinc-400 hover:text-white rounded-lg text-xs transition"
+                        onClick={() => setNewProductStep(newProductStep - 1)}
+                        className="px-4 py-1.5 bg-white dark:bg-zinc-950 border border-slate-205 dark:border-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-900 text-slate-700 dark:text-zinc-300 rounded-lg text-xs font-semibold cursor-pointer"
                       >
-                        Cancelar
+                        Anterior
                       </button>
+                    )}
+                    {newProductStep < 4 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (newProductStep === 1) {
+                            if (!newProduct.name || !newProduct.name.trim()) {
+                              setNewProductErrors({ name: "El nombre es obligatorio." });
+                              return;
+                            }
+                            if (!newProduct.categoria_id) {
+                              setNewProductErrors({ category: "La categoría principal es obligatoria." });
+                              return;
+                            }
+                          }
+                          if (newProductStep === 2) {
+                            if (newProduct.price === undefined || newProduct.price === null || isNaN(newProduct.price) || newProduct.price <= 0) {
+                              setNewProductErrors({ price: "El precio de venta es obligatorio y debe ser mayor a 0." });
+                              return;
+                            }
+                          }
+                          setNewProductErrors({});
+                          setNewProductStep(newProductStep + 1);
+                        }}
+                        className="px-4 py-1.5 bg-[#5346ff] hover:bg-[#5346ff]/90 text-white font-semibold rounded-lg text-xs transition cursor-pointer"
+                      >
+                        Siguiente
+                      </button>
+                    ) : (
                       <button
                         type="submit"
                         disabled={saving}
-                        className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                        className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-emerald-500/10"
                       >
-                        <span>{saving ? "Creando..." : "Crear e Insertar"}</span>
+                        <span>{saving ? "Creando..." : "Crear Artículo ✅"}</span>
                       </button>
-                    </div>
+                    )}
+                  </div>
+                </div>
                   </form>
                 )}
 
@@ -7242,29 +7556,69 @@ const resText = await uploadRes.text();
                   <form onSubmit={handleUpdateProduct} className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
                     <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3 mb-2">
                       <div className="flex items-center gap-2">
-                        <Edit className="h-4 w-4 text-amber-400" />
+                        <Edit className="h-4 w-4 text-amber-500" />
                         <h3 className="font-bold text-sm text-slate-900 dark:text-white">Modificar Detalles de Producto</h3>
                       </div>
                       <button
                         type="button"
-                        onClick={() => setEditingProduct(null)}
-                        className="text-xs text-zinc-400 hover:text-white underline"
+                        onClick={() => {
+                          setEditingProduct(null);
+                          setEditingProductStep(1);
+                        }}
+                        className="text-xs text-zinc-400 hover:text-red-500 transition-colors uppercase font-bold tracking-wider"
                       >
                         Cancelar
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Código / SKU (Opcional)</label>
-                        <input
-                          type="text"
-                          value={editingProduct.codigo || ""}
-                          onChange={(e) => setEditingProduct({ ...editingProduct, codigo: e.target.value.toUpperCase() })}
-                          className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-semibold"
-                          placeholder="p.ej. J001"
-                        />
+                    {/* Step-by-Step progress tabs */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 bg-slate-50 dark:bg-zinc-900 border border-slate-205 dark:border-zinc-805 p-1 rounded-xl gap-1">
+                      {[
+                        { step: 1, label: "Info Básica", icon: "📋" },
+                        { step: 2, label: "Precios y Fotos", icon: "💰" },
+                        { step: 3, label: "Variantes", icon: "✨" },
+                        { step: 4, label: "Inventario y Envío", icon: "⚙️" }
+                      ].map((s) => (
+                        <button
+                          key={s.step}
+                          type="button"
+                          onClick={() => {
+                            if (s.step > 1 && (!editingProduct.name || !editingProduct.name.trim())) {
+                              setEditProductErrors({ name: "El nombre es obligatorio antes de avanzar." });
+                              setEditingProductStep(1);
+                              return;
+                            }
+                            if (s.step > 1 && !editingProduct.categoria_id) {
+                              setEditProductErrors({ category: "La categoría principal es obligatoria." });
+                              setEditingProductStep(1);
+                              return;
+                            }
+                            setEditProductErrors({});
+                            setEditingProductStep(s.step);
+                          }}
+                          className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-[11px] font-bold transition duration-200 cursor-pointer ${
+                            editingProductStep === s.step
+                              ? "bg-amber-500 text-slate-950 shadow-sm font-extrabold"
+                              : "text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-850"
+                          }`}
+                        >
+                          <span className="font-mono text-xs">{s.icon}</span>
+                          <span>{s.label}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Global Form Validation Info Banner */}
+                    {Object.keys(editProductErrors).length > 0 && (
+                      <div className="p-3 bg-red-100 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded-lg text-red-700 dark:text-red-400 text-xs font-semibold flex items-center gap-2">
+                        <span className="flex h-2 w-2 rounded-full bg-red-500 animate-pulse shrink-0"></span>
+                        <span>Corrige los avisos antes de avanzar: {Object.values(editProductErrors).join(" | ")}</span>
                       </div>
+                    )}
+
+                    {editingProductStep === 1 && (
+                      <div className="space-y-4 animate-fade-in unique-step-one">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Nombre del Producto *</label>
                         <input
@@ -7274,6 +7628,24 @@ const resText = await uploadRes.text();
                           onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
                           className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-semibold"
                         />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
+                          <span className="flex items-center gap-1">
+                            <span>Código Único / SKU Base (Opcional)</span>
+                            <span className="px-1 py-0.2 bg-zinc-500/10 text-zinc-500 text-[8px] font-mono rounded font-extrabold">OPCIONAL</span>
+                          </span>
+                        </label>
+                        <input
+                          type="text"
+                          value={editingProduct.codigo || ""}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, codigo: e.target.value.toUpperCase() })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-[#5346ff] text-slate-900 dark:text-white transition-all font-mono uppercase font-bold placeholder-zinc-400"
+                          placeholder="p.ej. REMERA-SLIM"
+                        />
+                        <p className="text-[9px] text-zinc-400 dark:text-zinc-500 mt-1 leading-normal">
+                          Para productos simples, este es el código que verá el cliente. Para variantes de talles/colores, sirva de referencia, o déjelo vacío si cada variante tiene su código propio.
+                        </p>
                       </div>
                       <div>
                         <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Categoría Principal *</label>
@@ -7449,10 +7821,14 @@ const resText = await uploadRes.text();
                         </div>
                       </div>
                     </div>
+                    </div>
+                    )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <div>
-                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Precio de Lista / Antes</label>
+                    {editingProductStep === 2 && (
+                      <div className="space-y-4 animate-fade-in unique-step-two">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Precio de Lista / Antes</label>
                         <input
                           type="number"
                           step="0.01"
@@ -7503,16 +7879,6 @@ const resText = await uploadRes.text();
                           className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono"
                         />
                       </div>
-                      <div>
-                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Stock Real *</label>
-                        <input
-                          required
-                          type="number"
-                          value={editingProduct.stock}
-                          onChange={(e) => setEditingProduct({ ...editingProduct, stock: Number(e.target.value) })}
-                          className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono"
-                        />
-                      </div>
                     </div>
 
                     <ImageGalleryEditor
@@ -7526,19 +7892,27 @@ const resText = await uploadRes.text();
                       }}
                       isThemeDark={store.settings.themeMode === "dark"}
                     />
-
-                    <div>
-                      <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Descripción Detallada</label>
-                      <textarea
-                        value={editingProduct.description}
-                        onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
-                        rows={3}
-                        className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white resize-none"
-                      />
                     </div>
+                    )}
+
+                    {editingProductStep === 1 && (
+                      <div className="space-y-4 animate-fade-in unique-step-one-desc mt-3">
+                        <div>
+                          <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Descripción Detallada</label>
+                          <textarea
+                            value={editingProduct.description}
+                            onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
+                            rows={3}
+                            className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white resize-none"
+                          />
+                        </div>
+                      </div>
+                    )}
 
                     {/* Talles y Colores Configuration Panel */}
-                    <div className="flex flex-col gap-6 border border-indigo-500/10 p-4 rounded-xl bg-slate-50/50 dark:bg-zinc-900/40">
+                    {editingProductStep === 3 && (
+                      <>
+                        <div className="flex flex-col gap-6 border border-indigo-500/10 p-4 rounded-xl bg-slate-50/50 dark:bg-zinc-900/40">
                       <div>
                         {editingProduct.is3D || is3DProduct(editingProduct) ? (
                           <div>
@@ -8151,7 +8525,7 @@ const resText = await uploadRes.text();
                                           variants: nextArr
                                         });
                                       }}
-                                      className="w-28 px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none uppercase text-zinc-800 dark:text-zinc-200 focus:ring-1 focus:ring-[#5346ff]"
+                                      className="w-44 px-2 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none uppercase text-zinc-800 dark:text-zinc-200 focus:ring-1 focus:ring-[#5346ff]"
                                     />
                                   </td>
                                   <td className="p-2">
@@ -8344,85 +8718,148 @@ const resText = await uploadRes.text();
                         </div>
                       )}
                     </div>
+                      </>
+                    )}
 
-                      <div className="flex flex-col gap-3.5 p-4 rounded-xl bg-zinc-900/60 border border-zinc-800">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id="editProductIs3D"
-                          checked={!!editingProduct.is3D}
-                          onChange={(e) => setEditingProduct({ ...editingProduct, is3D: e.target.checked, hoursPerUnit: e.target.checked ? (editingProduct.hoursPerUnit || 1) : undefined })}
-                          className="rounded border-zinc-700 bg-zinc-950 text-indigo-500 focus:ring-0 cursor-pointer h-4 w-4"
-                        />
-                        <label htmlFor="editProductIs3D" className="text-xs text-zinc-300 select-none cursor-pointer font-bold flex items-center gap-1.5 text-indigo-400">
-                          <Cpu className="w-4 h-4 shrink-0" />
-                          <span>Habilitar Fabricación y Stock 3D Bajo Demanda</span>
-                        </label>
-                      </div>
-
-                      {editingProduct.is3D && (
-                        <div className="pl-6 animate-fade-in space-y-2">
-                          <label htmlFor="editProductHours" className="block text-[10px] font-extrabold uppercase text-zinc-400 tracking-wider">
-                            Demora de fabricación estimada por unidad (en días):
-                          </label>
-                          <div className="flex items-center gap-2.5">
+                    {editingProductStep === 4 && (
+                      <div className="space-y-4 animate-fade-in unique-step-four">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] font-extrabold text-[#5346ff] dark:text-[#9086ff] uppercase tracking-widest mb-1.5 font-bold">Stock Físico Real del Producto *</label>
                             <input
+                              required
                               type="number"
-                              id="editProductHours"
-                              min="1"
-                              max="100"
-                              value={editingProduct.hoursPerUnit || 1}
-                              onChange={(e) => setEditingProduct({ ...editingProduct, hoursPerUnit: Math.max(1, Number(e.target.value)) })}
-                              className="w-24 px-2.5 py-1.5 rounded bg-zinc-950 text-white border border-zinc-800 text-xs font-mono font-bold focus:outline-none focus:ring-1 focus:ring-[#5346ff]"
+                              value={editingProduct.stock}
+                              onChange={(e) => setEditingProduct({ ...editingProduct, stock: Number(e.target.value) })}
+                              className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono"
                             />
-                            <span className="text-[11px] text-zinc-500">día(s) de demora.</span>
                           </div>
                         </div>
-                      )}
 
-                      <div className="flex items-center gap-2 pt-1.5 border-t border-zinc-800/40">
-                        <input
-                          type="checkbox"
-                          id="editProductConsultOnly"
-                          checked={!!editingProduct.consultOnly}
-                          onChange={(e) => setEditingProduct({ ...editingProduct, consultOnly: e.target.checked })}
-                          className="rounded border-zinc-700 bg-zinc-950 text-emerald-500 focus:ring-0 cursor-pointer h-4 w-4"
-                        />
-                        <label htmlFor="editProductConsultOnly" className="text-xs text-zinc-300 select-none cursor-pointer font-bold flex items-center gap-1.5 text-emerald-400">
-                          <Phone className="w-4 h-4 shrink-0" />
-                          <span>Sólo Consulta (Sustituye botón de Comprar por Consultar vía WhatsApp)</span>
-                        </label>
+                        <div className="flex flex-col gap-3.5 p-4 rounded-xl bg-white dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-800">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              id="editProductIs3D"
+                              checked={!!editingProduct.is3D}
+                              onChange={(e) => setEditingProduct({ ...editingProduct, is3D: e.target.checked, hoursPerUnit: e.target.checked ? (editingProduct.hoursPerUnit || 1) : undefined })}
+                              className="rounded border-zinc-700 bg-zinc-950 text-indigo-500 focus:ring-0 cursor-pointer h-4 w-4"
+                            />
+                            <label htmlFor="editProductIs3D" className="text-xs text-zinc-700 dark:text-zinc-300 select-none cursor-pointer font-bold flex items-center gap-1.5 text-indigo-500 dark:text-indigo-400">
+                              <Cpu className="w-4 h-4 shrink-0" />
+                              <span>Habilitar Fabricación y Stock 3D Bajo Demanda</span>
+                            </label>
+                          </div>
+
+                          {editingProduct.is3D && (
+                            <div className="pl-6 animate-fade-in space-y-2">
+                              <label htmlFor="editProductHours" className="block text-[10px] font-extrabold uppercase text-slate-500 dark:text-zinc-400 tracking-wider">
+                                Demora de fabricación estimada por unidad (en días):
+                              </label>
+                              <div className="flex items-center gap-2.5">
+                                <input
+                                  type="number"
+                                  id="editProductHours"
+                                  min="1"
+                                  max="100"
+                                  value={editingProduct.hoursPerUnit || 1}
+                                  onChange={(e) => setEditingProduct({ ...editingProduct, hoursPerUnit: Math.max(1, Number(e.target.value)) })}
+                                  className="w-24 px-2.5 py-1.5 rounded bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-white border border-slate-200 dark:border-zinc-800 text-xs font-mono font-bold focus:outline-none focus:ring-1 focus:ring-[#5346ff]"
+                                />
+                                <span className="text-[11px] text-zinc-500">día(s) de demora.</span>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-2 pt-1.5 border-t border-slate-100 dark:border-zinc-800/40">
+                            <input
+                              type="checkbox"
+                              id="editProductConsultOnly"
+                              checked={!!editingProduct.consultOnly}
+                              onChange={(e) => setEditingProduct({ ...editingProduct, consultOnly: e.target.checked })}
+                              className="rounded border-zinc-700 bg-zinc-950 text-emerald-500 focus:ring-0 cursor-pointer h-4 w-4"
+                            />
+                            <label htmlFor="editProductConsultOnly" className="text-xs text-zinc-700 dark:text-zinc-300 select-none cursor-pointer font-bold flex items-center gap-1.5 text-emerald-500 dark:text-emerald-400">
+                              <Phone className="w-4 h-4 shrink-0" />
+                              <span>Sólo Consulta (Sustituye botón de Comprar por Consultar vía WhatsApp)</span>
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="editProductFeatured"
+                            checked={!!editingProduct.featured}
+                            onChange={(e) => setEditingProduct({ ...editingProduct, featured: e.target.checked })}
+                            className="rounded border-zinc-700 bg-zinc-900 text-indigo-500 focus:ring-0 cursor-pointer h-4 w-4"
+                          />
+                          <label htmlFor="editProductFeatured" className="text-xs text-slate-700 dark:text-zinc-300 select-none cursor-pointer font-semibold">
+                            Marcar este producto como "Destacado"
+                          </label>
+                        </div>
                       </div>
-                    </div>
+                    )}
 
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="editProductFeatured"
-                        checked={!!editingProduct.featured}
-                        onChange={(e) => setEditingProduct({ ...editingProduct, featured: e.target.checked })}
-                        className="rounded border-zinc-700 bg-zinc-900 text-indigo-500 focus:ring-0 cursor-pointer h-4 w-4"
-                      />
-                      <label htmlFor="editProductFeatured" className="text-xs text-zinc-300 select-none cursor-pointer font-semibold">
-                        Marcar este producto como "Destacado"
-                      </label>
-                    </div>
+                    <div className="pt-4 flex justify-between items-center border-t border-slate-100 dark:border-zinc-800 mt-4">
+                      <div className="flex gap-2">
+                        {editingProductStep > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditProductErrors({});
+                              setEditingProductStep((prev) => prev - 1);
+                            }}
+                            className="px-4 py-2 bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-200 rounded-lg text-xs font-semibold shadow-xs transition cursor-pointer"
+                          >
+                            ← Atrás
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingProduct(null);
+                            setEditingProductStep(1);
+                          }}
+                          className="px-4 py-2 text-red-500 hover:text-red-650 rounded-lg text-xs font-semibold hover:bg-red-50/50 dark:hover:bg-red-950/20 transition cursor-pointer"
+                        >
+                          Cancelar Todo
+                        </button>
+                      </div>
 
-                    <div className="pt-2 flex justify-end gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setEditingProduct(null)}
-                        className="px-4 py-2 bg-zinc-800 text-zinc-400 hover:text-white rounded-lg text-xs transition cursor-pointer"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={saving}
-                        className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <span>{saving ? "Salvando..." : "Guardar Modificación"}</span>
-                      </button>
+                      <div className="flex gap-2">
+                        {editingProductStep < 4 ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (editingProductStep === 1) {
+                                if (!editingProduct.name || !editingProduct.name.trim()) {
+                                  setEditProductErrors({ name: "El nombre es obligatorio antes de avanzar." });
+                                  return;
+                                }
+                                if (!editingProduct.categoria_id) {
+                                  setEditProductErrors({ category: "La categoría principal es obligatoria." });
+                                  return;
+                                }
+                              }
+                              setEditProductErrors({});
+                              setEditingProductStep((prev) => prev + 1);
+                            }}
+                            className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg text-xs transition shadow-xs flex items-center gap-1 cursor-pointer"
+                          >
+                            <span>Siguiente Paso</span>
+                            <span>→</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="submit"
+                            disabled={saving}
+                            className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs transition shadow-md flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <span>{saving ? "Guardando..." : "Guardar Modificación"}</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </form>
                 )}
@@ -9325,6 +9762,7 @@ const resText = await uploadRes.text();
                                           <button
                                             onClick={() => {
                                               setEditingProduct(p);
+                                              setEditingProductStep(1);
                                               setAdminSection("products");
                                             }}
                                             className="underline text-[10px] text-indigo-300 font-extrabold hover:text-indigo-200 cursor-pointer"

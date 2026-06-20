@@ -231,6 +231,54 @@ export default function ProductDetails({
     }
   }
 
+  const activeSku = useMemo(() => {
+    const baseCode = product.codigo || "";
+    if (!variants || variants.length === 0) return baseCode;
+    
+    // Exact size and color matches
+    if (selectedSize && selectedColor) {
+      const match = variants.find(v => v.size === selectedSize && v.color === selectedColor);
+      if (match?.sku) return match.sku;
+      if (match) {
+        const sizePart = match.size === 'Único' || !match.size ? '' : `-${match.size}`;
+        const colorPart = match.color === 'General' || !match.color ? '' : `-${match.color}`;
+        return `${baseCode}${sizePart}${colorPart}`.toUpperCase();
+      }
+    }
+    
+    // Only color matched
+    if (selectedColor) {
+      let match = selectedSize ? variants.find(v => v.size === selectedSize && v.color === selectedColor) : null;
+      if (!match) {
+        match = variants.find(v => v.color === selectedColor);
+      }
+      if (match?.sku) return match.sku;
+      if (match) {
+        const sizePart = match.size === 'Único' || !match.size ? '' : `-${match.size}`;
+        const colorPart = match.color === 'General' || !match.color ? '' : `-${match.color}`;
+        return `${baseCode}${sizePart}${colorPart}`.toUpperCase();
+      }
+    }
+    
+    // Only size matched
+    if (selectedSize) {
+      const match = variants.find(v => v.size === selectedSize);
+      if (match?.sku) return match.sku;
+      if (match) {
+        const sizePart = match.size === 'Único' || !match.size ? '' : `-${match.size}`;
+        const colorPart = match.color === 'General' || !match.color ? '' : `-${match.color}`;
+        return `${baseCode}${sizePart}${colorPart}`.toUpperCase();
+      }
+    }
+    
+    // Fallback: If there's an exact SKU in the first variant that matches color/size or general
+    if (variants[0]?.sku) {
+      return variants[0].sku;
+    }
+    
+    return baseCode;
+  }, [product.codigo, variants, selectedSize, selectedColor]);
+
   const getDelayInDays = (prod: any): number => {
     const val = prod.hoursPerUnit;
     if (val === undefined || val === null) return 1;
@@ -464,11 +512,11 @@ Me gustaría coordinar stock, fabricación y envío.`;
           <span>Inicio</span>
         </button>
         
-        <ChevronRight className="w-3 h-3 text-zinc-450" />
+        <ChevronRight className="w-3 h-3 text-slate-400 dark:text-zinc-500" />
         
         <span className="capitalize">{solvedCategory.nombre || "Categoría"}</span>
         
-        <ChevronRight className="w-3 h-3 text-zinc-450" />
+        <ChevronRight className="w-3 h-3 text-slate-400 dark:text-zinc-500" />
         
         <span className={isThemeDark ? "text-zinc-100 font-bold truncate max-w-[140px] sm:max-w-none" : "text-zinc-850 font-bold truncate max-w-[140px] sm:max-w-none"}>
           {product.name}
@@ -604,13 +652,13 @@ Me gustaría coordinar stock, fabricación y envío.`;
               </h2>
 
               {/* Unique Code / SKU */}
-              {(matchedVariant?.sku || product.codigo) && (
+              {activeSku && (
                 <div className="mb-3 flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[10px] font-extrabold tracking-wider uppercase text-zinc-450 dark:text-zinc-500">
+                  <span className="text-[10px] font-extrabold tracking-wider uppercase text-zinc-400 dark:text-zinc-500">
                     CÓDIGO ÚNICO:
                   </span>
-                  <span className="px-2.5 py-0.5 bg-slate-100 dark:bg-[#121214] border border-slate-200 dark:border-zinc-800 rounded font-mono text-[11px] font-black text-indigo-500 dark:text-indigo-400 tracking-wider select-all shadow-sm">
-                    {matchedVariant?.sku || product.codigo}
+                  <span className="px-2.5 py-0.5 bg-indigo-500/5 dark:bg-[#121214] border border-indigo-500/25 dark:border-zinc-800 rounded font-mono text-[11px] font-black text-[#5346ff] dark:text-[#a599ff] tracking-wider select-all shadow-sm">
+                    {activeSku}
                   </span>
                 </div>
               )}

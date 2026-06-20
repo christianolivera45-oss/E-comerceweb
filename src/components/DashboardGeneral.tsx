@@ -260,21 +260,21 @@ export function DashboardGeneral({
     <div className="w-full space-y-6 animate-fade-in">
       
       {/* 1. Welcoming Context Ribbon */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 text-zinc-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative overflow-hidden shadow-xl">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 text-zinc-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative overflow-hidden shadow-xl">
         <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-5 pointer-events-none">
           <TrendingUp className="h-full w-full stroke-[1px] rotate-12 scale-110" />
         </div>
-        <div className="space-y-1 relative z-10">
-          <h3 className="text-lg font-bold tracking-tight">Evolución de Negocio de Juem</h3>
-          <p className="text-xs text-zinc-400 font-medium">
-            Métricas de comercialización y rentabilidad en tiempo real. Configuración orientada a volumen de pedidos y ticket de compra promedio.
+        <div className="space-y-1.5 relative z-10">
+          <h3 className="text-xl font-bold tracking-tight text-white font-sans">Panel de Control y Métricas de Juem</h3>
+          <p className="text-xs text-zinc-400 leading-relaxed max-w-3xl">
+            Monitoreo integral de ventas, rendimiento de catálogo, cupones y niveles de stock. Toda la información comercial se encuentra optimizada para facilitar la lectura del administrador y agilizar la toma de decisiones.
           </p>
         </div>
         <div className="flex gap-2 shrink-0 relative z-10">
-          <div className="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-450 rounded-lg text-xs font-bold flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
-            <span>Métricas del Mes Sincronizadas</span>
-          </div>
+          <span className="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg text-[11px] font-bold flex items-center gap-1.5">
+            <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+            <span>Datos en Tiempo Real</span>
+          </span>
         </div>
       </div>
 
@@ -282,9 +282,9 @@ export function DashboardGeneral({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         
         {/* KPI Card 1: Month Sales / Ventas del Mes */}
-        <div className="bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-850 shadow-sm flex flex-col justify-between space-y-4">
+        <div className="bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] uppercase font-mono font-black text-slate-500 dark:text-zinc-450 tracking-wider">Ventas del Mes</span>
+            <span className="text-[10px] sm:text-[11px] uppercase font-bold text-slate-500 dark:text-zinc-400 tracking-wider">Ventas de Últimos 30 Días</span>
             <div className="h-9 w-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/35 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
               <DollarSign className="h-5 w-5" />
             </div>
@@ -295,7 +295,7 @@ export function DashboardGeneral({
                 ${salesHistory.totalSales.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
-            <p className="text-[10px] text-emerald-500 font-bold mt-1 flex items-center gap-0.5">
+            <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-1.5 flex items-center gap-0.5">
               <ArrowUpRight className="h-3.5 w-3.5 inline shrink-0" />
               <span>+14.2% vs período anterior</span>
             </p>
@@ -303,9 +303,9 @@ export function DashboardGeneral({
         </div>
 
         {/* KPI Card 2: Orders Count / Cantidad de Pedidos */}
-        <div className="bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-850 shadow-sm flex flex-col justify-between space-y-4">
+        <div className="bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] uppercase font-mono font-black text-slate-500 dark:text-zinc-450 tracking-wider">Cantidad de Pedidos</span>
+            <span className="text-[10px] sm:text-[11px] uppercase font-bold text-slate-500 dark:text-zinc-400 tracking-wider">Total de Pedidos</span>
             <div className="h-9 w-9 rounded-xl bg-blue-50 dark:bg-blue-950/35 text-blue-600 dark:text-blue-400 flex items-center justify-center">
               <ShoppingBag className="h-5 w-5" />
             </div>
@@ -316,17 +316,17 @@ export function DashboardGeneral({
                 {salesHistory.totalOrders}
               </span>
             </div>
-            <p className="text-[10px] text-zinc-450 dark:text-zinc-500 font-semibold mt-1">
-              Simulado en base a consultas y carritos de WhatsApp
+            <p className="text-[10px] text-slate-600 dark:text-zinc-300 font-semibold mt-1.5">
+              Sincronizado con consultas de WhatsApp
             </p>
           </div>
         </div>
 
         {/* KPI Card 3: Average Ticket / Ticket Promedio */}
-        <div className="bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-850 shadow-sm flex flex-col justify-between space-y-4">
+        <div className="bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] uppercase font-mono font-black text-slate-500 dark:text-zinc-450 tracking-wider">Ticket Promedio</span>
-            <div className="h-9 w-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/35 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+            <span className="text-[10px] sm:text-[11px] uppercase font-bold text-slate-500 dark:text-zinc-400 tracking-wider">Ticket Promedio</span>
+            <div className="h-9 w-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/35 text-indigo-600 dark:text-indigo-455 flex items-center justify-center">
               <Tag className="h-5 w-5" />
             </div>
           </div>
@@ -336,16 +336,16 @@ export function DashboardGeneral({
                 ${salesHistory.avgTicket.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
-            <p className="text-[10px] text-indigo-500 font-bold mt-1 flex items-center gap-0.5">
-              <span>Optimizado por ventas cruzadas y variantes</span>
+            <p className="text-[10px] text-slate-600 dark:text-zinc-300 font-semibold mt-1.5">
+              Valor de compra estimado por pedido
             </p>
           </div>
         </div>
 
         {/* KPI Card 4: Estimated Profit / Ganancia Estimada */}
-        <div className="bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-850 shadow-sm flex flex-col justify-between space-y-4 font-sans">
+        <div className="bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-4 font-sans">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] uppercase font-mono font-black text-slate-500 dark:text-zinc-450 tracking-wider">Ganancia Estimada</span>
+            <span className="text-[10px] sm:text-[11px] uppercase font-bold text-slate-500 dark:text-zinc-400 tracking-wider">Ganancia Estimada</span>
             <div className="h-9 w-9 rounded-xl bg-violet-50 dark:bg-violet-950/35 text-violet-600 dark:text-violet-400 flex items-center justify-center">
               <Percent className="h-5 w-5" />
             </div>
@@ -356,8 +356,8 @@ export function DashboardGeneral({
                 ${salesHistory.totalProfit.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
-            <p className="text-[10px] text-zinc-450 dark:text-zinc-500 font-semibold mt-1">
-              Margen promedio deducido de un{(salesHistory.totalProfit / (salesHistory.totalSales || 1) * 100).toFixed(0)}%
+            <p className="text-[10px] text-slate-600 dark:text-zinc-300 font-semibold mt-1.5">
+              Retorno promedio estimado en {(salesHistory.totalProfit / (salesHistory.totalSales || 1) * 100).toFixed(0)}%
             </p>
           </div>
         </div>
@@ -375,13 +375,13 @@ export function DashboardGeneral({
                 <BarChart3 className="h-4.5 w-4.5 text-emerald-500" />
                 <span>Evolución de Ventas (Últimos 30 días)</span>
               </h4>
-              <p className="text-[10px] text-zinc-450 dark:text-zinc-500">Mueve el cursor por encima de las barras para ver información del día.</p>
+              <p className="text-[10px] text-slate-600 dark:text-zinc-400 font-medium">Mueve el cursor por encima de las barras para ver información del día.</p>
             </div>
 
             {/* Live Interactive Detail bubble */}
             {currentChartSelected && (
-              <div className="bg-slate-50 dark:bg-zinc-900 border border-slate-100 dark:border-zinc-850 px-3 py-1.5 rounded-xl text-left sm:text-right font-sans shrink-0">
-                <p className="text-[10px] text-zinc-450 font-semibold">{formatSpanishDate(currentChartSelected.date)}</p>
+              <div className="bg-slate-50 dark:bg-zinc-900 border border-slate-100 dark:border-zinc-855 px-3 py-1.5 rounded-xl text-left sm:text-right font-sans shrink-0">
+                <p className="text-[10px] text-slate-600 dark:text-zinc-400 font-bold">{formatSpanishDate(currentChartSelected.date)}</p>
                 <div className="flex items-center gap-2.5 mt-0.5">
                   <span className="text-xs font-extrabold text-slate-900 dark:text-white">${Math.round(currentChartSelected.sales).toLocaleString("es-AR")}</span>
                   <span className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold px-1.5 py-0.2 rounded-md">{currentChartSelected.ordersCount} {currentChartSelected.ordersCount === 1 ? "pedido" : "pedidos"}</span>
@@ -499,7 +499,7 @@ export function DashboardGeneral({
             </div>
           </div>
 
-          <div className="bg-slate-50 dark:bg-zinc-900/50 border border-slate-100 dark:border-zinc-850 p-2.5 rounded-xl flex items-center gap-2 text-[10px] text-zinc-450 dark:text-zinc-500">
+          <div className="bg-slate-50 dark:bg-zinc-900/50 border border-slate-100 dark:border-zinc-800 p-2.5 rounded-xl flex items-center gap-2 text-[10px] text-slate-600 dark:text-zinc-300 font-semibold">
             <MessageSquare className="w-4 h-4 text-emerald-500 shrink-0" />
             <span>Los clientes de WhatsApp compran principalmente el talle estándar de estos modelos.</span>
           </div>
@@ -515,7 +515,7 @@ export function DashboardGeneral({
               <AlertCircle className="h-4.5 w-4.5 text-amber-500 animate-pulse" />
               <span>Alertas de Reposición (Stock Bajo)</span>
             </h4>
-            <p className="text-[10px] text-zinc-450 dark:text-zinc-500">
+            <p className="text-[10px] text-slate-600 dark:text-zinc-400 font-semibold">
               Productos activos que superan o igualan el stock de seguridad límite establecido ({lowStockThresholdSetting} unidades).
             </p>
           </div>
@@ -560,7 +560,7 @@ export function DashboardGeneral({
                     />
                     <div className="min-w-0">
                       <h5 className="font-bold text-xs text-slate-800 dark:text-zinc-200 truncate leading-tight group-hover:text-indigo-500 transition">{prod.name}</h5>
-                      <span className="text-[9px] uppercase tracking-wider text-zinc-450 mt-1 block font-semibold">{prod.category}</span>
+                      <span className="text-[9px] uppercase tracking-wider text-slate-500 dark:text-zinc-400 mt-1 block font-extrabold">{prod.category}</span>
                     </div>
                   </div>
 
@@ -596,9 +596,9 @@ export function DashboardGeneral({
           <div className="lg:col-span-4 space-y-4">
             
             {/* KPI Card Section: Inventory Value */}
-            <div className="bg-slate-50/50 dark:bg-zinc-900/35 p-5 rounded-2xl border border-slate-200/60 dark:border-zinc-850 shadow-sm flex flex-col justify-between space-y-4">
+            <div className="bg-slate-50/50 dark:bg-zinc-900/35 p-5 rounded-2xl border border-slate-200/60 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-[9px] uppercase font-mono font-black text-slate-500 dark:text-zinc-450 tracking-wider">Valor total del Inventario</span>
+                <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-zinc-400 tracking-wider">Valor total del Inventario</span>
                 <Box className="h-4 w-4 text-zinc-500" />
               </div>
               <div>
@@ -607,7 +607,7 @@ export function DashboardGeneral({
                     ${totalInventoryValue.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
-                <p className="text-[10px] text-zinc-450 dark:text-zinc-500 mt-1">
+                <p className="text-[10px] text-slate-600 dark:text-zinc-400 font-semibold mt-1">
                   {activeProducts.reduce((sum, p) => sum + p.stock, 0)} unidades físicas valorizadas en costo-compras.
                 </p>
               </div>
@@ -616,10 +616,10 @@ export function DashboardGeneral({
             {/* KPI Card: Coupons Admin Section */}
             <div 
               onClick={() => navigateAdminSection("promos")} 
-              className="bg-slate-50/50 dark:bg-zinc-900/35 p-5 rounded-2xl border border-slate-200/60 dark:border-zinc-850 shadow-sm flex flex-col justify-between space-y-4 cursor-pointer hover:border-indigo-500/40 transition group"
+              className="bg-slate-50/50 dark:bg-zinc-900/35 p-5 rounded-2xl border border-slate-200/60 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-4 cursor-pointer hover:border-indigo-500/40 transition group"
             >
               <div className="flex items-center justify-between">
-                <span className="text-[9px] uppercase font-mono font-black text-slate-500 dark:text-zinc-450 tracking-wider">Cupones de Descuento Activos</span>
+                <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-zinc-400 tracking-wider">Cupones de Descuento Activos</span>
                 <Tag className="h-4 w-4 text-zinc-500 group-hover:text-indigo-500 transition" />
               </div>
               <div>
@@ -627,7 +627,7 @@ export function DashboardGeneral({
                   <span className="text-xl font-bold tracking-tight text-slate-800 dark:text-zinc-200">
                     {activeCoupons.length}
                   </span>
-                  <span className="text-[10px] font-mono text-zinc-450 dark:text-zinc-500">campañas</span>
+                  <span className="text-[10px] font-mono text-slate-600 dark:text-zinc-400 font-semibold">campañas</span>
                 </div>
                 <p className="text-[9px] text-indigo-500 font-bold mt-1 group-hover:underline flex items-center gap-0.5">
                   <span>Administrar Cupones</span>
@@ -639,10 +639,10 @@ export function DashboardGeneral({
             {/* KPI Card: Payments Admin Section */}
             <div 
               onClick={() => navigateAdminSection("payments")} 
-              className="bg-slate-50/50 dark:bg-zinc-900/35 p-5 rounded-2xl border border-slate-200/60 dark:border-zinc-850 shadow-sm flex flex-col justify-between space-y-4 cursor-pointer hover:border-indigo-500/40 transition group"
+              className="bg-slate-50/50 dark:bg-zinc-900/35 p-5 rounded-2xl border border-slate-200/60 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-4 cursor-pointer hover:border-indigo-500/40 transition group"
             >
               <div className="flex items-center justify-between">
-                <span className="text-[9px] uppercase font-mono font-black text-slate-500 dark:text-zinc-450 tracking-wider">Métodos de Pago</span>
+                <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-zinc-400 tracking-wider">Métodos de Pago</span>
                 <CreditCard className="h-4 w-4 text-zinc-500 group-hover:text-indigo-500 transition" />
               </div>
               <div>
@@ -652,9 +652,9 @@ export function DashboardGeneral({
                       store.settings?.mercadopagoActive !== false,
                       store.settings?.transferActive !== false,
                       store.settings?.cashActive !== false
-                    ].filter(Boolean).length}
+                     ].filter(Boolean).length}
                   </span>
-                  <span className="text-[10px] font-mono text-zinc-450 dark:text-zinc-500">activos</span>
+                  <span className="text-[10px] font-mono text-slate-600 dark:text-zinc-400 font-semibold">activos</span>
                 </div>
                 <p className="text-[9px] text-indigo-500 font-bold mt-1 group-hover:underline flex items-center gap-0.5">
                   <span>Administrar Pagos</span>
@@ -672,7 +672,7 @@ export function DashboardGeneral({
                 <Folder className="h-4.5 w-4.5 text-zinc-500" />
                 <span>Distribución del Stock por Categorías</span>
               </h5>
-              <p className="text-[10px] text-zinc-450 dark:text-zinc-500">Cantidad y valor monetario del inventario clasificado.</p>
+              <p className="text-[10px] text-slate-600 dark:text-zinc-400 font-semibold">Cantidad y valor monetario del inventario clasificado.</p>
             </div>
 
             <div className="space-y-3 pt-2 max-h-[175px] overflow-y-auto pr-1">

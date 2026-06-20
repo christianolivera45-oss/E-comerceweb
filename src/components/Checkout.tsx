@@ -2216,7 +2216,7 @@ export default function Checkout({
                                  setModalError("");
                                  setIsAddressModalOpen(true);
                                }}
-                              className="p-1 rounded hover:bg-zinc-800/60 text-zinc-450 hover:text-white transition"
+                              className="p-1 rounded hover:bg-zinc-800/60 text-zinc-400 hover:text-white dark:text-zinc-500 transition"
                               title="Editar dirección"
                             >
                               <Edit className="h-3 w-3" />
@@ -2233,7 +2233,7 @@ export default function Checkout({
                                    setSelectedAddressId("");
                                  }
                                }}
-                              className="p-1 rounded hover:bg-red-950/20 text-zinc-450 hover:text-red-400 transition"
+                              className="p-1 rounded hover:bg-red-950/20 text-zinc-400 hover:text-red-400 dark:text-zinc-500 transition"
                               title="Eliminar dirección"
                             >
                               <Trash2 className="h-3 w-3" />
@@ -2876,7 +2876,7 @@ export default function Checkout({
               <button
                 type="button"
                 onClick={() => setIsAddressModalOpen(false)}
-                className="p-1 rounded-lg hover:bg-[#050B1A]/40 text-zinc-450 hover:text-[#E6BF76] transition cursor-pointer"
+                className="p-1 rounded-lg hover:bg-[#050B1A]/40 text-[#E6BF76]/80 hover:text-[#E6BF76] transition cursor-pointer"
               >
                 <X className="h-4.5 w-4.5" />
               </button>
@@ -3071,7 +3071,7 @@ export default function Checkout({
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 px-0.5 text-zinc-455">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 px-0.5 text-zinc-400">
                     Apto / Piso / Bloque
                   </label>
                   <input

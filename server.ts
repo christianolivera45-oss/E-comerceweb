@@ -633,7 +633,7 @@ async function getDbState(): Promise<ShopState> {
     const prodRes = await pool.query(`
       SELECT id, name, price, stock, category, featured, image_url, created_at, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors, is_3d, hours_per_unit,
              size_chart_enabled, size_chart_show_superior, size_chart_show_inferior, size_chart_show_calzado, size_chart_show_recommender, size_chart_data, consult_only,
-             categorias_adicionales, subcategorias_adicionales
+             categorias_adicionales, subcategorias_adicionales, codigo
       FROM public.products 
       WHERE active = true 
       ORDER BY id DESC;
@@ -657,7 +657,7 @@ async function getDbState(): Promise<ShopState> {
     // Fetch product variants
     const productVariantsMap: Record<number, any[]> = {};
     try {
-      const variantsRes = await pool.query("SELECT id, product_id, size_value, color_name, color_code, additional_price, stock, image_url, price FROM public.product_variants WHERE active = true;");
+      const variantsRes = await pool.query("SELECT id, product_id, sku, size_value, color_name, color_code, additional_price, stock, image_url, price FROM public.product_variants WHERE active = true;");
       for (const vRow of variantsRes.rows) {
         const pid = vRow.product_id;
         if (!productVariantsMap[pid]) {
@@ -665,6 +665,7 @@ async function getDbState(): Promise<ShopState> {
         }
         productVariantsMap[pid].push({
           id: String(vRow.id),
+          sku: vRow.sku || "",
           size: vRow.size_value || "",
           color: vRow.color_name || "",
           colorCode: vRow.color_code || "",
@@ -682,6 +683,7 @@ async function getDbState(): Promise<ShopState> {
       const pid = row.id;
       return {
         id: String(pid),
+        codigo: row.codigo || "",
         name: row.name,
         price: Number(row.price),
         stock: Number(row.stock),
@@ -900,8 +902,8 @@ async function saveDbState(state: ShopState): Promise<boolean> {
           INSERT INTO public.products (
             name, price, stock, category, featured, image_url, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors, is_3d, hours_per_unit,
             size_chart_enabled, size_chart_show_superior, size_chart_show_inferior, size_chart_show_calzado, size_chart_show_recommender, size_chart_data, consult_only,
-            categorias_adicionales, subcategorias_adicionales
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+            categorias_adicionales, subcategorias_adicionales, codigo
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
           RETURNING id;
         `, [
           prod.name, priceVal, stockVal, prod.category, featuredVal, prod.imageUrl,
@@ -910,7 +912,8 @@ async function saveDbState(state: ShopState): Promise<boolean> {
           sizeChartEnabledVal, sizeChartShowSuperiorVal, sizeChartShowInferiorVal, sizeChartShowCalzadoVal, sizeChartShowRecommenderVal, sizeChartDataVal,
           consultOnlyVal,
           catAdicionales,
-          subcatAdicionales
+          subcatAdicionales,
+          prod.codigo || ""
         ]);
         prodId = insertRes.rows[0].id;
         prod.id = String(prodId);
@@ -924,8 +927,9 @@ async function saveDbState(state: ShopState): Promise<boolean> {
             size_chart_enabled = $16, size_chart_show_superior = $17, size_chart_show_inferior = $18, size_chart_show_calzado = $19, size_chart_show_recommender = $20, size_chart_data = $21,
             consult_only = $22,
             categorias_adicionales = $23,
-            subcategorias_adicionales = $24
-          WHERE id = $25;
+            subcategorias_adicionales = $24,
+            codigo = $25
+          WHERE id = $26;
         `, [
           prod.name, priceVal, stockVal, prod.category, featuredVal, prod.imageUrl,
           prod.description || "", prod.categoria_id, originalPriceVal, prod.subcategoria_id,
@@ -934,6 +938,7 @@ async function saveDbState(state: ShopState): Promise<boolean> {
           consultOnlyVal,
           catAdicionales,
           subcatAdicionales,
+          prod.codigo || "",
           prodId
         ]);
       }
@@ -1054,6 +1059,7 @@ async function initPostgresStore(): Promise<ShopState | null> {
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS original_price NUMERIC(10, 2);
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS subcategoria_id TEXT;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS codigo TEXT;
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS categoria_id TEXT;
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS is_3d BOOLEAN DEFAULT false;
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS hours_per_unit INTEGER;

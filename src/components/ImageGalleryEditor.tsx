@@ -270,8 +270,8 @@ export default function ImageGalleryEditor({ images, onChange, isThemeDark }: Im
             <ImageIcon className="h-4 w-4 text-indigo-505 dark:text-indigo-400" />
             Control de Imágenes Único
           </h3>
-          <p className="text-[10px] text-zinc-450 dark:text-zinc-500">
-            Sube o arrastra tus imágenes. La primera de la lista será la <strong className="text-indigo-600 dark:text-indigo-400">Principal</strong>. Arrástralas para reordenar.
+          <p className="text-[10px] text-slate-600 dark:text-zinc-400 font-medium">
+            Sube o arrastra tus imágenes. La primera de la lista será la <strong className="text-indigo-600 dark:text-indigo-400 font-bold">Principal</strong>. Arrástralas para reordenar.
           </p>
           <div className="mt-1.5 p-2 bg-indigo-50/50 dark:bg-zinc-900/45 border border-indigo-500/10 rounded-xl text-[9.5px] text-slate-600 dark:text-zinc-400 leading-relaxed max-w-2xl">
             💡 <strong>Guía Visual de Calidad:</strong> Para que tus imágenes se exhiban en su máximo tamaño posible y queden perfectamente encuadradas, te recomendamos usar <strong>formato cuadrado (relación de aspecto 1:1)</strong>, fotos tomadas con <strong>fondo transparente o de un color sólido uniforme</strong>, y dejar un <strong>margen o "aire" de aproximadamente 10%</strong> en los bordes para una visualización premium y pulida sin recortes accidentales.
@@ -328,7 +328,7 @@ export default function ImageGalleryEditor({ images, onChange, isThemeDark }: Im
         <div className="flex gap-2">
           <div className="relative flex-1">
             <span className="absolute left-3 inset-y-0 flex items-center pointer-events-none">
-              <LinkIcon className="h-3.5 w-3.5 text-zinc-450 dark:text-zinc-650" />
+              <LinkIcon className="h-3.5 w-3.5 text-slate-400 dark:text-zinc-500" />
             </span>
             <input
               type="text"
@@ -383,7 +383,7 @@ export default function ImageGalleryEditor({ images, onChange, isThemeDark }: Im
       {/* GALERÍA / LIST OF LOADED IMAGES (GRID) */}
       {images.length > 0 ? (
         <div className="space-y-2">
-          <div className="text-[10px] text-zinc-455 font-bold uppercase tracking-wider">Galería del Producto</div>
+          <div className="text-[10px] text-slate-700 dark:text-zinc-300 font-black uppercase tracking-wider">Galería del Producto</div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-100/20 dark:bg-zinc-950/60 p-3 rounded-xl border border-slate-150 dark:border-zinc-900/80">
             {images.map((imgUrl, i) => {
               const isPrincipal = i === 0;

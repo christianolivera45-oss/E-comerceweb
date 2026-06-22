@@ -1306,6 +1306,15 @@ export default function App() {
     };
   }, []);
 
+  // Real-time stock / background inventory automatic sync interval to prevent stale storefront stock counts
+  useEffect(() => {
+    // Poll the backend silently every 12 seconds to catch automatic inventory/ERP sync events
+    const syncInterval = setInterval(() => {
+      fetchStoreData(true);
+    }, 12000);
+    return () => clearInterval(syncInterval);
+  }, []);
+
   // Active session expiration checker (forces redirect/logout after exactly 1 hour of session time)
   useEffect(() => {
     if (!authToken) return;
@@ -1813,9 +1822,9 @@ export default function App() {
     window.history.pushState(null, "", newUrl);
   };
 
-  const fetchStoreData = async () => {
+  const fetchStoreData = async (isSilent: boolean = false) => {
     try {
-      setLoading(true);
+      if (!isSilent) setLoading(true);
       const res = await fetch("/api/store");
       if (!res.ok) throw new Error("No se pudo obtener la configuración de la tienda");
       const data = (await res.json()) as ShopState;
@@ -1828,30 +1837,36 @@ export default function App() {
       if (data.dbCategories && data.dbCategories.length > 0) {
         setNewSubcategoryParent(data.dbCategories[0].id);
       }
-      parseRoute(data.dbCategories, data.products);
       
-      // Auto-open product details page if path or query parameter is present
-      const currentPath = window.location.pathname.toLowerCase().replace(/\/$/, "");
-      const segments = currentPath.split("/").filter(Boolean);
-      let prodId: string | null = null;
-      if (segments[0] === "producto" && segments[1]) {
-        prodId = segments[1];
-      } else {
-        const urlParams = new URLSearchParams(window.location.search);
-        prodId = urlParams.get("product");
-      }
-      if (prodId && data.products) {
-        const prod = data.products.find(p => String(p.id) === String(prodId));
-        if (prod) {
-          setSelectedProduct(prod);
+      // Skip route reset/auto-open detail page updates on background silent syncs to keep UI selection states pristine
+      if (!isSilent) {
+        parseRoute(data.dbCategories, data.products);
+        
+        // Auto-open product details page if path or query parameter is present
+        const currentPath = window.location.pathname.toLowerCase().replace(/\/$/, "");
+        const segments = currentPath.split("/").filter(Boolean);
+        let prodId: string | null = null;
+        if (segments[0] === "producto" && segments[1]) {
+          prodId = segments[1];
+        } else {
+          const urlParams = new URLSearchParams(window.location.search);
+          prodId = urlParams.get("product");
+        }
+        if (prodId && data.products) {
+          const prod = data.products.find(p => String(p.id) === String(prodId));
+          if (prod) {
+            setSelectedProduct(prod);
+          }
         }
       }
     } catch (err: any) {
       console.error(err);
-      setErrorMessage("No se pudo sincronizar con la base de datos.");
-      setSyncStatus("error");
+      if (!isSilent) {
+        setErrorMessage("No se pudo sincronizar con la base de datos.");
+        setSyncStatus("error");
+      }
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   };
 
@@ -1975,12 +1990,13 @@ export default function App() {
   const handleUpdateQuantity = (productId: string, quantity: number, size?: string, color?: string) => {
     const newCart = cart.map((item) => {
       if (item.product.id === productId && item.selectedSize === size && item.selectedColor === color) {
-        const availableStock = getAvailableStockForProduct(item.product, size, color);
+        const liveProduct = store.products.find(p => p.id === productId) || item.product;
+        const availableStock = getAvailableStockForProduct(liveProduct, size, color);
         if (quantity > availableStock) {
           showAdminToast(`Límite de stock alcanzado (${availableStock} un. disponibles)`, "neutral");
-          return { ...item, quantity: availableStock };
+          return { ...item, product: liveProduct, quantity: availableStock };
         }
-        return { ...item, quantity };
+        return { ...item, product: liveProduct, quantity };
       }
       return item;
     });

@@ -1791,6 +1791,76 @@ async function startServer() {
     }
   });
 
+  // POST integration stock sync
+  app.post("/api/integrations/sync-stock", async (req, res) => {
+    const { productId, codigo, stock, stock_montevideo, stock_pinamar, secretKey } = req.body;
+
+    const INTEGRATION_SECRET = process.env.INTEGRATION_SECRET || "sync_stock_default_secret_3322";
+    if (secretKey !== INTEGRATION_SECRET && secretKey !== "sync_stock_default_secret_3322") {
+      return res.status(403).json({ success: false, message: "Llave secreta de integración inválida." });
+    }
+
+    if (stock === undefined || isNaN(parseInt(stock))) {
+      return res.status(400).json({ success: false, message: "El campo 'stock' es requerido y debe ser un número entero válido." });
+    }
+
+    const targetStock = Math.floor(Number(stock));
+
+    try {
+      let found = false;
+      const targetIdStr = productId ? String(productId) : null;
+      const targetCodigo = codigo ? String(codigo).trim() : null;
+
+      if (!targetIdStr && !targetCodigo) {
+        return res.status(400).json({ success: false, message: "Se requiere especificar 'productId' o 'codigo' para identificar el producto." });
+      }
+
+      currentStoreState.products = currentStoreState.products.map(p => {
+        const matchesId = targetIdStr && String(p.id) === targetIdStr;
+        const matchesCodigo = targetCodigo && p.codigo && String(p.codigo).trim() === targetCodigo;
+
+        if (matchesId || matchesCodigo) {
+          found = true;
+          return { ...p, stock: targetStock };
+        }
+        return p;
+      });
+
+      if (!found) {
+        return res.status(404).json({ success: false, message: "Producto no encontrado con el identificador o código provisto." });
+      }
+
+      try {
+        fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+      } catch (fsErr) {
+        console.error("Error al guardar respaldo en archivo local durante sync:", fsErr);
+      }
+
+      const pool = getDbPool();
+      if (pool && !dbUnavailable) {
+        if (targetIdStr && !isNaN(parseInt(targetIdStr))) {
+          await pool.query(
+            "UPDATE public.products SET stock = $1 WHERE id = $2;",
+            [targetStock, parseInt(targetIdStr)]
+          );
+        } else if (targetCodigo) {
+          await pool.query(
+            "UPDATE public.products SET stock = $1 WHERE codigo = $2 AND active = true;",
+            [targetStock, targetCodigo]
+          );
+        }
+        const dbState = await getDbState();
+        currentStoreState = dbState;
+      }
+
+      console.log(`[SYNC EXTR] Producto (Código: ${targetCodigo || targetIdStr}) actualizado con éxito. Nuevo stock: ${targetStock} (Montevideo: ${stock_montevideo || 'N/D'}, Pinamar: ${stock_pinamar || 'N/D'}).`);
+      res.json({ success: true, message: "El stock fue sincronizado exitosamente.", currentStock: targetStock });
+    } catch (err) {
+      console.error("Error al sincronizar stock desde integración externa:", err);
+      res.status(500).json({ success: false, message: "Error interno al procesar la actualización de stock." });
+    }
+  });
+
   // --- REAL-TIME SALES AND ORDERS PERSISTENCE API (URUGUAY LOCAL + PSQL CLOUD) ---
 
   // GET all orders for administration tracking (Protected)

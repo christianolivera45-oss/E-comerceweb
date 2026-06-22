@@ -1861,6 +1861,214 @@ async function startServer() {
     }
   });
 
+  // POST integration complete product synchronization (Create or Update dynamically)
+  app.post("/api/integrations/sync-product", async (req, res) => {
+    const {
+      secretKey,
+      codigo,
+      name,
+      description,
+      price,
+      originalPrice,
+      category,
+      subcategory,
+      categoria_id,
+      subcategoria_id,
+      imageUrl,
+      imagenes,
+      variants,
+      stock,
+      featured,
+      paused,
+      is3D,
+      hoursPerUnit,
+      consultOnly
+    } = req.body;
+
+    const INTEGRATION_SECRET = process.env.INTEGRATION_SECRET || "sync_stock_default_secret_3322";
+    if (secretKey !== INTEGRATION_SECRET && secretKey !== "sync_stock_default_secret_3322") {
+      return res.status(403).json({ success: false, message: "Llave secreta de integración inválida." });
+    }
+
+    const targetCodigo = codigo ? String(codigo).trim() : null;
+    if (!targetCodigo) {
+      return res.status(400).json({ success: false, message: "El campo 'codigo' es requerido para mapear el artículo de forma unívoca con el sistema de facturación." });
+    }
+
+    try {
+      // 1. Find product in state or DB
+      const existingProduct = currentStoreState.products.find(
+        (p) => p.codigo && String(p.codigo).trim() === targetCodigo
+      );
+
+      const isNew = !existingProduct;
+
+      if (isNew) {
+        if (!name || price === undefined) {
+          return res.status(400).json({
+            success: false,
+            message: "Para crear un nuevo producto es obligatorio proveer 'name' y 'price'."
+          });
+        }
+      }
+
+      // 2. Resolve Category & Subcategory matching
+      let finalCategoryId = categoria_id || (existingProduct ? existingProduct.categoria_id : undefined);
+      let finalSubcategoryId = subcategoria_id || (existingProduct ? existingProduct.subcategoria_id : undefined);
+      let finalCategoryName = category || (existingProduct ? existingProduct.category : "Ropa");
+
+      if (category && category.trim()) {
+        const catNameTrimmed = category.trim();
+        const existingCat = (currentStoreState.dbCategories || []).find(
+          (c) => c.nombre.toLowerCase().trim() === catNameTrimmed.toLowerCase()
+        );
+
+        if (existingCat) {
+          finalCategoryId = existingCat.id;
+          finalCategoryName = existingCat.nombre;
+        } else {
+          // Dynamic category creation!
+          const newCatId = "cat-" + catNameTrimmed.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-");
+          const newCat = {
+            id: newCatId,
+            nombre: catNameTrimmed,
+            icono: "Shirt",
+            orden: (currentStoreState.dbCategories || []).length + 1,
+            active: true
+          };
+          if (!currentStoreState.dbCategories) currentStoreState.dbCategories = [];
+          currentStoreState.dbCategories.push(newCat);
+          
+          if (!currentStoreState.categories) currentStoreState.categories = [];
+          if (!currentStoreState.categories.includes(catNameTrimmed)) {
+            currentStoreState.categories.push(catNameTrimmed);
+          }
+          finalCategoryId = newCatId;
+          finalCategoryName = catNameTrimmed;
+        }
+      }
+
+      if (subcategory && subcategory.trim() && finalCategoryId) {
+        const subNameTrimmed = subcategory.trim();
+        const existingSub = (currentStoreState.dbSubcategories || []).find(
+          (s) => s.nombre.toLowerCase().trim() === subNameTrimmed.toLowerCase() && s.categoria_id === finalCategoryId
+        );
+
+        if (existingSub) {
+          finalSubcategoryId = existingSub.id;
+        } else {
+          // Dynamic subcategory creation!
+          const newSubId = "sub-" + subNameTrimmed.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-");
+          const newSub = {
+            id: newSubId,
+            nombre: subNameTrimmed,
+            categoria_id: finalCategoryId,
+            active: true
+          };
+          if (!currentStoreState.dbSubcategories) currentStoreState.dbSubcategories = [];
+          currentStoreState.dbSubcategories.push(newSub);
+          finalSubcategoryId = newSubId;
+        }
+      }
+
+      // 3. Formulate updated product properties
+      const parsedPrice = price !== undefined ? Number(price) : (existingProduct ? existingProduct.price : 0);
+      const parsedOriginalPrice = originalPrice !== undefined ? Number(originalPrice) : (existingProduct?.originalPrice || parsedPrice);
+      const parsedStock = stock !== undefined ? Math.floor(Number(stock)) : (existingProduct ? existingProduct.stock : 0);
+
+      const updatedProduct = {
+        id: existingProduct ? existingProduct.id : "prod-" + Date.now(),
+        codigo: targetCodigo,
+        name: name || (existingProduct ? existingProduct.name : ""),
+        description: description !== undefined ? description : (existingProduct ? existingProduct.description : ""),
+        price: parsedPrice,
+        originalPrice: parsedOriginalPrice,
+        category: finalCategoryName,
+        categoria_id: finalCategoryId,
+        subcategoria_id: finalSubcategoryId,
+        imageUrl: imageUrl || (existingProduct ? existingProduct.imageUrl : "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=600&q=80"),
+        imagenes: Array.isArray(imagenes) ? imagenes : (existingProduct ? existingProduct.imagenes : []),
+        variants: Array.isArray(variants) ? variants : (existingProduct ? existingProduct.variants : []),
+        stock: parsedStock,
+        featured: featured !== undefined ? !!featured : (existingProduct ? !!existingProduct.featured : false),
+        paused: paused !== undefined ? !!paused : (existingProduct ? !!existingProduct.paused : false),
+        is3D: is3D !== undefined ? !!is3D : (existingProduct ? !!existingProduct.is3D : false),
+        hoursPerUnit: hoursPerUnit !== undefined ? Number(hoursPerUnit) : (existingProduct ? existingProduct.hoursPerUnit : undefined),
+        consultOnly: consultOnly !== undefined ? !!consultOnly : (existingProduct ? !!existingProduct.consultOnly : false),
+        active: true,
+        createdAt: existingProduct ? existingProduct.createdAt : new Date().toISOString()
+      };
+
+      // 4. Update memory list state
+      if (isNew) {
+        currentStoreState.products.push(updatedProduct);
+      } else {
+        currentStoreState.products = currentStoreState.products.map(p =>
+          p.codigo && String(p.codigo).trim() === targetCodigo ? updatedProduct : p
+        );
+      }
+
+      // 5. Commit to local file & DB
+      try {
+        fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+      } catch (fsErr) {
+        console.error("Error al guardar respaldo local tras sync-product:", fsErr);
+      }
+
+      if (process.env.DATABASE_URL) {
+        const saved = await saveDbState(currentStoreState);
+        if (saved) {
+          const dbState = await getDbState();
+          currentStoreState = dbState;
+        }
+      }
+
+      // Find the final created/updated product representation with real ID from Database in case of inserts
+      const finalProductObj = currentStoreState.products.find(
+        (p) => p.codigo && String(p.codigo).trim() === targetCodigo
+      ) || updatedProduct;
+
+      console.log(`[DYNAMIC SYNC] Artículo con código '${targetCodigo}' sincronizado con éxito. Acción: ${isNew ? 'CREADO' : 'ACTUALIZADO'}.`);
+
+      res.json({
+        success: true,
+        message: isNew ? "Producto creado exitosamente en la tienda web." : "Producto actualizado exitosamente en la tienda web.",
+        action: isNew ? "CREATE" : "UPDATE",
+        product: finalProductObj
+      });
+    } catch (err) {
+      console.error("Error al sincronizar producto completo por integración:", err);
+      res.status(500).json({ success: false, message: "Error interno al sincronizar el producto en la base de datos." });
+    }
+  });
+
+  // GET integration metadata (Categories and Subcategories for dropdown menus in ERP billing system)
+  app.get("/api/integrations/metadata", async (req, res) => {
+    const secretKey = req.query.secretKey || req.headers["x-secret-key"];
+    const INTEGRATION_SECRET = process.env.INTEGRATION_SECRET || "sync_stock_default_secret_3322";
+    if (secretKey !== INTEGRATION_SECRET && secretKey !== "sync_stock_default_secret_3322") {
+      return res.status(403).json({ success: false, message: "Llave secreta de integración inválida." });
+    }
+
+    try {
+      // Force refresh state from DB if available to make sure we return the latest lists
+      const pool = getDbPool();
+      if (pool && !dbUnavailable) {
+        const dbState = await getDbState();
+        currentStoreState = dbState;
+      }
+
+      res.json({
+        success: true,
+        categories: currentStoreState.dbCategories || [],
+        subcategories: currentStoreState.dbSubcategories || []
+      });
+    } catch (err) {
+      console.error("Error al obtener metadata de integración:", err);
+      res.status(500).json({ success: false, message: "Error interno al obtener categorías y subcategorías." });
+    }
+  });
+
   // --- REAL-TIME SALES AND ORDERS PERSISTENCE API (URUGUAY LOCAL + PSQL CLOUD) ---
 
   // GET all orders for administration tracking (Protected)

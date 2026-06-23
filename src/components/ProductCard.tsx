@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { Product, SiteSettings } from "../types";
 import { ShoppingCart, Eye, Tag, Phone } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 
 interface ProductCardProps {
   key?: string;
@@ -74,27 +75,64 @@ Precio: $${Math.round(product.price)}
     return { price, imageUrl };
   }, [product]);
 
-  const [currentImage, setCurrentImage] = useState<string>("");
-  const [fallbackAttempt, setFallbackAttempt] = useState<number>(0);
+  // List of all unique image URLs for rotation
+  const allImages = useMemo(() => {
+    const list: string[] = [];
+    if (product.imageUrl) {
+      list.push(product.imageUrl);
+    }
+    if (product.imagenes && Array.isArray(product.imagenes)) {
+      product.imagenes.forEach(img => {
+        if (img && typeof img === "string" && !list.includes(img)) {
+          list.push(img);
+        }
+      });
+    }
+    if (product.variants && Array.isArray(product.variants)) {
+      product.variants.forEach(v => {
+        if (v.imageUrl && typeof v.imageUrl === "string" && !list.includes(v.imageUrl)) {
+          list.push(v.imageUrl);
+        }
+      });
+    }
+    return list;
+  }, [product.imageUrl, product.imagenes, product.variants]);
 
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
+  const [imageIndex, setImageIndex] = useState<number>(0);
+
+  const validImages = useMemo(() => {
+    const filtered = allImages.filter(img => !failedImages.has(img));
+    return filtered.length > 0 ? filtered : ["https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80"];
+  }, [allImages, failedImages]);
+
+  // When product changes, reset index and failures
   useEffect(() => {
-    setCurrentImage(product.imageUrl || "");
-    setFallbackAttempt(0);
-  }, [product.imageUrl]);
+    setImageIndex(0);
+    setFailedImages(new Set());
+  }, [product.id, product.imageUrl]);
+
+  // Interval timer for automatic image rotation
+  useEffect(() => {
+    if (validImages.length <= 1) return;
+
+    const interval = setInterval(() => {
+      setImageIndex((prev) => (prev + 1) % validImages.length);
+    }, 4500); // Rotates every 4.5 seconds
+
+    return () => clearInterval(interval);
+  }, [validImages]);
+
+  const activeIndex = imageIndex >= validImages.length ? 0 : imageIndex;
+  const currentImage = validImages[activeIndex];
 
   const handleImageError = () => {
-    const gallery = product.imagenes || [];
-    if (fallbackAttempt < gallery.length) {
-      const nextImg = gallery[fallbackAttempt];
-      setFallbackAttempt(prev => prev + 1);
-      if (nextImg && nextImg !== currentImage) {
-        setCurrentImage(nextImg);
-      } else {
-        setCurrentImage("https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80");
-      }
-    } else {
-      setCurrentImage("https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80");
-    }
+    const failedImg = currentImage;
+    setFailedImages(prev => {
+      const next = new Set(prev);
+      next.add(failedImg);
+      return next;
+    });
   };
 
   const getPriceDisplay = () => {
@@ -130,14 +168,21 @@ Precio: $${Math.round(product.price)}
             : "aspect-[3/4]"
         } overflow-hidden bg-gradient-to-br from-[#050B1A]/80 via-[#0B1730]/40 to-[#050B1A]/75 cursor-pointer flex items-center justify-center p-2.5`}
       >
-        <img
-          src={optimizeImageUrl(currentImage || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80")}
-          alt={product.name}
-          className="max-h-full max-w-full object-contain transition-transform duration-700 ease-out group-hover:scale-106"
-          referrerPolicy="no-referrer"
-          loading="lazy"
-          onError={handleImageError}
-        />
+        <AnimatePresence>
+          <motion.img
+            key={currentImage || "default"}
+            src={optimizeImageUrl(currentImage || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80")}
+            alt={product.name}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.8, ease: "easeInOut" }}
+            className="absolute inset-0 w-full h-full object-contain p-2.5 transition-transform duration-700 ease-out group-hover:scale-106"
+            referrerPolicy="no-referrer"
+            loading="lazy"
+            onError={handleImageError}
+          />
+        </AnimatePresence>
 
         {/* Promo Badge */}
         {isDiscounted && (

@@ -1384,6 +1384,26 @@ export default function App() {
     const gaId = store.settings?.googleAnalyticsId;
     if (!gaId) return;
 
+    // Check if running in sandboxed iframe or local dev, otherwise load dynamically
+    let isDev = false;
+    try {
+      if (typeof window !== "undefined") {
+        isDev = 
+          window.self !== window.top || 
+          window.location.hostname.includes("localhost") || 
+          window.location.hostname.includes("127.0.0.1") ||
+          window.location.hostname.includes("run.app") ||
+          window.location.hostname.includes("google.com") ||
+          window.location.hostname !== "ventas-juem.com";
+      }
+    } catch (e) {
+      isDev = true;
+    }
+    if (isDev) {
+      console.log("[Dev Target] Loaded GA4 ID '" + gaId + "' bypassed in preview context.");
+      return;
+    }
+
     // Check if script already exists to avoid redundant tags
     const scriptId = "google-analytics-script";
     let script = document.getElementById(scriptId) as HTMLScriptElement;
@@ -1418,6 +1438,26 @@ export default function App() {
     const gtmId = store.settings?.googleTagManagerId;
     if (!gtmId) return;
 
+    // Check if running in sandboxed iframe or local dev, otherwise load dynamically
+    let isDev = false;
+    try {
+      if (typeof window !== "undefined") {
+        isDev = 
+          window.self !== window.top || 
+          window.location.hostname.includes("localhost") || 
+          window.location.hostname.includes("127.0.0.1") ||
+          window.location.hostname.includes("run.app") ||
+          window.location.hostname.includes("google.com") ||
+          window.location.hostname !== "ventas-juem.com";
+      }
+    } catch (e) {
+      isDev = true;
+    }
+    if (isDev) {
+      console.log("[Dev Target] Loaded GTM ID '" + gtmId + "' bypassed in preview context.");
+      return;
+    }
+
     // Check if GTM script is already added
     const scriptId = "google-tag-manager-script";
     let script = document.getElementById(scriptId);
@@ -1449,6 +1489,26 @@ export default function App() {
   useEffect(() => {
     const pixelId = store.settings?.metaPixelId;
     if (!pixelId) return;
+
+    // Check if running in sandboxed iframe or local dev, otherwise load dynamically
+    let isDev = false;
+    try {
+      if (typeof window !== "undefined") {
+        isDev = 
+          window.self !== window.top || 
+          window.location.hostname.includes("localhost") || 
+          window.location.hostname.includes("127.0.0.1") ||
+          window.location.hostname.includes("run.app") ||
+          window.location.hostname.includes("google.com") ||
+          window.location.hostname !== "ventas-juem.com";
+      }
+    } catch (e) {
+      isDev = true;
+    }
+    if (isDev) {
+      console.log("[Dev Target] Loaded Meta Pixel '" + pixelId + "' bypassed in preview context.");
+      return;
+    }
 
     // Check if Meta Pixel script is already added
     const scriptId = "meta-pixel-script";

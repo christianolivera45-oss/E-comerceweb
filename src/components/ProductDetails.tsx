@@ -649,21 +649,21 @@ Me gustaría coordinar stock, fabricación y envío.`;
               className="relative w-full h-full flex items-center justify-center overflow-hidden cursor-zoom-in group/main-img"
               title="Haz clic para ampliar la imagen"
             >
-              <AnimatePresence mode="wait">
+              <AnimatePresence>
                 <motion.img
                   key={activeImgIndex}
                   src={optimizeImageUrlForDetail(allImages[activeImgIndex], 800, 75)}
                   alt={product.name}
-                  initial={{ opacity: 0, scale: 0.97 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 1.03 }}
-                  transition={{ duration: 0.22, ease: "easeOut" }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.45, ease: "easeInOut" }}
                   style={{
                     filter: imageExposureMode === "boosted"
                       ? "brightness(1.18) contrast(1.08) saturate(1.03)"
                       : "none"
                   }}
-                  className="max-h-full max-w-full object-contain select-none transition-transform duration-300 group-hover/main-img:scale-[1.025]"
+                  className="absolute max-h-full max-w-full object-contain select-none transition-transform duration-300 group-hover/main-img:scale-[1.025]"
                   referrerPolicy="no-referrer"
                   loading="eager"
                   fetchPriority="high"
@@ -1130,16 +1130,16 @@ Me gustaría coordinar stock, fabricación y envío.`;
               className="relative w-full max-w-5xl h-[70vh] sm:h-[80vh] flex items-center justify-center"
               onClick={(e) => e.stopPropagation()} // Prevent clicking the image from closing the lightbox
             >
-              <AnimatePresence mode="wait">
+              <AnimatePresence>
                 <motion.img
                   key={activeImgIndex}
                   src={optimizeImageUrlForDetail(allImages[activeImgIndex], 1200, 80)}
                   alt={product.name}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 1.05 }}
-                  transition={{ duration: 0.22, ease: "easeOut" }}
-                  className="max-h-full max-w-full object-contain rounded-xl select-none"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.45, ease: "easeInOut" }}
+                  className="absolute max-h-full max-w-full object-contain rounded-xl select-none"
                   referrerPolicy="no-referrer"
                 />
               </AnimatePresence>

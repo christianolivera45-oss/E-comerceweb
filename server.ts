@@ -1882,7 +1882,9 @@ async function startServer() {
       paused,
       is3D,
       hoursPerUnit,
-      consultOnly
+      consultOnly,
+      sizes,
+      colors
     } = req.body;
 
     const INTEGRATION_SECRET = process.env.INTEGRATION_SECRET || "sync_stock_default_secret_3322";
@@ -2030,6 +2032,26 @@ async function startServer() {
       const parsedOriginalPrice = originalPrice !== undefined ? Number(originalPrice) : (existingProduct?.originalPrice || parsedPrice);
       const parsedStock = stock !== undefined ? Math.floor(Number(stock)) : (existingProduct ? existingProduct.stock : 0);
 
+      // Resolve unique sizes and colors, either from direct input or inferred from variants
+      let finalSizes = Array.isArray(sizes) ? sizes : [];
+      let finalColors = Array.isArray(colors) ? colors : [];
+
+      if (Array.isArray(variants) && variants.length > 0) {
+        if (finalSizes.length === 0) {
+          finalSizes = Array.from(new Set(variants.map(v => v.size).filter(Boolean)));
+        }
+        if (finalColors.length === 0) {
+          finalColors = Array.from(new Set(variants.map(v => v.color).filter(Boolean)));
+        }
+      } else {
+        if (finalSizes.length === 0 && existingProduct) {
+          finalSizes = existingProduct.sizes || [];
+        }
+        if (finalColors.length === 0 && existingProduct) {
+          finalColors = existingProduct.colors || [];
+        }
+      }
+
       const updatedProduct = {
         id: existingProduct ? existingProduct.id : "prod-" + Date.now(),
         codigo: targetCodigo,
@@ -2043,6 +2065,8 @@ async function startServer() {
         imageUrl: imageUrl || (existingProduct ? existingProduct.imageUrl : "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=600&q=80"),
         imagenes: Array.isArray(imagenes) ? imagenes : (existingProduct ? existingProduct.imagenes : []),
         variants: Array.isArray(variants) ? variants : (existingProduct ? existingProduct.variants : []),
+        sizes: finalSizes,
+        colors: finalColors,
         stock: parsedStock,
         featured: featured !== undefined ? !!featured : (existingProduct ? !!existingProduct.featured : false),
         paused: paused !== undefined ? !!paused : (existingProduct ? !!existingProduct.paused : false),

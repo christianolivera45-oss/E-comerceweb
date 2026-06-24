@@ -701,7 +701,9 @@ async function getDbState(): Promise<ShopState> {
         colors: Array.isArray(row.colors) ? row.colors : [],
         categorias_adicionales: Array.isArray(row.categorias_adicionales) ? row.categorias_adicionales : [],
         subcategorias_adicionales: Array.isArray(row.subcategorias_adicionales) ? row.subcategorias_adicionales : [],
-        imagenes: productImagesMap[pid] || [],
+        imagenes: Array.from(new Set(productImagesMap[pid] || []))
+          .map(u => String(u || "").trim())
+          .filter(u => u && u !== String(row.image_url || "").trim()),
         variants: productVariantsMap[pid] || [],
         is3D: row.is_3d === true,
         hoursPerUnit: row.hours_per_unit !== null && row.hours_per_unit !== undefined ? Number(row.hours_per_unit) : undefined,
@@ -946,16 +948,21 @@ async function saveDbState(state: ShopState): Promise<boolean> {
       // Sync product multiple images
       try {
         await pool.query("DELETE FROM public.product_images WHERE product_id = $1;", [prodId]);
-        if (Array.isArray(prod.imagenes) && prod.imagenes.length > 0) {
-          for (let i = 0; i < prod.imagenes.length; i++) {
-            const imgUrl = prod.imagenes[i];
-            if (imgUrl && imgUrl.trim()) {
-              await pool.query(`
-                INSERT INTO public.product_images (product_id, image_url, order_index)
-                VALUES ($1, $2, $3);
-              `, [prodId, imgUrl.trim(), i]);
-            }
-          }
+        
+        const rawImgs = Array.isArray(prod.imagenes) ? prod.imagenes : [];
+        const mainUrlTrimmed = (prod.imageUrl || "").trim();
+        const uniqueImgs = Array.from(new Set(rawImgs))
+          .map(img => (img || "").trim())
+          .filter(img => img && img !== mainUrlTrimmed);
+        
+        // Keep internal memory state representation perfectly clean as well
+        prod.imagenes = uniqueImgs;
+
+        for (let i = 0; i < uniqueImgs.length; i++) {
+          await pool.query(`
+            INSERT INTO public.product_images (product_id, image_url, order_index)
+            VALUES ($1, $2, $3);
+          `, [prodId, uniqueImgs[i], i]);
         }
       } catch (imgErr) {
         console.error(`Error saving product images for product ${prodId}:`, imgErr);
@@ -1875,8 +1882,11 @@ async function startServer() {
       categoria_id,
       subcategoria_id,
       imageUrl,
+      imagen,
       imagenes,
+      imagenes_adicionales,
       variants,
+      variantes,
       stock,
       featured,
       paused,
@@ -1884,8 +1894,17 @@ async function startServer() {
       hoursPerUnit,
       consultOnly,
       sizes,
-      colors
+      colors,
+      talles,
+      tallas,
+      colores
     } = req.body;
+
+    const targetImageUrl = imageUrl || imagen || "";
+    const rawImagenes = imagenes || imagenes_adicionales || [];
+    const rawVariants = variants || variantes || [];
+    const rawSizes = sizes || talles || tallas || [];
+    const rawColors = colors || colores || [];
 
     const INTEGRATION_SECRET = process.env.INTEGRATION_SECRET || "sync_stock_default_secret_3322";
     if (secretKey !== INTEGRATION_SECRET && secretKey !== "sync_stock_default_secret_3322") {
@@ -2032,16 +2051,48 @@ async function startServer() {
       const parsedOriginalPrice = originalPrice !== undefined ? Number(originalPrice) : (existingProduct?.originalPrice || parsedPrice);
       const parsedStock = stock !== undefined ? Math.floor(Number(stock)) : (existingProduct ? existingProduct.stock : 0);
 
-      // Resolve unique sizes and colors, either from direct input or inferred from variants
-      let finalSizes = Array.isArray(sizes) ? sizes : [];
-      let finalColors = Array.isArray(colors) ? colors : [];
+      // Parse and map variants robustly with Spanish/English key fallbacks
+      let parsedVariants = [];
+      if (Array.isArray(rawVariants)) {
+        parsedVariants = rawVariants.map((v: any, index: number) => {
+          const size = String(v.size || v.talle || v.talla || "").trim();
+          const color = String(v.color || v.color_name || v.colorName || "").trim();
+          const stockVal = v.stock !== undefined ? Math.floor(Number(v.stock)) : 0;
+          const priceOverride = v.price !== undefined ? Number(v.price) : undefined;
+          const priceDelta = v.priceDelta !== undefined || v.price_delta !== undefined 
+            ? Number(v.priceDelta ?? v.price_delta) 
+            : undefined;
+          
+          const vImgUrl = String(v.imageUrl || v.image_url || v.imagen || v.url || "").trim();
+          const vSku = String(v.sku || "").trim();
+          const vColorCode = String(v.colorCode || v.color_code || v.codigo_color || "").trim();
 
-      if (Array.isArray(variants) && variants.length > 0) {
+          return {
+            id: v.id ? String(v.id) : `var-${Date.now()}-${index}`,
+            sku: vSku || undefined,
+            size,
+            color,
+            colorCode: vColorCode || undefined,
+            priceDelta,
+            stock: stockVal,
+            imageUrl: vImgUrl || undefined,
+            price: priceOverride
+          };
+        }).filter((v: any) => v.size || v.color);
+      } else if (existingProduct) {
+        parsedVariants = existingProduct.variants || [];
+      }
+
+      // Resolve unique sizes and colors, either from direct input or inferred from variants
+      let finalSizes = Array.isArray(rawSizes) ? rawSizes.map(s => String(s).trim()).filter(Boolean) : [];
+      let finalColors = Array.isArray(rawColors) ? rawColors.map(c => String(c).trim()).filter(Boolean) : [];
+
+      if (parsedVariants.length > 0) {
         if (finalSizes.length === 0) {
-          finalSizes = Array.from(new Set(variants.map(v => v.size).filter(Boolean)));
+          finalSizes = Array.from(new Set(parsedVariants.map(v => v.size).filter(Boolean)));
         }
         if (finalColors.length === 0) {
-          finalColors = Array.from(new Set(variants.map(v => v.color).filter(Boolean)));
+          finalColors = Array.from(new Set(parsedVariants.map(v => v.color).filter(Boolean)));
         }
       } else {
         if (finalSizes.length === 0 && existingProduct) {
@@ -2051,6 +2102,18 @@ async function startServer() {
           finalColors = existingProduct.colors || [];
         }
       }
+
+      // Resolve images: unique images, filtering out duplicates and main cover image
+      const resolvedMainImageUrl = targetImageUrl || (existingProduct ? existingProduct.imageUrl : "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=600&q=80");
+      
+      const rawImgsToProcess = Array.isArray(rawImagenes) ? rawImagenes : (existingProduct ? existingProduct.imagenes : []);
+      const finalImagenes = Array.from(
+        new Set(
+          rawImgsToProcess
+            .map(img => String(img || "").trim())
+            .filter(img => img && img !== resolvedMainImageUrl.trim())
+        )
+      );
 
       const updatedProduct = {
         id: existingProduct ? existingProduct.id : "prod-" + Date.now(),
@@ -2062,9 +2125,9 @@ async function startServer() {
         category: finalCategoryName,
         categoria_id: finalCategoryId,
         subcategoria_id: finalSubcategoryId,
-        imageUrl: imageUrl || (existingProduct ? existingProduct.imageUrl : "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=600&q=80"),
-        imagenes: Array.isArray(imagenes) ? imagenes : (existingProduct ? existingProduct.imagenes : []),
-        variants: Array.isArray(variants) ? variants : (existingProduct ? existingProduct.variants : []),
+        imageUrl: resolvedMainImageUrl,
+        imagenes: finalImagenes,
+        variants: parsedVariants,
         sizes: finalSizes,
         colors: finalColors,
         stock: parsedStock,

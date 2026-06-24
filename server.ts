@@ -1817,7 +1817,7 @@ async function startServer() {
 
       currentStoreState.products = currentStoreState.products.map(p => {
         const matchesId = targetIdStr && String(p.id) === targetIdStr;
-        const matchesCodigo = targetCodigo && p.codigo && String(p.codigo).trim() === targetCodigo;
+        const matchesCodigo = targetCodigo && p.codigo && String(p.codigo).trim().toUpperCase() === targetCodigo.toUpperCase();
 
         if (matchesId || matchesCodigo) {
           found = true;
@@ -1896,12 +1896,66 @@ async function startServer() {
     }
 
     try {
-      // 1. Find product in state or DB
+      // 1. Find product in state or DB (Case-insensitive check for base SKU/codigo matching)
       const existingProduct = currentStoreState.products.find(
-        (p) => p.codigo && String(p.codigo).trim() === targetCodigo
+        (p) => p.codigo && String(p.codigo).trim().toUpperCase() === targetCodigo.toUpperCase()
       );
 
       const isNew = !existingProduct;
+
+      // 1b. Check if targetCodigo is already in use by another product (as a variant SKU or a main SKU with different ID)
+      const occupiedByOther = currentStoreState.products.find(p => {
+        if (existingProduct && String(p.id) === String(existingProduct.id)) {
+          return false;
+        }
+        
+        // Match main code
+        if (p.codigo && String(p.codigo).trim().toUpperCase() === targetCodigo.toUpperCase()) {
+          return true;
+        }
+        
+        // Match variant codes
+        if (p.variants) {
+          return p.variants.some(v => v.sku && String(v.sku).trim().toUpperCase() === targetCodigo.toUpperCase());
+        }
+        
+        return false;
+      });
+
+      if (occupiedByOther) {
+        return res.status(400).json({
+          success: false,
+          message: `El código/SKU base '${targetCodigo}' ya está asignado a otro artículo o variante de la tienda web ('${occupiedByOther.name}'). No se permiten duplicados.`
+        });
+      }
+
+      // Check incoming variants for duplicate SKUs as well
+      if (Array.isArray(variants)) {
+        for (const v of variants) {
+          const vSku = v.sku ? String(v.sku).trim().toUpperCase() : null;
+          if (vSku) {
+            const occupiedBy = currentStoreState.products.find(p => {
+              if (existingProduct && String(p.id) === String(existingProduct.id)) {
+                return false;
+              }
+              if (p.codigo && String(p.codigo).trim().toUpperCase() === vSku) {
+                return true;
+              }
+              if (p.variants) {
+                return p.variants.some(pv => pv.sku && String(pv.sku).trim().toUpperCase() === vSku);
+              }
+              return false;
+            });
+            
+            if (occupiedBy) {
+              return res.status(400).json({
+                success: false,
+                message: `El código de variante '${v.sku}' ya está asignado a otro artículo de la tienda web ('${occupiedBy.name}'). No se permiten duplicados.`
+              });
+            }
+          }
+        }
+      }
 
       if (isNew) {
         if (!name || price === undefined) {

@@ -2206,6 +2206,16 @@ export default function App() {
       }
     }
 
+    // 4. Check if any variant's SKU is identical to the product's main code
+    if (baseCode && product.variants) {
+      for (const v of product.variants) {
+        const vSku = v.sku?.trim().toUpperCase();
+        if (vSku === baseCode) {
+          return `El código de variante "${vSku}" no puede ser idéntico al código base de este mismo producto.`;
+        }
+      }
+    }
+
     return null;
   };
 
@@ -7207,6 +7217,34 @@ export default function App() {
                                   showAdminToast(`La combinación ${sz} - ${col} ya existe.`, "error");
                                   return;
                                 }
+
+                                if (sku) {
+                                  // 1. Check if SKU matches this product's own code
+                                  if (newProduct.codigo && newProduct.codigo.trim().toUpperCase() === sku) {
+                                    showAdminToast(`El código de variante "${sku}" no puede ser idéntico al código base de este producto.`, "error");
+                                    return;
+                                  }
+                                  // 2. Check if SKU is already in use by another variant of this product
+                                  if (current.some(v => v.sku && v.sku.trim().toUpperCase() === sku)) {
+                                    showAdminToast(`El código de variante "${sku}" ya está registrado en otra variante de este artículo.`, "error");
+                                    return;
+                                  }
+                                  // 3. Check other products and their variants
+                                  const otherProducts = store.products;
+                                  for (const p of otherProducts) {
+                                    if (p.codigo && p.codigo.trim().toUpperCase() === sku) {
+                                      showAdminToast(`El código "${sku}" ya está en uso como código base de "${p.name}".`, "error");
+                                      return;
+                                    }
+                                    if (p.variants) {
+                                      const dupV = p.variants.find(v => v.sku && v.sku.trim().toUpperCase() === sku);
+                                      if (dupV) {
+                                        showAdminToast(`El código "${sku}" ya está en uso por la variante "${dupV.size} ${dupV.color}" de "${p.name}".`, "error");
+                                        return;
+                                      }
+                                    }
+                                  }
+                                }
                                 
                                 const newV: ProductVariant = {
                                   size: sz,
@@ -8539,6 +8577,34 @@ const resText = await uploadRes.text();
                                 if (current.some(v => v.size === sz && v.color === col)) {
                                   showAdminToast(`La combinación ${sz} - ${col} ya existe.`, "error");
                                   return;
+                                }
+
+                                if (sku) {
+                                  // 1. Check if SKU matches this product's own code
+                                  if (editingProduct.codigo && editingProduct.codigo.trim().toUpperCase() === sku) {
+                                    showAdminToast(`El código de variante "${sku}" no puede ser idéntico al código base de este producto.`, "error");
+                                    return;
+                                  }
+                                  // 2. Check if SKU is already in use by another variant of this product
+                                  if (current.some(v => v.sku && v.sku.trim().toUpperCase() === sku)) {
+                                    showAdminToast(`El código de variante "${sku}" ya está registrado en otra variante de este artículo.`, "error");
+                                    return;
+                                  }
+                                  // 3. Check other products and their variants
+                                  const otherProducts = store.products.filter(p => p.id !== editingProduct.id);
+                                  for (const p of otherProducts) {
+                                    if (p.codigo && p.codigo.trim().toUpperCase() === sku) {
+                                      showAdminToast(`El código "${sku}" ya está en uso como código base de "${p.name}".`, "error");
+                                      return;
+                                    }
+                                    if (p.variants) {
+                                      const dupV = p.variants.find(v => v.sku && v.sku.trim().toUpperCase() === sku);
+                                      if (dupV) {
+                                        showAdminToast(`El código "${sku}" ya está en uso por la variante "${dupV.size} ${dupV.color}" de "${p.name}".`, "error");
+                                        return;
+                                      }
+                                    }
+                                  }
                                 }
                                 
                                 const newV: ProductVariant = {

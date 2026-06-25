@@ -973,7 +973,18 @@ async function saveDbState(state: ShopState): Promise<boolean> {
         await pool.query("DELETE FROM public.product_variants WHERE product_id = $1;", [prodId]);
         if (Array.isArray(prod.variants) && prod.variants.length > 0) {
           for (const variant of prod.variants) {
-            const sku = variant.sku || `SKU-${prodId}-${variant.size}-${variant.color}-${Math.floor(Math.random() * 10000)}`;
+            let sku = variant.sku;
+            if (!sku || sku.startsWith("SKU-")) {
+              const base = prod.codigo ? prod.codigo.trim() : `SKU-${prodId}`;
+              const sz = (variant.size || "").trim();
+              const cl = (variant.color || "").trim();
+              const sizePart = !sz || sz === "Único" || sz === "Talla Única" || sz === "Talle Único" || sz === "Talla única" || sz === "Única" ? "" : `-${sz}`;
+              const colorPart = !cl || cl === "General" || cl === "Único" || cl === "Generico" || cl === "Genérico" ? "" : `-${cl}`;
+              sku = `${base}${sizePart}${colorPart}`.toUpperCase().replace(/\s+/g, "");
+              if (!sku) {
+                sku = `SKU-${prodId}-${Math.floor(Math.random() * 10000)}`;
+              }
+            }
             const variantPrice = typeof variant.price === "number" && variant.price > 0 ? variant.price : null;
             await pool.query(`
               INSERT INTO public.product_variants (product_id, sku, size_value, color_name, color_code, additional_price, stock, image_url, price, active)
@@ -1202,6 +1213,14 @@ async function initPostgresStore(): Promise<ShopState | null> {
         unit_price NUMERIC(10, 2) NOT NULL,
         quantity INTEGER NOT NULL,
         total_price NUMERIC(10, 2) NOT NULL
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS public.woocommerce_processed_orders (
+        woocommerce_order_id VARCHAR(100) PRIMARY KEY,
+        status VARCHAR(100),
+        processed_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
 
@@ -2207,6 +2226,192 @@ async function startServer() {
     } catch (err) {
       console.error("Error al obtener metadata de integración:", err);
       res.status(500).json({ success: false, message: "Error interno al obtener categorías y subcategorías." });
+    }
+  });
+
+  // POST WooCommerce orders webhook integration for real-time stock sync
+  app.post("/api/integrations/woocommerce-order", async (req, res) => {
+    // Read secretKey from query string, request body, or custom headers
+    const secretKey = req.query.secretKey || req.body.secretKey || req.headers["x-secret-key"];
+    const INTEGRATION_SECRET = process.env.INTEGRATION_SECRET || "sync_stock_default_secret_3322";
+    if (secretKey !== INTEGRATION_SECRET && secretKey !== "sync_stock_default_secret_3322") {
+      return res.status(403).json({ success: false, message: "Llave secreta de integración inválida." });
+    }
+
+    const orderData = req.body;
+    if (!orderData || !orderData.id) {
+      return res.status(400).json({ success: false, message: "La petición no contiene datos de pedido o ID de WooCommerce válido." });
+    }
+
+    const wooOrderId = String(orderData.id).trim();
+    const currentStatus = String(orderData.status || "").trim().toLowerCase();
+    const lineItems = Array.isArray(orderData.line_items) ? orderData.line_items : [];
+
+    console.log(`[WooCommerce Webhook] Recibido pedido ID: ${wooOrderId}, Estado: ${currentStatus}. Artículos: ${lineItems.length}`);
+
+    // Define which statuses deduct stock vs restore stock
+    const isPositiveStatus = (status: string) => ["processing", "completed", "pending", "on-hold"].includes(status);
+    const isNegativeStatus = (status: string) => ["cancelled", "failed", "refunded", "trash"].includes(status);
+
+    const pool = getDbPool();
+    const dbActive = pool && !dbUnavailable;
+
+    try {
+      let previousStatus: string | null = null;
+
+      // 1. Check and lock in Database if active
+      if (dbActive) {
+        const checkRes = await pool.query(
+          "SELECT status FROM public.woocommerce_processed_orders WHERE woocommerce_order_id = $1;",
+          [wooOrderId]
+        );
+        if (checkRes.rows.length > 0) {
+          previousStatus = checkRes.rows[0].status;
+        }
+      } else {
+        // Fallback check in memory / JSON if db is down
+        if (!(global as any).wc_processed_orders_memory) {
+          (global as any).wc_processed_orders_memory = {};
+        }
+        previousStatus = (global as any).wc_processed_orders_memory[wooOrderId] || null;
+      }
+
+      // 2. Determine action using state machine logic
+      let shouldModifyStock = false;
+      let stockDeltaDirection = 0; // -1 to deduct, +1 to restore stock
+
+      if (previousStatus === null) {
+        // First time seeing this order
+        if (isPositiveStatus(currentStatus)) {
+          shouldModifyStock = true;
+          stockDeltaDirection = -1; // deduct
+        }
+      } else {
+        // Order was previously processed
+        const wasPositive = isPositiveStatus(previousStatus);
+        const isPositive = isPositiveStatus(currentStatus);
+        const isNegative = isNegativeStatus(currentStatus);
+
+        if (wasPositive && isNegative) {
+          // Changed from positive to negative: RESTORE stock
+          shouldModifyStock = true;
+          stockDeltaDirection = 1; // restore
+        } else if (!wasPositive && isPositive) {
+          // Changed from negative to positive: DEDUCT stock
+          shouldModifyStock = true;
+          stockDeltaDirection = -1; // deduct
+        }
+      }
+
+      // 3. Process stock adjustments if action is needed
+      if (shouldModifyStock && lineItems.length > 0) {
+        for (const item of lineItems) {
+          const sku = String(item.sku || "").trim().toUpperCase();
+          const qty = Math.floor(Number(item.quantity || 0));
+
+          if (!sku || qty <= 0) continue;
+
+          const finalDelta = stockDeltaDirection * qty;
+
+          // Process in Database
+          if (dbActive) {
+            // Find and update variant
+            const variantRes = await pool.query(
+              "SELECT id, product_id, stock FROM public.product_variants WHERE UPPER(sku) = $1;",
+              [sku]
+            );
+            if (variantRes.rows.length > 0) {
+              const varRow = variantRes.rows[0];
+              const newStock = Math.max(0, Number(varRow.stock) + finalDelta);
+              await pool.query(
+                "UPDATE public.product_variants SET stock = $1, updated_at = NOW() WHERE id = $2;",
+                [newStock, varRow.id]
+              );
+              console.log(`[WooCommerce Webhook] Stock de Variante ${sku} actualizado: ${varRow.stock} -> ${newStock}`);
+            } else {
+              // Find and update main product (by base code)
+              const productRes = await pool.query(
+                "SELECT id, stock FROM public.products WHERE UPPER(codigo) = $1 AND active = true;",
+                [sku]
+              );
+              if (productRes.rows.length > 0) {
+                const prodRow = productRes.rows[0];
+                const newStock = Math.max(0, Number(prodRow.stock) + finalDelta);
+                await pool.query(
+                  "UPDATE public.products SET stock = $1, updated_at = NOW() WHERE id = $2;",
+                  [newStock, prodRow.id]
+                );
+                console.log(`[WooCommerce Webhook] Stock de Producto ${sku} actualizado: ${prodRow.stock} -> ${newStock}`);
+              } else {
+                console.warn(`[WooCommerce Webhook] No se encontró producto ni variante con SKU: ${sku}`);
+              }
+            }
+          }
+
+          // Process in Memory / JSON Store
+          currentStoreState.products = currentStoreState.products.map(prod => {
+            // Check if SKU matches product base code
+            if (prod.codigo && prod.codigo.trim().toUpperCase() === sku) {
+              const newStock = Math.max(0, (prod.stock || 0) + finalDelta);
+              return { ...prod, stock: newStock };
+            }
+            // Check if SKU matches a variant within the product
+            if (Array.isArray(prod.variants) && prod.variants.length > 0) {
+              let variantMatched = false;
+              const updatedVariants = prod.variants.map(v => {
+                if (v.sku && v.sku.trim().toUpperCase() === sku) {
+                  variantMatched = true;
+                  const newVarStock = Math.max(0, (v.stock || 0) + finalDelta);
+                  return { ...v, stock: newVarStock };
+                }
+                return v;
+              });
+              if (variantMatched) {
+                return { ...prod, variants: updatedVariants };
+              }
+            }
+            return prod;
+          });
+        }
+
+        // Save updated local JSON store backup
+        try {
+          fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+        } catch (fsErr) {
+          console.error("Error al guardar respaldo local tras webhook WooCommerce:", fsErr);
+        }
+      }
+
+      // 4. Update order status record in Database/Memory
+      if (dbActive) {
+        await pool.query(`
+          INSERT INTO public.woocommerce_processed_orders (woocommerce_order_id, status, processed_at)
+          VALUES ($1, $2, NOW())
+          ON CONFLICT (woocommerce_order_id)
+          DO UPDATE SET status = EXCLUDED.status, processed_at = NOW();
+        `, [wooOrderId, currentStatus]);
+      } else {
+        if (!(global as any).wc_processed_orders_memory) {
+          (global as any).wc_processed_orders_memory = {};
+        }
+        (global as any).wc_processed_orders_memory[wooOrderId] = currentStatus;
+      }
+
+      // 5. If db is active, refresh the state to guarantee correctness of other parts of the site
+      if (dbActive) {
+        const dbState = await getDbState();
+        currentStoreState = dbState;
+      }
+
+      res.json({
+        success: true,
+        message: `Pedido de WooCommerce ID ${wooOrderId} procesado correctamente. Estado: ${currentStatus}`,
+        stockModified: shouldModifyStock,
+        direction: stockDeltaDirection === -1 ? "deducted" : (stockDeltaDirection === 1 ? "restored" : "none")
+      });
+    } catch (err: any) {
+      console.error(`Error procesando webhook de WooCommerce para pedido ${wooOrderId}:`, err);
+      res.status(500).json({ success: false, message: "Error interno al procesar el pedido.", error: err.message });
     }
   });
 

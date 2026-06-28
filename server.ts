@@ -15,6 +15,17 @@ import { v2 as cloudinary } from "cloudinary";
 import multer from "multer";
 import { MercadoPagoConfig, Preference, Payment } from "mercadopago";
 import { sendEmail, emailDeliveryLogs, generateOrderCreatedEmailHtml, generateOrderStatusChangedEmailHtml } from "./server_emails";
+import { GoogleGenAI } from "@google/genai";
+
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY || "",
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    }
+  }
+});
+
 
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -422,6 +433,155 @@ async function sendApprovalEmails(order: any, settings: any) {
   }
 }
 
+async function deductStockDb(client: any, orderId: string): Promise<void> {
+  const itemsRes = await client.query(
+    "SELECT product_id, variant_id, quantity, product_name FROM public.order_items WHERE order_id = $1;",
+    [orderId]
+  );
+  
+  for (const item of itemsRes.rows) {
+    const qty = Number(item.quantity);
+    if (qty <= 0) continue;
+
+    if (item.variant_id) {
+      const varLock = await client.query(
+        "SELECT stock, stock_pinamar, stock_montevideo FROM public.product_variants WHERE id = $1 FOR UPDATE;",
+        [item.variant_id]
+      );
+      
+      if (varLock.rows.length > 0) {
+        const vPin = Number(varLock.rows[0].stock_pinamar || 0);
+        const vMvd = Number(varLock.rows[0].stock_montevideo || 0);
+        
+        let pinDeduct = 0;
+        let mvdDeduct = 0;
+        
+        if (vPin >= qty) {
+          pinDeduct = qty;
+        } else {
+          pinDeduct = Math.max(0, vPin);
+          mvdDeduct = qty - pinDeduct;
+        }
+
+        await client.query(
+          `UPDATE public.product_variants 
+           SET stock = GREATEST(0, stock - $1), 
+               stock_pinamar = GREATEST(0, stock_pinamar - $2), 
+               stock_montevideo = GREATEST(0, stock_montevideo - $3), 
+               updated_at = NOW() 
+           WHERE id = $4;`,
+          [qty, pinDeduct, mvdDeduct, item.variant_id]
+        );
+      }
+
+      const prodLock = await client.query(
+        "SELECT stock, stock_pinamar, stock_montevideo FROM public.products WHERE id = $1 FOR UPDATE;",
+        [item.product_id]
+      );
+
+      if (prodLock.rows.length > 0) {
+        const pPin = Number(prodLock.rows[0].stock_pinamar || 0);
+        const pMvd = Number(prodLock.rows[0].stock_montevideo || 0);
+        
+        let pinDeduct = 0;
+        let mvdDeduct = 0;
+        
+        if (pPin >= qty) {
+          pinDeduct = qty;
+        } else {
+          pinDeduct = Math.max(0, pPin);
+          mvdDeduct = qty - pinDeduct;
+        }
+
+        await client.query(
+          `UPDATE public.products 
+           SET stock = GREATEST(0, stock - $1), 
+               stock_pinamar = GREATEST(0, stock_pinamar - $2), 
+               stock_montevideo = GREATEST(0, stock_montevideo - $3), 
+               updated_at = NOW() 
+           WHERE id = $4;`,
+          [qty, pinDeduct, mvdDeduct, item.product_id]
+        );
+      }
+    } else if (item.product_id) {
+      const prodLock = await client.query(
+        "SELECT stock, stock_pinamar, stock_montevideo FROM public.products WHERE id = $1 FOR UPDATE;",
+        [item.product_id]
+      );
+
+      if (prodLock.rows.length > 0) {
+        const pPin = Number(prodLock.rows[0].stock_pinamar || 0);
+        const pMvd = Number(prodLock.rows[0].stock_montevideo || 0);
+        
+        let pinDeduct = 0;
+        let mvdDeduct = 0;
+        
+        if (pPin >= qty) {
+          pinDeduct = qty;
+        } else {
+          pinDeduct = Math.max(0, pPin);
+          mvdDeduct = qty - pinDeduct;
+        }
+
+        await client.query(
+          `UPDATE public.products 
+           SET stock = GREATEST(0, stock - $1), 
+               stock_pinamar = GREATEST(0, stock_pinamar - $2), 
+               stock_montevideo = GREATEST(0, stock_montevideo - $3), 
+               updated_at = NOW() 
+           WHERE id = $4;`,
+          [qty, pinDeduct, mvdDeduct, item.product_id]
+        );
+      }
+    }
+  }
+}
+
+function deductStockMemory(orderItems: any[]): void {
+  for (const item of orderItems) {
+    const dbProd = currentStoreState.products?.find(p => String(p.id) === String(item.productId));
+    if (dbProd) {
+      const qty = Number(item.quantity || 1);
+      const pinStock = dbProd.stockPinamar || 0;
+      const mvdStock = dbProd.stockMontevideo || 0;
+      
+      let pinDeduct = 0;
+      let mvdDeduct = 0;
+      if (pinStock >= qty) {
+        pinDeduct = qty;
+      } else {
+        pinDeduct = Math.max(0, pinStock);
+        mvdDeduct = qty - pinDeduct;
+      }
+
+      dbProd.stockPinamar = Math.max(0, pinStock - pinDeduct);
+      dbProd.stockMontevideo = Math.max(0, mvdStock - mvdDeduct);
+      dbProd.stock = Math.max(0, (dbProd.stock || 0) - qty);
+
+      if (item.variantId) {
+        const matchVar = dbProd.variants?.find((v: any) => String(v.id) === String(item.variantId));
+        if (matchVar) {
+          const vPin = matchVar.stockPinamar || 0;
+          const vMvd = matchVar.stockMontevideo || 0;
+          
+          let vPinDeduct = 0;
+          let vMvdDeduct = 0;
+          if (vPin >= qty) {
+            vPinDeduct = qty;
+          } else {
+            vPinDeduct = Math.max(0, vPin);
+            vMvdDeduct = qty - vPinDeduct;
+          }
+
+          matchVar.stockPinamar = Math.max(0, vPin - vPinDeduct);
+          matchVar.stockMontevideo = Math.max(0, vMvd - vMvdDeduct);
+          matchVar.stock = Math.max(0, (matchVar.stock || 0) - qty);
+        }
+      }
+    }
+  }
+}
+
 async function approveOrderAndDeductStock(orderId: string, paymentId: string, verifiedPaymentAmount: number): Promise<string> {
   const pool = getDbPool();
   if (pool && !dbUnavailable) {
@@ -445,23 +605,8 @@ async function approveOrderAndDeductStock(orderId: string, paymentId: string, ve
       // Update order status with verified status
       await client.query("UPDATE public.orders SET current_status = 'pago_aprobado', updated_at = NOW() WHERE id = $1;", [orderId]);
       
-      // Fetch item list and lock materials to deduct stock
-      const itemsRes = await client.query("SELECT product_id, variant_id, quantity, product_name FROM public.order_items WHERE order_id = $1;", [orderId]);
-      
-      for (const item of itemsRes.rows) {
-        const qty = Number(item.quantity);
-        if (item.variant_id) {
-          // Lock variant for update
-          await client.query("SELECT stock FROM public.product_variants WHERE id = $1 FOR UPDATE;", [item.variant_id]);
-          // Deduct stock down to greatest of 0 or stock - qty
-          await client.query("UPDATE public.product_variants SET stock = GREATEST(0, stock - $1), updated_at = NOW() WHERE id = $2;", [qty, item.variant_id]);
-        } else if (item.product_id) {
-          // Lock product for update
-          await client.query("SELECT stock FROM public.products WHERE id = $1 FOR UPDATE;", [item.product_id]);
-          // Deduct stock down to greatest of 0 or stock - qty
-          await client.query("UPDATE public.products SET stock = GREATEST(0, stock - $1), updated_at = NOW() WHERE id = $2;", [qty, item.product_id]);
-        }
-      }
+      // Deduct stock prioritizing Pinamar, then Montevideo
+      await deductStockDb(client, orderId);
       
       await client.query("COMMIT;");
       console.log(`[Seguridad Stock] Transacción completada con éxito. Stock descontado para Orden ${orderId}.`);
@@ -497,21 +642,14 @@ async function approveOrderAndDeductStock(orderId: string, paymentId: string, ve
             o.status = "pago_aprobado";
             o.updatedAt = new Date().toISOString();
             
-            // Deduct in-memory stock
+            // Deduct in-memory stock prioritizing Pinamar, then Montevideo
             if (o.items && Array.isArray(o.items)) {
-              for (const it of o.items) {
-                const prod = currentStoreState.products?.find(p => String(p.id) === String(it.productId));
-                if (prod) {
-                  if (it.variantId) {
-                    const variant = prod.variants?.find((v: any) => String(v.id) === String(it.variantId));
-                    if (variant) {
-                      variant.stock = Math.max(0, (variant.stock || 0) - (it.quantity || 1));
-                    }
-                  } else {
-                    prod.stock = Math.max(0, (prod.stock || 0) - (it.quantity || 1));
-                  }
-                }
-              }
+              const formattedItems = o.items.map((it: any) => ({
+                productId: it.productId,
+                variantId: it.variantId,
+                quantity: it.quantity
+              }));
+              deductStockMemory(formattedItems);
             }
           }
         }
@@ -633,7 +771,8 @@ async function getDbState(): Promise<ShopState> {
     const prodRes = await pool.query(`
       SELECT id, name, price, stock, category, featured, image_url, created_at, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors, is_3d, hours_per_unit,
              size_chart_enabled, size_chart_show_superior, size_chart_show_inferior, size_chart_show_calzado, size_chart_show_recommender, size_chart_data, consult_only,
-             categorias_adicionales, subcategorias_adicionales, codigo
+             categorias_adicionales, subcategorias_adicionales, codigo,
+             precio_compra, precio_con_40, comision_ml, precio_venta_ml, precio_web, descuento_porcentaje, stock_pinamar, stock_montevideo
       FROM public.products 
       WHERE active = true 
       ORDER BY id DESC;
@@ -657,7 +796,7 @@ async function getDbState(): Promise<ShopState> {
     // Fetch product variants
     const productVariantsMap: Record<number, any[]> = {};
     try {
-      const variantsRes = await pool.query("SELECT id, product_id, sku, size_value, color_name, color_code, additional_price, stock, image_url, price FROM public.product_variants WHERE active = true;");
+      const variantsRes = await pool.query("SELECT id, product_id, sku, size_value, color_name, color_code, additional_price, stock, image_url, price, stock_pinamar, stock_montevideo FROM public.product_variants WHERE active = true;");
       for (const vRow of variantsRes.rows) {
         const pid = vRow.product_id;
         if (!productVariantsMap[pid]) {
@@ -672,7 +811,9 @@ async function getDbState(): Promise<ShopState> {
           priceDelta: vRow.additional_price ? Number(vRow.additional_price) : 0,
           stock: vRow.stock ? Number(vRow.stock) : 0,
           imageUrl: vRow.image_url || "",
-          price: vRow.price !== null && vRow.price !== undefined ? Number(vRow.price) : undefined
+          price: vRow.price !== null && vRow.price !== undefined ? Number(vRow.price) : undefined,
+          stockPinamar: vRow.stock_pinamar ? Number(vRow.stock_pinamar) : 0,
+          stockMontevideo: vRow.stock_montevideo ? Number(vRow.stock_montevideo) : 0
         });
       }
     } catch (varErr) {
@@ -713,14 +854,22 @@ async function getDbState(): Promise<ShopState> {
         sizeChartShowCalzado: row.size_chart_show_calzado !== false,
         sizeChartShowRecommender: row.size_chart_show_recommender !== false,
         sizeChartData: row.size_chart_data || undefined,
-        consultOnly: row.consult_only === true
+        consultOnly: row.consult_only === true,
+        precioCompra: row.precio_compra !== null && row.precio_compra !== undefined ? Number(row.precio_compra) : undefined,
+        precioCon40: row.precio_con_40 !== null && row.precio_con_40 !== undefined ? Number(row.precio_con_40) : undefined,
+        comisionML: row.comision_ml !== null && row.comision_ml !== undefined ? Number(row.comision_ml) : undefined,
+        precioVentaML: row.precio_venta_ml !== null && row.precio_venta_ml !== undefined ? Number(row.precio_venta_ml) : undefined,
+        precioWeb: row.precio_web !== null && row.precio_web !== undefined ? Number(row.precio_web) : undefined,
+        descuentoPorcentaje: row.descuento_porcentaje !== null && row.descuento_porcentaje !== undefined ? Number(row.descuento_porcentaje) : undefined,
+        stockPinamar: row.stock_pinamar !== null && row.stock_pinamar !== undefined ? Number(row.stock_pinamar) : undefined,
+        stockMontevideo: row.stock_montevideo !== null && row.stock_montevideo !== undefined ? Number(row.stock_montevideo) : undefined
       };
     });
 
     // 7. Fetch orders & their items
     let orders: any[] = [];
     try {
-      const ordersRes = await pool.query("SELECT id, customer_email, customer_name, customer_phone, subtotal, discount_amount, shipping_cost, total, applied_coupon_code, current_status, notes, payment_method, created_at, updated_at FROM public.orders ORDER BY created_at DESC;");
+      const ordersRes = await pool.query("SELECT id, customer_email, customer_name, customer_phone, subtotal, discount_amount, shipping_cost, total, applied_coupon_code, current_status, notes, payment_method, deposito_origen, canal, created_at, updated_at FROM public.orders ORDER BY created_at DESC;");
       
       const itemsRes = await pool.query("SELECT id, order_id, product_id, variant_id, product_name, sku, size_selected, color_selected, unit_price, quantity, total_price FROM public.order_items;");
       const orderItemsMap: Record<string, any[]> = {};
@@ -756,12 +905,94 @@ async function getDbState(): Promise<ShopState> {
         status: row.current_status,
         notes: row.notes || undefined,
         paymentMethod: row.payment_method || undefined,
+        depositoOrigen: row.deposito_origen || "Pinamar",
+        canal: row.canal || "Web",
         createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
         updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
         items: orderItemsMap[row.id] || []
       }));
     } catch (ordErr) {
       console.warn("Orders database tables read failed (possibly not created yet):", ordErr);
+    }
+
+    // 7.5 Fetch bills
+    let bills: any[] = [];
+    try {
+      const billsRes = await pool.query("SELECT id, provider_name, provider_rut, document_type, document_number, date, currency, subtotal, iva_amount, total, payment_method, deposito_origen, notes, items, created_at, updated_at FROM public.bills ORDER BY date DESC, created_at DESC;");
+      bills = billsRes.rows.map(row => {
+        // Date is fetched from DB. Ensure we format it cleanly.
+        let formattedDate = "";
+        if (row.date) {
+          try {
+            const d = new Date(row.date);
+            const yr = d.getFullYear();
+            const mo = String(d.getMonth() + 1).padStart(2, "0");
+            const dy = String(d.getDate()).padStart(2, "0");
+            formattedDate = `${yr}-${mo}-${dy}`;
+          } catch (e) {
+            formattedDate = String(row.date);
+          }
+        }
+        return {
+          id: row.id,
+          providerName: row.provider_name,
+          providerRut: row.provider_rut || "",
+          documentType: row.document_type || "Boleta Contado",
+          documentNumber: row.document_number || "",
+          date: formattedDate,
+          currency: row.currency || "UYU",
+          subtotal: Number(row.subtotal || 0),
+          ivaAmount: Number(row.iva_amount || 0),
+          total: Number(row.total || 0),
+          paymentMethod: row.payment_method || "Contado",
+          depositoOrigen: row.deposito_origen || "Pinamar",
+          notes: row.notes || "",
+          items: Array.isArray(row.items) ? row.items : [],
+          createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+          updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined
+        };
+      });
+    } catch (billErr) {
+      console.warn("Bills database table read failed (possibly not created yet):", billErr);
+      bills = currentStoreState.bills || [];
+    }
+
+    // Fetch shippings
+    let shippings: any[] = [];
+    try {
+      const shippingsRes = await pool.query("SELECT id, order_number, customer_name, customer_phone, delivery_hours, delivery_address, comments, branch, shipping_cost, status, created_at, updated_at FROM public.shippings ORDER BY created_at DESC;");
+      shippings = shippingsRes.rows.map(row => ({
+        id: row.id,
+        orderNumber: row.order_number,
+        customerName: row.customer_name,
+        customerPhone: row.customer_phone || "",
+        deliveryHours: row.delivery_hours || "",
+        deliveryAddress: row.delivery_address,
+        comments: row.comments || "",
+        branch: row.branch,
+        shippingCost: Number(row.shipping_cost || 0),
+        status: row.status || "Pendiente",
+        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+        updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined
+      }));
+    } catch (shipErr) {
+      console.warn("Shippings database table read failed:", shipErr);
+      shippings = currentStoreState.shippings || [];
+    }
+
+    // Fetch shippingOrigins
+    let shippingOrigins: any[] = [];
+    try {
+      const originsRes = await pool.query("SELECT id, name, address, contact FROM public.shipping_origins;");
+      shippingOrigins = originsRes.rows.map(row => ({
+        id: row.id,
+        name: row.name,
+        address: row.address,
+        contact: row.contact
+      }));
+    } catch (origErr) {
+      console.warn("Shipping origins database table read failed:", origErr);
+      shippingOrigins = currentStoreState.shippingOrigins || [];
     }
 
     return {
@@ -772,7 +1003,10 @@ async function getDbState(): Promise<ShopState> {
       products,
       coupons,
       adminCredentials,
-      orders
+      orders,
+      bills,
+      shippings,
+      shippingOrigins
     };
   } catch (err: any) {
     console.error("Error reading relational DB tables:", err);
@@ -873,6 +1107,7 @@ async function saveDbState(state: ShopState): Promise<boolean> {
       const idInts = deletedProdIds.map(id => parseInt(id)).filter(id => !isNaN(id));
       if (idInts.length > 0) {
         await pool.query("UPDATE public.products SET active = false WHERE id = ANY($1::int[]);", [idInts]);
+        await pool.query("UPDATE public.product_variants SET active = false, sku = NULL WHERE product_id = ANY($1::int[]);", [idInts]);
       }
     }
 
@@ -895,6 +1130,15 @@ async function saveDbState(state: ShopState): Promise<boolean> {
       const sizeChartDataVal = prod.sizeChartData ? JSON.stringify(prod.sizeChartData) : null;
       const consultOnlyVal = !!prod.consultOnly;
 
+      const precioCompraVal = prod.precioCompra ? Number(prod.precioCompra) : 0;
+      const precioCon40Val = prod.precioCon40 ? Number(prod.precioCon40) : 0;
+      const comisionMLVal = prod.comisionML ? Number(prod.comisionML) : 0;
+      const precioVentaMLVal = prod.precioVentaML ? Number(prod.precioVentaML) : 0;
+      const precioWebVal = prod.precioWeb ? Number(prod.precioWeb) : 0;
+      const descuentoPorcentajeVal = prod.descuentoPorcentaje ? Math.floor(Number(prod.descuentoPorcentaje)) : 0;
+      const stockPinamarVal = prod.stockPinamar ? Math.floor(Number(prod.stockPinamar)) : 0;
+      const stockMontevideoVal = prod.stockMontevideo ? Math.floor(Number(prod.stockMontevideo)) : 0;
+
       let prodId: number;
       const catAdicionales = Array.isArray(prod.categorias_adicionales) ? prod.categorias_adicionales : [];
       const subcatAdicionales = Array.isArray(prod.subcategorias_adicionales) ? prod.subcategorias_adicionales : [];
@@ -904,8 +1148,9 @@ async function saveDbState(state: ShopState): Promise<boolean> {
           INSERT INTO public.products (
             name, price, stock, category, featured, image_url, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors, is_3d, hours_per_unit,
             size_chart_enabled, size_chart_show_superior, size_chart_show_inferior, size_chart_show_calzado, size_chart_show_recommender, size_chart_data, consult_only,
-            categorias_adicionales, subcategorias_adicionales, codigo
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+            categorias_adicionales, subcategorias_adicionales, codigo,
+            precio_compra, precio_con_40, comision_ml, precio_venta_ml, precio_web, descuento_porcentaje, stock_pinamar, stock_montevideo
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
           RETURNING id;
         `, [
           prod.name, priceVal, stockVal, prod.category, featuredVal, prod.imageUrl,
@@ -915,7 +1160,8 @@ async function saveDbState(state: ShopState): Promise<boolean> {
           consultOnlyVal,
           catAdicionales,
           subcatAdicionales,
-          prod.codigo || ""
+          prod.codigo || "",
+          precioCompraVal, precioCon40Val, comisionMLVal, precioVentaMLVal, precioWebVal, descuentoPorcentajeVal, stockPinamarVal, stockMontevideoVal
         ]);
         prodId = insertRes.rows[0].id;
         prod.id = String(prodId);
@@ -930,8 +1176,16 @@ async function saveDbState(state: ShopState): Promise<boolean> {
             consult_only = $22,
             categorias_adicionales = $23,
             subcategorias_adicionales = $24,
-            codigo = $25
-          WHERE id = $26;
+            codigo = $25,
+            precio_compra = $26,
+            precio_con_40 = $27,
+            comision_ml = $28,
+            precio_venta_ml = $29,
+            precio_web = $30,
+            descuento_porcentaje = $31,
+            stock_pinamar = $32,
+            stock_montevideo = $33
+          WHERE id = $34;
         `, [
           prod.name, priceVal, stockVal, prod.category, featuredVal, prod.imageUrl,
           prod.description || "", prod.categoria_id, originalPriceVal, prod.subcategoria_id,
@@ -941,6 +1195,7 @@ async function saveDbState(state: ShopState): Promise<boolean> {
           catAdicionales,
           subcatAdicionales,
           prod.codigo || "",
+          precioCompraVal, precioCon40Val, comisionMLVal, precioVentaMLVal, precioWebVal, descuentoPorcentajeVal, stockPinamarVal, stockMontevideoVal,
           prodId
         ]);
       }
@@ -966,6 +1221,7 @@ async function saveDbState(state: ShopState): Promise<boolean> {
         }
       } catch (imgErr) {
         console.error(`Error saving product images for product ${prodId}:`, imgErr);
+        throw imgErr;
       }
 
       // Sync product variants
@@ -987,8 +1243,8 @@ async function saveDbState(state: ShopState): Promise<boolean> {
             }
             const variantPrice = typeof variant.price === "number" && variant.price > 0 ? variant.price : null;
             await pool.query(`
-              INSERT INTO public.product_variants (product_id, sku, size_value, color_name, color_code, additional_price, stock, image_url, price, active)
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true);
+              INSERT INTO public.product_variants (product_id, sku, size_value, color_name, color_code, additional_price, stock, image_url, price, active, stock_pinamar, stock_montevideo)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, $10, $11);
             `, [
               prodId,
               sku,
@@ -998,12 +1254,15 @@ async function saveDbState(state: ShopState): Promise<boolean> {
               Number(variant.priceDelta || 0),
               Math.floor(Number(variant.stock || 0)),
               variant.imageUrl || null,
-              variantPrice
+              variantPrice,
+              Math.floor(Number(variant.stockPinamar || 0)),
+              Math.floor(Number(variant.stockMontevideo || 0))
             ]);
           }
         }
       } catch (varErr) {
         console.error(`Error saving product variants for product ${prodId}:`, varErr);
+        throw varErr;
       }
     }
 
@@ -1014,8 +1273,9 @@ async function saveDbState(state: ShopState): Promise<boolean> {
     if (msg.includes("auth") || msg.includes("password") || msg.includes("connection") || msg.includes("econ") || msg.includes("timeout")) {
       console.warn("⚠️ Error crítico de conexión detectado al guardar. Usando almacenamiento local.");
       dbUnavailable = true;
+      return false;
     }
-    return false;
+    throw err;
   }
 }
 
@@ -1090,6 +1350,14 @@ async function initPostgresStore(): Promise<ShopState | null> {
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS consult_only BOOLEAN DEFAULT false;
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS categorias_adicionales TEXT[] DEFAULT '{}';
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS subcategorias_adicionales TEXT[] DEFAULT '{}';
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS precio_compra NUMERIC(10, 2) DEFAULT 0.00;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS precio_con_40 NUMERIC(10, 2) DEFAULT 0.00;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS comision_ml NUMERIC(10, 2) DEFAULT 0.00;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS precio_venta_ml NUMERIC(10, 2) DEFAULT 0.00;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS precio_web NUMERIC(10, 2) DEFAULT 0.00;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS descuento_porcentaje INTEGER DEFAULT 0;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS stock_pinamar INTEGER DEFAULT 0;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS stock_montevideo INTEGER DEFAULT 0;
     `);
 
     // Create product_images table if not exists
@@ -1129,6 +1397,12 @@ async function initPostgresStore(): Promise<ShopState | null> {
     `);
     await pool.query(`
       ALTER TABLE public.product_variants ADD COLUMN IF NOT EXISTS price NUMERIC(10, 2);
+    `);
+    await pool.query(`
+      ALTER TABLE public.product_variants ADD COLUMN IF NOT EXISTS stock_pinamar INTEGER DEFAULT 0;
+    `);
+    await pool.query(`
+      ALTER TABLE public.product_variants ADD COLUMN IF NOT EXISTS stock_montevideo INTEGER DEFAULT 0;
     `);
 
     // 4. Create categories
@@ -1198,6 +1472,8 @@ async function initPostgresStore(): Promise<ShopState | null> {
 
     await pool.query(`
       ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50);
+      ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS deposito_origen VARCHAR(50);
+      ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS canal VARCHAR(50);
     `);
 
     await pool.query(`
@@ -1223,6 +1499,92 @@ async function initPostgresStore(): Promise<ShopState | null> {
         processed_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
+
+    // Create public.bills table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS public.bills (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        provider_name VARCHAR(255) NOT NULL,
+        provider_rut VARCHAR(50),
+        document_type VARCHAR(100),
+        document_number VARCHAR(100),
+        date DATE NOT NULL,
+        currency VARCHAR(10) NOT NULL DEFAULT 'UYU',
+        subtotal NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+        iva_amount NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+        total NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+        payment_method VARCHAR(50),
+        deposito_origen VARCHAR(50),
+        notes TEXT,
+        items JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // Create public.shippings table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS public.shippings (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        order_number VARCHAR(100) NOT NULL,
+        customer_name VARCHAR(255) NOT NULL,
+        customer_phone VARCHAR(100),
+        delivery_hours VARCHAR(255),
+        delivery_address TEXT NOT NULL,
+        comments TEXT,
+        branch VARCHAR(50) NOT NULL,
+        shipping_cost NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+        status VARCHAR(50) NOT NULL DEFAULT 'Pendiente',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // Ensure all columns exist in public.shippings (handles cases where table already existed without them)
+    await pool.query(`
+      ALTER TABLE public.shippings ADD COLUMN IF NOT EXISTS order_number VARCHAR(100) NOT NULL DEFAULT '';
+      ALTER TABLE public.shippings ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255) NOT NULL DEFAULT '';
+      ALTER TABLE public.shippings ADD COLUMN IF NOT EXISTS customer_phone VARCHAR(100);
+      ALTER TABLE public.shippings ADD COLUMN IF NOT EXISTS delivery_hours VARCHAR(255);
+      ALTER TABLE public.shippings ADD COLUMN IF NOT EXISTS delivery_address TEXT NOT NULL DEFAULT '';
+      ALTER TABLE public.shippings ADD COLUMN IF NOT EXISTS comments TEXT;
+      ALTER TABLE public.shippings ADD COLUMN IF NOT EXISTS branch VARCHAR(50) NOT NULL DEFAULT 'Montevideo';
+      ALTER TABLE public.shippings ADD COLUMN IF NOT EXISTS shipping_cost NUMERIC(10, 2) NOT NULL DEFAULT 0.00;
+      ALTER TABLE public.shippings ADD COLUMN IF NOT EXISTS status VARCHAR(50) NOT NULL DEFAULT 'Pendiente';
+      ALTER TABLE public.shippings ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+      ALTER TABLE public.shippings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    `);
+
+    // Create public.shipping_origins table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS public.shipping_origins (
+        id VARCHAR(50) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        address TEXT NOT NULL,
+        contact VARCHAR(255) NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // Ensure all columns exist in public.shipping_origins
+    await pool.query(`
+      ALTER TABLE public.shipping_origins ADD COLUMN IF NOT EXISTS name VARCHAR(255) NOT NULL DEFAULT '';
+      ALTER TABLE public.shipping_origins ADD COLUMN IF NOT EXISTS address TEXT NOT NULL DEFAULT '';
+      ALTER TABLE public.shipping_origins ADD COLUMN IF NOT EXISTS contact VARCHAR(255) NOT NULL DEFAULT '';
+      ALTER TABLE public.shipping_origins ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+      ALTER TABLE public.shipping_origins ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+    `);
+
+    // Seed shipping_origins if empty
+    const checkOrigins = await pool.query("SELECT COUNT(*) FROM public.shipping_origins;");
+    if (Number(checkOrigins.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO public.shipping_origins (id, name, address, contact) VALUES
+        ('Montevideo', 'JUEM - Montevideo', 'Coruña 3038 Bis, Montevideo', '098058775 | 096958714'),
+        ('Pinamar', 'JUEM - Pinamar', 'Ruta 11 Km 320, Pinamar', '098058775 | 096958714');
+      `);
+    }
 
     // --- CREATE OPTIMIZED INDEXES FOR HIGH-PERFORMANCE CATALOGUE FETCHES ---
     await pool.query(`
@@ -1328,7 +1690,7 @@ async function initPostgresStore(): Promise<ShopState | null> {
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+  const PORT = 3000;
 
   // Verify mandatory credentials/secrets. In production, we generate secure runtime defaults to prevent container crashes while logging clear recommendations.
   if (!process.env.JWT_SECRET) {
@@ -1642,6 +2004,111 @@ async function startServer() {
     }
   });
 
+  // AI Assistant endpoint
+  app.post("/api/admin/assistant", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado: debes estar autenticado como administrador." });
+    }
+
+    try {
+      const { message, history } = req.body;
+      if (!message || typeof message !== "string") {
+        return res.status(400).json({ success: false, message: "El mensaje de usuario es obligatorio." });
+      }
+
+      const dbState = await getDbState();
+
+      // Create a super clean and structured summary for the AI context to keep tokens small and fast
+      const productsSummary = (dbState.products || [])
+        .filter(p => p.active !== false)
+        .map(p => ({
+          sku: p.codigo || p.id,
+          name: p.name,
+          category: p.category,
+          price: p.price,
+          originalPrice: p.originalPrice,
+          cost: p.precioCompra,
+          stock: p.stock,
+          stockPinamar: p.stockPinamar,
+          stockMontevideo: p.stockMontevideo,
+          paused: p.paused === true
+        }));
+
+      const ordersSummary = (dbState.orders || []).slice(0, 15).map(o => ({
+        id: o.id,
+        customerName: o.customerName,
+        total: o.total,
+        status: o.status,
+        date: o.createdAt,
+        items: (o.items || []).map((it: any) => `${it.productName} (x${it.quantity})`).join(", ")
+      }));
+
+      const settings = (dbState.settings || {}) as any;
+
+      const systemInstruction = `Eres un asistente de Inteligencia Artificial para el Panel de Administración de "Ventas Juem", una tienda uruguaya de moda, tecnología y accesorios con sucursales en Pinamar y Montevideo.
+
+Tu función es ayudar al administrador de la tienda con la toma de decisiones, análisis de inventario, redacción de copys publicitarios, descripciones de productos, respuestas de soporte por WhatsApp, cálculos de rentabilidad y auditorías de stock.
+
+Aquí tienes el estado actual y real de la tienda (contexto en tiempo real):
+- Total de productos activos: ${productsSummary.length}
+- Total de pedidos/órdenes: ${dbState.orders?.length || 0}
+- Total de categorías: ${dbState.categories?.length || 0}
+
+INFORMACIÓN DE PRODUCTOS (Detalles de Inventario y Precios):
+${JSON.stringify(productsSummary.slice(0, 50), null, 2)}
+${productsSummary.length > 50 ? `... y otros ${productsSummary.length - 50} productos más.` : ''}
+
+RESUMEN DE PEDIDOS RECIENTES (Últimos 15):
+${JSON.stringify(ordersSummary, null, 2)}
+
+CONFIGURACIÓN DE LA TIENDA:
+- Título del Sitio: "${settings.siteTitle || 'Ventas Juem'}"
+- Subtítulo: "${settings.siteSubtitle || ''}"
+- Envíos Gratis Activos: ${settings.freeShippingActive ? 'Sí' : 'No'}
+- Monto Mínimo de Envío Gratis: $${settings.freeShippingMinAmount || 0} UYU
+- Regiones de Envío Gratis: "${settings.freeShippingRegions || ''}"
+- WhatsApp de la Tienda: "${settings.whatsappNumber || ''}"
+
+REGLAS DE COMPORTAMIENTO:
+1. Responde siempre en español de manera profesional, amigable, concisa y extremadamente útil.
+2. Basate ÚNICAMENTE en los datos reales suministrados. No inventes productos, precios, stock o ventas que no estén en la lista.
+3. Si te preguntan sobre el stock, sé preciso. Distingue entre el stock de Montevideo y el de Pinamar si el producto los tiene por separado.
+4. Puedes realizar análisis avanzados, como:
+   - Identificar productos con stock bajo o nulo (stock crítico).
+   - Calcular el margen de ganancia de un producto si tiene costo de compra (margen = (precio - costo_compra) / precio * 100).
+   - Sugerir estrategias de reposición para Montevideo o Pinamar.
+   - Redactar mensajes listos para enviar por WhatsApp para el seguimiento de pedidos pendientes o aprobados.
+   - Escribir descripciones de productos atractivas y optimizadas para SEO y marketing.
+5. Si te piden realizar acciones de edición o eliminación (como "desactiva el producto X" o "cambia el precio de Y"), explica que como asistente puedes aconsejar los valores ideales, pero ellos deben realizar el cambio manualmente en la sección correspondiente del panel.
+`;
+
+      const formattedHistory = (history || []).map((msg: any) => ({
+        role: msg.sender === "user" ? "user" : "model",
+        parts: [{ text: msg.text }]
+      }));
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: [
+          ...formattedHistory,
+          { role: "user", parts: [{ text: message }] }
+        ],
+        config: {
+          systemInstruction,
+          temperature: 0.7,
+        }
+      });
+
+      const responseText = response.text || "No se pudo generar una respuesta.";
+      res.json({ success: true, text: responseText });
+
+    } catch (err: any) {
+      console.error("Error en el Asistente de IA:", err);
+      res.status(500).json({ success: false, message: `Error en el Asistente de IA: ${err.message}` });
+    }
+  });
+
   // POST upload to Cloudinary (Full-stack API proxy for credentials safety)
   app.post("/api/cloudinary/upload", (req, res, next) => {
     // Invoke multer manually to catch limits and filter errors gracefully
@@ -1811,9 +2278,15 @@ async function startServer() {
       }
 
       res.json({ success: true, message: "Cambios guardados con éxito en el servidor.", state: currentStoreState });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error al guardar estado de la tienda:", err);
-      res.status(500).json({ success: false, message: "Error interno al guardar los datos." });
+      let errMsg = "Error interno al guardar los datos.";
+      if (err.message && err.message.toLowerCase().includes("duplicate key") && err.message.toLowerCase().includes("product_variants_sku_key")) {
+        errMsg = "Error de base de datos: El código SKU de una variante ya está registrado para otro producto. Por favor, verifica que los códigos SKU sean únicos.";
+      } else if (err.message) {
+        errMsg = `Error al guardar en base de datos: ${err.message}`;
+      }
+      res.status(500).json({ success: false, message: errMsg });
     }
   });
 
@@ -2438,6 +2911,390 @@ async function startServer() {
     }
   });
 
+  // GET all bills/boletas (Protected)
+  app.get("/api/bills", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación de administrador principal." });
+    }
+    try {
+      const pool = getDbPool();
+      if (pool && !dbUnavailable) {
+        const dbState = await getDbState();
+        currentStoreState = dbState;
+      }
+      res.json({ success: true, bills: currentStoreState.bills || [] });
+    } catch (err: any) {
+      console.error("Error reading bills:", err);
+      res.status(500).json({ success: false, message: "Error al recuperar listado de boletas.", error: err.message });
+    }
+  });
+
+  // POST register a new bill/boleta (Protected)
+  app.post("/api/bills", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación de administrador principal." });
+    }
+    try {
+      const { providerName, providerRut, documentType, documentNumber, date, currency, subtotal, ivaAmount, total, paymentMethod, depositoOrigen, notes, items } = req.body;
+      
+      if (!providerName || !date || total === undefined) {
+        return res.status(400).json({ success: false, message: "El proveedor, la fecha y el total son obligatorios." });
+      }
+
+      const pName = sanitizeHtmlString(providerName).substring(0, 255);
+      const pRut = sanitizeHtmlString(providerRut || "").substring(0, 50);
+      const dType = sanitizeHtmlString(documentType || "Boleta Contado").substring(0, 100);
+      const dNum = sanitizeHtmlString(documentNumber || "").substring(0, 100);
+      const curr = sanitizeHtmlString(currency || "UYU").substring(0, 10);
+      const payMeth = sanitizeHtmlString(paymentMethod || "Contado").substring(0, 50);
+      const depOrig = sanitizeHtmlString(depositoOrigen || "Pinamar").substring(0, 50);
+      const nts = sanitizeHtmlString(notes || "");
+      const finalSubtotal = Number(subtotal || 0);
+      const finalIvaAmount = Number(ivaAmount || 0);
+      const finalTotal = Number(total || 0);
+      const itemsList = Array.isArray(items) ? items : [];
+
+      const pool = getDbPool();
+      let generatedId = "";
+
+      if (pool && !dbUnavailable) {
+        const insertRes = await pool.query(
+          `INSERT INTO public.bills (provider_name, provider_rut, document_type, document_number, date, currency, subtotal, iva_amount, total, payment_method, deposito_origen, notes, items, created_at, updated_at) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW()) RETURNING id;`,
+          [pName, pRut, dType, dNum, date, curr, finalSubtotal, finalIvaAmount, finalTotal, payMeth, depOrig, nts, JSON.stringify(itemsList)]
+        );
+        generatedId = insertRes.rows[0].id;
+        
+        // Refresh state
+        const dbState = await getDbState();
+        currentStoreState = dbState;
+      } else {
+        generatedId = "local-bill-" + crypto.randomBytes(8).toString("hex");
+        const newBill = {
+          id: generatedId,
+          providerName: pName,
+          providerRut: pRut,
+          documentType: dType,
+          documentNumber: dNum,
+          date,
+          currency: curr,
+          subtotal: finalSubtotal,
+          ivaAmount: finalIvaAmount,
+          total: finalTotal,
+          paymentMethod: payMeth,
+          depositoOrigen: (depOrig === "Montevideo" ? "Montevideo" : "Pinamar") as "Pinamar" | "Montevideo",
+          notes: nts,
+          items: itemsList,
+          createdAt: new Date().toISOString()
+        };
+        if (!currentStoreState.bills) {
+          currentStoreState.bills = [];
+        }
+        currentStoreState.bills.unshift(newBill);
+        fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+      }
+
+      res.json({ success: true, message: "Boleta ingresada correctamente.", id: generatedId, bill: {
+        id: generatedId,
+        providerName: pName,
+        providerRut: pRut,
+        documentType: dType,
+        documentNumber: dNum,
+        date,
+        currency: curr,
+        subtotal: finalSubtotal,
+        ivaAmount: finalIvaAmount,
+        total: finalTotal,
+        paymentMethod: payMeth,
+        depositoOrigen: depOrig,
+        notes: nts,
+        items: itemsList
+      }});
+    } catch (err: any) {
+      console.error("Error creating bill:", err);
+      res.status(500).json({ success: false, message: "Error al registrar la boleta.", error: err.message });
+    }
+  });
+
+  // DELETE a bill/boleta (Protected)
+  app.delete("/api/bills/:id", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación de administrador principal." });
+    }
+    try {
+      const { id } = req.params;
+      const pool = getDbPool();
+      if (pool && !dbUnavailable) {
+        await pool.query("DELETE FROM public.bills WHERE id = $1;", [id]);
+        
+        // Refresh state
+        const dbState = await getDbState();
+        currentStoreState = dbState;
+      } else {
+        if (currentStoreState.bills) {
+          currentStoreState.bills = currentStoreState.bills.filter(b => b.id !== id);
+          fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+        }
+      }
+      res.json({ success: true, message: "Boleta eliminada correctamente." });
+    } catch (err: any) {
+      console.error("Error deleting bill:", err);
+      res.status(500).json({ success: false, message: "Error al eliminar la boleta.", error: err.message });
+    }
+  });
+
+  // GET all shippings (Protected)
+  app.get("/api/shippings", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación de administrador principal." });
+    }
+    try {
+      const pool = getDbPool();
+      if (pool && !dbUnavailable) {
+        const dbState = await getDbState();
+        res.json({ success: true, shippings: dbState.shippings || [] });
+      } else {
+        res.json({ success: true, shippings: currentStoreState.shippings || [] });
+      }
+    } catch (err: any) {
+      console.error("Error fetching shippings:", err);
+      res.status(500).json({ success: false, message: "Error al recuperar listado de envíos.", error: err.message });
+    }
+  });
+
+  // POST register a new shipping (Protected)
+  app.post("/api/shippings", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación de administrador principal." });
+    }
+    try {
+      const { orderNumber, customerName, customerPhone, deliveryHours, deliveryAddress, comments, branch, shippingCost, status } = req.body;
+      
+      if (!orderNumber || !customerName || !deliveryAddress || !branch) {
+        return res.status(400).json({ success: false, message: "El número de pedido, cliente, dirección de entrega y sucursal de origen son obligatorios." });
+      }
+
+      const ordNum = sanitizeHtmlString(orderNumber).substring(0, 100);
+      const custName = sanitizeHtmlString(customerName).substring(0, 255);
+      const custPhone = sanitizeHtmlString(customerPhone || "").substring(0, 100);
+      const delHours = sanitizeHtmlString(deliveryHours || "").substring(0, 255);
+      const delAddress = sanitizeHtmlString(deliveryAddress);
+      const comms = sanitizeHtmlString(comments || "");
+      const brch = sanitizeHtmlString(branch || "Pinamar").substring(0, 50);
+      const cost = Number(shippingCost || 0);
+      const stat = sanitizeHtmlString(status || "Pendiente").substring(0, 50);
+
+      const pool = getDbPool();
+      let generatedId = "";
+
+      if (pool && !dbUnavailable) {
+        const insertRes = await pool.query(
+          `INSERT INTO public.shippings (order_number, customer_name, customer_phone, delivery_hours, delivery_address, comments, branch, shipping_cost, status, created_at, updated_at) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW()) RETURNING id;`,
+          [ordNum, custName, custPhone, delHours, delAddress, comms, brch, cost, stat]
+        );
+        generatedId = insertRes.rows[0].id;
+        
+        // Refresh state
+        const dbState = await getDbState();
+        currentStoreState = dbState;
+      } else {
+        generatedId = "local-ship-" + crypto.randomBytes(8).toString("hex");
+        const newShip = {
+          id: generatedId,
+          orderNumber: ordNum,
+          customerName: custName,
+          customerPhone: custPhone,
+          deliveryHours: delHours,
+          deliveryAddress: delAddress,
+          comments: comms,
+          branch: (brch === "Montevideo" ? "Montevideo" : "Pinamar") as "Pinamar" | "Montevideo",
+          shippingCost: cost,
+          status: (stat === "Entregado" ? "Entregado" : stat === "Cancelado" ? "Cancelado" : "Pendiente") as "Pendiente" | "Entregado" | "Cancelado",
+          createdAt: new Date().toISOString()
+        };
+        if (!currentStoreState.shippings) {
+          currentStoreState.shippings = [];
+        }
+        currentStoreState.shippings.unshift(newShip);
+        fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+      }
+
+      res.json({
+        success: true,
+        message: "Envío registrado correctamente.",
+        id: generatedId,
+        shipping: {
+          id: generatedId,
+          orderNumber: ordNum,
+          customerName: custName,
+          customerPhone: custPhone,
+          deliveryHours: delHours,
+          deliveryAddress: delAddress,
+          comments: comms,
+          branch: brch,
+          shippingCost: cost,
+          status: stat,
+          createdAt: new Date().toISOString()
+        }
+      });
+    } catch (err: any) {
+      console.error("Error creating shipping:", err);
+      res.status(500).json({ success: false, message: "Error al registrar el envío.", error: err.message });
+    }
+  });
+
+  // PUT update an existing shipping (Protected)
+  app.put("/api/shippings/:id", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación de administrador principal." });
+    }
+    try {
+      const { id } = req.params;
+      const { orderNumber, customerName, customerPhone, deliveryHours, deliveryAddress, comments, branch, shippingCost, status } = req.body;
+
+      if (!orderNumber || !customerName || !deliveryAddress || !branch) {
+        return res.status(400).json({ success: false, message: "El número de pedido, cliente, dirección de entrega y sucursal de origen son obligatorios." });
+      }
+
+      const ordNum = sanitizeHtmlString(orderNumber).substring(0, 100);
+      const custName = sanitizeHtmlString(customerName).substring(0, 255);
+      const custPhone = sanitizeHtmlString(customerPhone || "").substring(0, 100);
+      const delHours = sanitizeHtmlString(deliveryHours || "").substring(0, 255);
+      const delAddress = sanitizeHtmlString(deliveryAddress);
+      const comms = sanitizeHtmlString(comments || "");
+      const brch = sanitizeHtmlString(branch || "Pinamar").substring(0, 50);
+      const cost = Number(shippingCost || 0);
+      const stat = sanitizeHtmlString(status || "Pendiente").substring(0, 50);
+
+      const pool = getDbPool();
+      if (pool && !dbUnavailable) {
+        await pool.query(
+          `UPDATE public.shippings 
+           SET order_number = $1, customer_name = $2, customer_phone = $3, delivery_hours = $4, delivery_address = $5, comments = $6, branch = $7, shipping_cost = $8, status = $9, updated_at = NOW()
+           WHERE id = $10;`,
+          [ordNum, custName, custPhone, delHours, delAddress, comms, brch, cost, stat, id]
+        );
+        
+        // Refresh state
+        const dbState = await getDbState();
+        currentStoreState = dbState;
+      } else {
+        if (currentStoreState.shippings) {
+          const idx = currentStoreState.shippings.findIndex(s => s.id === id);
+          if (idx !== -1) {
+            currentStoreState.shippings[idx] = {
+              ...currentStoreState.shippings[idx],
+              orderNumber: ordNum,
+              customerName: custName,
+              customerPhone: custPhone,
+              deliveryHours: delHours,
+              deliveryAddress: delAddress,
+              comments: comms,
+              branch: (brch === "Montevideo" ? "Montevideo" : "Pinamar") as "Pinamar" | "Montevideo",
+              shippingCost: cost,
+              status: (stat === "Entregado" ? "Entregado" : stat === "Cancelado" ? "Cancelado" : "Pendiente") as "Pendiente" | "Entregado" | "Cancelado",
+              updatedAt: new Date().toISOString()
+            };
+            fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+          }
+        }
+      }
+
+      res.json({ success: true, message: "Envío actualizado correctamente." });
+    } catch (err: any) {
+      console.error("Error updating shipping:", err);
+      res.status(500).json({ success: false, message: "Error al actualizar el envío.", error: err.message });
+    }
+  });
+
+  // DELETE an existing shipping (Protected)
+  app.delete("/api/shippings/:id", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación de administrador principal." });
+    }
+    try {
+      const { id } = req.params;
+      const pool = getDbPool();
+      if (pool && !dbUnavailable) {
+        await pool.query("DELETE FROM public.shippings WHERE id = $1;", [id]);
+        
+        // Refresh state
+        const dbState = await getDbState();
+        currentStoreState = dbState;
+      } else {
+        if (currentStoreState.shippings) {
+          currentStoreState.shippings = currentStoreState.shippings.filter(s => s.id !== id);
+          fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+        }
+      }
+      res.json({ success: true, message: "Envío eliminado correctamente." });
+    } catch (err: any) {
+      console.error("Error deleting shipping:", err);
+      res.status(500).json({ success: false, message: "Error al eliminar el envío.", error: err.message });
+    }
+  });
+
+  // POST update shipping origins (Protected)
+  app.post("/api/shipping-origins", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación de administrador principal." });
+    }
+    try {
+      const { origins } = req.body;
+      if (!origins || !Array.isArray(origins)) {
+        return res.status(400).json({ success: false, message: "El listado de orígenes es obligatorio y debe ser un arreglo." });
+      }
+
+      const pool = getDbPool();
+      if (pool && !dbUnavailable) {
+        for (const orig of origins) {
+          const { id, name, address, contact } = orig;
+          if (!id || !name || !address || !contact) continue;
+          
+          await pool.query(
+            `INSERT INTO public.shipping_origins (id, name, address, contact, updated_at) 
+             VALUES ($1, $2, $3, $4, NOW()) 
+             ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, address = EXCLUDED.address, contact = EXCLUDED.contact, updated_at = NOW();`,
+            [id, name, address, contact]
+          );
+        }
+        // Refresh state
+        const dbState = await getDbState();
+        currentStoreState = dbState;
+      } else {
+        if (!currentStoreState.shippingOrigins) {
+          currentStoreState.shippingOrigins = [];
+        }
+        for (const orig of origins) {
+          const { id, name, address, contact } = orig;
+          if (!id || !name || !address || !contact) continue;
+
+          const idx = currentStoreState.shippingOrigins.findIndex(o => o.id === id);
+          if (idx !== -1) {
+            currentStoreState.shippingOrigins[idx] = { id: id as any, name, address, contact };
+          } else {
+            currentStoreState.shippingOrigins.push({ id: id as any, name, address, contact });
+          }
+        }
+        fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+      }
+
+      res.json({ success: true, message: "Orígenes de remitentes actualizados correctamente." });
+    } catch (err: any) {
+      console.error("Error updating shipping origins:", err);
+      res.status(500).json({ success: false, message: "Error al guardar los orígenes.", error: err.message });
+    }
+  });
+
   // POST create a safe checkout order BEFORE redirecting to gateway (Fully Secured)
   app.post("/api/orders", async (req, res) => {
     try {
@@ -2448,13 +3305,15 @@ async function startServer() {
         return res.status(429).json({ success: false, message: "Demasiados pedidos creados en poco tiempo. Por favor, intente nuevamente en unos minutos." });
       }
 
-      const { customerName, customerEmail, customerPhone, shippingCost, couponCode, notes, items, paymentMethod } = req.body;
+      const { customerName, customerEmail, customerPhone, shippingCost, couponCode, notes, items, paymentMethod, depositoOrigen, canal } = req.body;
       
       if (!customerName || !customerEmail || !items || items.length === 0) {
         return res.status(400).json({ success: false, message: "Nombre, Correo Electrónico y Artículos del carrito son obligatorios." });
       }
 
       const sanitizedPaymentMethod = sanitizeHtmlString(paymentMethod || "transfer").trim().substring(0, 50);
+      const sanitizedDepositoOrigen = sanitizeHtmlString(depositoOrigen || "Pinamar").trim().substring(0, 50);
+      const sanitizedCanal = sanitizeHtmlString(canal || "Web").trim().substring(0, 50);
 
       // 2. Input Sanitization to prevent XSS (Stored & Dom XSS injection blocks)
       const sanitizedName = sanitizeHtmlString(customerName).trim().substring(0, 100);
@@ -2462,7 +3321,10 @@ async function startServer() {
       const sanitizedPhone = sanitizeHtmlString(customerPhone || "").trim().substring(0, 50);
       const sanitizedNotes = sanitizeHtmlString(notes || "").trim().substring(0, 1000);
 
-      const status = "pedido_iniciado"; // initial state
+      let status: string = "pedido_iniciado"; // initial state
+      if (req.body.status && ["pago_aprobado", "pago_pendiente", "pago_rechazado", "pedido_iniciado"].includes(req.body.status)) {
+        status = req.body.status;
+      }
       const pool = getDbPool();
       let orderId: string;
 
@@ -2574,8 +3436,8 @@ async function startServer() {
 
           // Insert secure calculated values into postgres
           const orderRes = await client.query(`
-            INSERT INTO public.orders (customer_name, customer_email, customer_phone, subtotal, discount_amount, shipping_cost, total, applied_coupon_code, current_status, notes, payment_method)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            INSERT INTO public.orders (customer_name, customer_email, customer_phone, subtotal, discount_amount, shipping_cost, total, applied_coupon_code, current_status, notes, payment_method, deposito_origen, canal)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             RETURNING id, created_at;
           `, [
             sanitizedName, 
@@ -2588,7 +3450,9 @@ async function startServer() {
             validCouponCodeToSave, 
             status, 
             sanitizedNotes || null,
-            sanitizedPaymentMethod
+            sanitizedPaymentMethod,
+            sanitizedDepositoOrigen,
+            sanitizedCanal
           ]);
           
           orderId = orderRes.rows[0].id;
@@ -2612,6 +3476,10 @@ async function startServer() {
               item.quantity,
               item.totalPrice
             ]);
+          }
+
+          if (status === "pago_aprobado") {
+            await deductStockDb(client, orderId);
           }
 
           await client.query("COMMIT;");
@@ -2664,6 +3532,8 @@ async function startServer() {
           status: status as any,
           notes: sanitizedNotes,
           paymentMethod: sanitizedPaymentMethod,
+          depositoOrigen: sanitizedDepositoOrigen as any,
+          canal: sanitizedCanal,
           createdAt: new Date().toISOString(),
           items: verifiedItems.map((i: any) => ({
             productId: String(i.productId),
@@ -2677,6 +3547,11 @@ async function startServer() {
             totalPrice: i.totalPrice
           }))
         };
+
+        // Deduct stock in-memory if status is pago_aprobado
+        if (status === "pago_aprobado") {
+          deductStockMemory(verifiedItems);
+        }
 
         if (!currentStoreState.orders) {
           currentStoreState.orders = [];
@@ -2757,17 +3632,47 @@ async function startServer() {
     try {
       const pool = getDbPool();
       if (pool && !dbUnavailable) {
+        const prevRes = await pool.query("SELECT current_status FROM public.orders WHERE id = $1;", [id]);
+        const prevStatus = prevRes.rows[0]?.current_status;
+
         await pool.query("UPDATE public.orders SET current_status = $1, updated_at = NOW() WHERE id = $2;", [status, id]);
+
+        if (status === "pago_aprobado" && prevStatus !== "pago_aprobado") {
+          const client = await pool.connect();
+          try {
+            await client.query("BEGIN;");
+            await deductStockDb(client, id);
+            await client.query("COMMIT;");
+          } catch (txErr) {
+            await client.query("ROLLBACK;");
+            console.error("Error deducting stock on manual status update:", txErr);
+          } finally {
+            client.release();
+          }
+        }
+
         const dbState = await getDbState();
         currentStoreState = dbState;
       } else {
         if (currentStoreState.orders) {
+          let shouldDeduct = false;
           currentStoreState.orders = currentStoreState.orders.map(o => {
             if (o.id === id) {
+              if (status === "pago_aprobado" && o.status !== "pago_aprobado") {
+                shouldDeduct = true;
+              }
               return { ...o, status, updatedAt: new Date().toISOString() };
             }
             return o;
           });
+
+          if (shouldDeduct) {
+            const order = currentStoreState.orders.find(o => o.id === id);
+            if (order && order.items) {
+              deductStockMemory(order.items);
+            }
+          }
+
           fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
         }
       }

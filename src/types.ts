@@ -8,6 +8,9 @@ export interface ProductVariant {
   stock: number;
   imageUrl?: string; // Image associated with this color/variant
   price?: number; // Custom override price
+  stockPinamar?: number;
+  stockMontevideo?: number;
+  stockTotalActual?: number;
 }
 
 export interface Product {
@@ -35,6 +38,18 @@ export interface Product {
   is3D?: boolean; // Is a 3D printed product with custom logic
   hoursPerUnit?: number; // Hours needed to 3D print one unit
   consultOnly?: boolean; // Show 'Consultar por WhatsApp' instead of 'Comprar'
+  
+  // Custom internal pricing and branch stock fields
+  precioCompra?: number;
+  precioCon40?: number;
+  comisionML?: number;
+  precioVentaML?: number;
+  precioWeb?: number;
+  descuentoPorcentaje?: number;
+  stockPinamar?: number;
+  stockMontevideo?: number;
+  stockTotalActual?: number;
+
   sizeChartEnabled?: boolean;
   sizeChartShowSuperior?: boolean;
   sizeChartShowInferior?: boolean;
@@ -218,6 +233,58 @@ export interface Order {
   createdAt: string;
   updatedAt?: string;
   items?: OrderItem[];
+  depositoOrigen?: 'Pinamar' | 'Montevideo';
+  canal?: string;
+  paymentMethod?: string;
+}
+
+export interface BillItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  ivaRate?: string; // e.g. "22%", "10%", "No Gravado"
+}
+
+export interface Bill {
+  id: string;
+  providerName: string;
+  providerRut?: string;
+  documentType: string;
+  documentNumber?: string;
+  date: string; // YYYY-MM-DD
+  currency: string;
+  subtotal: number;
+  ivaAmount: number;
+  total: number;
+  paymentMethod?: string;
+  depositoOrigen?: "Pinamar" | "Montevideo";
+  notes?: string;
+  items?: BillItem[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface Shipping {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  customerPhone?: string;
+  deliveryHours?: string;
+  deliveryAddress: string;
+  comments?: string;
+  branch: "Pinamar" | "Montevideo";
+  shippingCost: number;
+  status: "Pendiente" | "Entregado" | "Cancelado";
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface ShippingOrigin {
+  id: "Pinamar" | "Montevideo";
+  name: string;
+  address: string;
+  contact: string;
 }
 
 export interface ShopState {
@@ -229,6 +296,9 @@ export interface ShopState {
   adminCredentials?: AdminCredentials;
   coupons?: Coupon[];
   orders?: Order[]; // local context or active cached orders
+  bills?: Bill[]; // entered provider bills/expenses
+  shippings?: Shipping[];
+  shippingOrigins?: ShippingOrigin[];
 }
 
 export interface CartItem {

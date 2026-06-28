@@ -1,5 +1,14 @@
 import dotenv from "dotenv";
 dotenv.config({ override: true });
+
+// Prevent server crash on unhandled errors or rejections
+process.on("uncaughtException", (error) => {
+  console.error("🔥 CRITICAL UNCAUGHT EXCEPTION:", error);
+});
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("🔥 CRITICAL UNHANDLED REJECTION at:", promise, "reason:", reason);
+});
+
 import dns from "dns";
 if (dns && typeof dns.setDefaultResultOrder === "function") {
   dns.setDefaultResultOrder("ipv4first");

@@ -85,9 +85,11 @@ import {
   Instagram,
   Facebook,
   Phone,
-  ShieldCheck
+  ShieldCheck,
+  Receipt,
+  Scale
 } from "lucide-react";
-import { Product, SiteSettings, ShopState, CartItem, Category, Subcategory, ProductVariant, is3DProduct } from "./types";
+import { Product, SiteSettings, ShopState, CartItem, Category, Subcategory, ProductVariant, is3DProduct, Shipping, ShippingOrigin } from "./types";
 import ThemeStyles from "./components/ThemeStyles";
 import ProductCard from "./components/ProductCard";
 import ProductSlider from "./components/ProductSlider";
@@ -98,6 +100,10 @@ import HeroSlider from "./components/HeroSlider";
 import SecurityPanel from "./components/SecurityPanel";
 import { DashboardGeneral } from "./components/DashboardGeneral";
 import { DashboardOrders } from "./components/DashboardOrders";
+import { DashboardBills } from "./components/DashboardBills";
+import { DashboardResumenGeneral } from "./components/DashboardResumenGeneral";
+import { DashboardShippings } from "./components/DashboardShippings";
+import AIAssistant from "./components/AIAssistant";
 import WhatsAppWidget from "./components/WhatsAppWidget";
 import ImageGalleryEditor from "./components/ImageGalleryEditor";
 import GoogleReviewsCompact from "./components/GoogleReviewsCompact";
@@ -707,6 +713,80 @@ export function getProductSizeChartData(p: Partial<Product>) {
   };
 }
 
+function deductProductsStockClient(products: any[], items: any[], dep: string): any[] {
+  return products.map(p => {
+    const itemsToDeduct = items.filter(it => String(it.productId) === String(p.id));
+    if (itemsToDeduct.length > 0) {
+      const clonedProduct = { ...p };
+      for (const it of itemsToDeduct) {
+        const qty = it.quantity || 1;
+        const pinStock = clonedProduct.stockPinamar || 0;
+        const mvdStock = clonedProduct.stockMontevideo || 0;
+        
+        let pinDeduct = 0;
+        let mvdDeduct = 0;
+        
+        if (dep === "Montevideo") {
+          if (mvdStock >= qty) {
+            mvdDeduct = qty;
+          } else {
+            mvdDeduct = mvdStock;
+            pinDeduct = qty - mvdStock;
+          }
+        } else {
+          if (pinStock >= qty) {
+            pinDeduct = qty;
+          } else {
+            pinDeduct = pinStock;
+            mvdDeduct = qty - pinStock;
+          }
+        }
+
+        clonedProduct.stockPinamar = Math.max(0, pinStock - pinDeduct);
+        clonedProduct.stockMontevideo = Math.max(0, mvdStock - mvdDeduct);
+        clonedProduct.stock = Math.max(0, (clonedProduct.stock || 0) - qty);
+
+        if (it.variantId && clonedProduct.variants) {
+          clonedProduct.variants = clonedProduct.variants.map((v: any) => {
+            if (String(v.id) === String(it.variantId)) {
+              const clonedV = { ...v };
+              const vPinStock = clonedV.stockPinamar || 0;
+              const vMvdStock = clonedV.stockMontevideo || 0;
+              
+              let vPinDeduct = 0;
+              let vMvdDeduct = 0;
+              
+              if (dep === "Montevideo") {
+                if (vMvdStock >= qty) {
+                  vMvdDeduct = qty;
+                } else {
+                  vMvdDeduct = vMvdStock;
+                  vPinDeduct = qty - vMvdStock;
+                }
+              } else {
+                if (vPinStock >= qty) {
+                  vPinDeduct = qty;
+                } else {
+                  vPinDeduct = vPinStock;
+                  vMvdDeduct = qty - vPinStock;
+                }
+              }
+
+              clonedV.stockPinamar = Math.max(0, vPinStock - vPinDeduct);
+              clonedV.stockMontevideo = Math.max(0, vMvdStock - vMvdDeduct);
+              clonedV.stock = Math.max(0, (clonedV.stock || 0) - qty);
+              return clonedV;
+            }
+            return v;
+          });
+        }
+      }
+      return clonedProduct;
+    }
+    return p;
+  });
+}
+
 export default function App() {
   // Store state loaded from api
   const [store, setStore] = useState<ShopState>({
@@ -742,7 +822,8 @@ export default function App() {
 
   // Search & Navigation
   const [activeTab, setActiveTab] = useState<"storefront" | "admin" | "checkout">("storefront");
-  const [adminSection, setAdminSection] = useState<"general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales" | "reviews">("dashboard");
+  const [adminSection, setAdminSection] = useState<"general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales" | "reviews" | "bills" | "finances" | "shippings" | "assistant">("dashboard");
+  const [showAIAssistantSidebar, setShowAIAssistantSidebar] = useState(false);
   const [showAdminDevicePreview, setShowAdminDevicePreview] = useState(true);
   const [mobileAdminMenuOpen, setMobileAdminMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -772,6 +853,26 @@ export default function App() {
   const [showFiltersPanel, setShowFiltersPanel] = useState<boolean>(false);
   const [mobileLayoutMode, setMobileLayoutMode] = useState<"grid" | "list">("grid");
   const [stockFilterTab, setStockFilterTab] = useState<"all" | "outOfStock" | "lowStock" | "alerts">("alerts");
+  const [stockSearchQuery, setStockSearchQuery] = useState<string>("");
+  const [stockPage, setStockPage] = useState<number>(1);
+  const [stockSkuFilter, setStockSkuFilter] = useState<string>("");
+  const [stockNameFilter, setStockNameFilter] = useState<string>("");
+  const [stockCostFilter, setStockCostFilter] = useState<string>("all");
+  const [stockLocalFilter, setStockLocalFilter] = useState<string>("all");
+  const [stockMlFilter, setStockMlFilter] = useState<string>("all");
+  const [stockMvdFilter, setStockMvdFilter] = useState<string>("all");
+  const [stockPinFilter, setStockPinFilter] = useState<string>("all");
+  const [sortField, setSortField] = useState<string>("");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
+  const toggleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
   const [currentPage, setCurrentPage] = useState<number>(1);
 
   // Auto-reset pagination on catalog changes
@@ -809,7 +910,7 @@ export default function App() {
     }
   };
 
-  const navigateAdminSection = (section: "general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales" | "reviews" | "emails") => {
+  const navigateAdminSection = (section: "general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales" | "reviews" | "emails" | "bills" | "finances" | "shippings" | "assistant") => {
     setAdminSection(section);
     setEditingProduct(null);
     setIsNewProductMode(false);
@@ -1021,23 +1122,120 @@ export default function App() {
   const [newProductStep, setNewProductStep] = useState(1);
   const [editingProductStep, setEditingProductStep] = useState(1);
 
+  const updateProductCalculations = (p: Partial<Product>): Partial<Product> => {
+    const pCompra = Number(p.precioCompra || 0);
+    const pCon40 = Number((pCompra * 1.4).toFixed(2));
+    const pVentaML = Number(p.precioVentaML || 0);
+    const pComision = Number(p.comisionML || 0);
+    const pWeb = Number((pVentaML - pComision).toFixed(2));
+    const desc = Number(p.descuentoPorcentaje || 0);
+    
+    let sPinamar = Number(p.stockPinamar || 0);
+    let sMontevideo = Number(p.stockMontevideo || 0);
+
+    if (p.variants && p.variants.length > 0) {
+      sPinamar = p.variants.reduce((sum, v) => sum + Number(v.stockPinamar || 0), 0);
+      sMontevideo = p.variants.reduce((sum, v) => sum + Number(v.stockMontevideo || 0), 0);
+    }
+    
+    const sTotal = sPinamar + sMontevideo;
+
+    const computedPrice = desc > 0 ? Number((pWeb * (1 - desc / 100)).toFixed(2)) : pWeb;
+    const computedOriginalPrice = desc > 0 ? pWeb : undefined;
+
+    return {
+      ...p,
+      precioCon40: pCon40,
+      precioWeb: pWeb,
+      stockPinamar: sPinamar,
+      stockMontevideo: sMontevideo,
+      stockTotalActual: sTotal,
+      stock: sTotal,
+      price: computedPrice,
+      originalPrice: computedOriginalPrice
+    };
+  };
+
+  const prepareProductForEditing = (p: Product): Product => {
+    const precioCompra = p.precioCompra !== undefined ? p.precioCompra : 0;
+    const precioCon40 = p.precioCon40 !== undefined ? p.precioCon40 : Number((precioCompra * 1.4).toFixed(2));
+    const comisionML = p.comisionML !== undefined ? p.comisionML : 0;
+    const precioVentaML = p.precioVentaML !== undefined ? p.precioVentaML : (p.price || 0);
+    const precioWeb = p.precioWeb !== undefined ? p.precioWeb : Number((precioVentaML - comisionML).toFixed(2));
+    
+    let descuentoPorcentaje = p.descuentoPorcentaje !== undefined ? p.descuentoPorcentaje : 0;
+    if (descuentoPorcentaje === 0 && p.originalPrice && p.price && p.originalPrice > p.price) {
+      descuentoPorcentaje = Math.round(((p.originalPrice - p.price) / p.originalPrice) * 100);
+    }
+
+    const preparedVariants = p.variants ? p.variants.map(v => {
+      const sp = v.stockPinamar !== undefined ? v.stockPinamar : v.stock;
+      const sm = v.stockMontevideo !== undefined ? v.stockMontevideo : 0;
+      return {
+        ...v,
+        stockPinamar: sp,
+        stockMontevideo: sm,
+        stock: sp + sm
+      };
+    }) : undefined;
+
+    let stockPinamar = p.stockPinamar !== undefined ? p.stockPinamar : p.stock;
+    let stockMontevideo = p.stockMontevideo !== undefined ? p.stockMontevideo : 0;
+    if (preparedVariants && preparedVariants.length > 0) {
+      stockPinamar = preparedVariants.reduce((sum, v) => sum + v.stockPinamar, 0);
+      stockMontevideo = preparedVariants.reduce((sum, v) => sum + v.stockMontevideo, 0);
+    }
+    const stockTotalActual = stockPinamar + stockMontevideo;
+
+    return {
+      ...p,
+      precioCompra,
+      precioCon40,
+      comisionML,
+      precioVentaML,
+      precioWeb,
+      descuentoPorcentaje,
+      stockPinamar,
+      stockMontevideo,
+      stockTotalActual,
+      stock: stockTotalActual,
+      variants: preparedVariants
+    };
+  };
+
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isNewProductMode, setIsNewProductMode] = useState(false);
   const [newProduct, setNewProduct] = useState<Partial<Product>>({
     name: "",
     description: "",
-    price: undefined,
+    price: 0,
     originalPrice: undefined,
     category: "",
     imageUrl: "",
-    stock: 10,
+    stock: 0,
     featured: false,
     consultOnly: false,
     categorias_adicionales: [],
-    subcategorias_adicionales: []
+    subcategorias_adicionales: [],
+    precioCompra: 0,
+    precioCon40: 0,
+    comisionML: 0,
+    precioVentaML: 0,
+    precioWeb: 0,
+    descuentoPorcentaje: 0,
+    stockPinamar: 0,
+    stockMontevideo: 0,
+    stockTotalActual: 0
   });
   const [newProductErrors, setNewProductErrors] = useState<Record<string, string>>({});
   const [editProductErrors, setEditProductErrors] = useState<Record<string, string>>({});
+
+  const [newSubSecCategoryFilter, setNewSubSecCategoryFilter] = useState<string>("");
+  const [editSubSecCategoryFilter, setEditSubSecCategoryFilter] = useState<string>("");
+  const [newVarSize, setNewVarSize] = useState<string>("Único");
+  const [newVarColor, setNewVarColor] = useState<string>("General");
+  const [editVarSize, setEditVarSize] = useState<string>("Único");
+  const [editVarColor, setEditVarColor] = useState<string>("General");
 
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryIcon, setNewCategoryIcon] = useState("Shirt");
@@ -2049,8 +2247,8 @@ export default function App() {
 
   const handleUpdateQuantity = (productId: string, quantity: number, size?: string, color?: string) => {
     const newCart = cart.map((item) => {
-      if (item.product.id === productId && item.selectedSize === size && item.selectedColor === color) {
-        const liveProduct = store.products.find(p => p.id === productId) || item.product;
+      if (String(item.product.id) === String(productId) && item.selectedSize === size && item.selectedColor === color) {
+        const liveProduct = store.products.find(p => String(p.id) === String(productId)) || item.product;
         const availableStock = getAvailableStockForProduct(liveProduct, size, color);
         if (quantity > availableStock) {
           showAdminToast(`Límite de stock alcanzado (${availableStock} un. disponibles)`, "neutral");
@@ -2155,9 +2353,48 @@ export default function App() {
     }
   };
 
+  const getNextAvailableSKUNumber = (products: Product[], additionalSkus: string[]): number => {
+    let maxNum = 0;
+    products.forEach(p => {
+      if (p.codigo) {
+        const match = p.codigo.trim().match(/^J(\d+)/i);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      }
+      if (p.variants) {
+        p.variants.forEach(v => {
+          if (v.sku) {
+            const match = v.sku.trim().match(/^J(\d+)/i);
+            if (match) {
+              const num = parseInt(match[1], 10);
+              if (num > maxNum) maxNum = num;
+            }
+          }
+        });
+      }
+    });
+    additionalSkus.forEach(sku => {
+      if (sku) {
+        const match = sku.trim().match(/^J(\d+)/i);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      }
+    });
+    return maxNum === 0 ? 1 : maxNum + 1;
+  };
+
+  const getNextAutoSKU = (products: Product[]): string => {
+    const nextNum = getNextAvailableSKUNumber(products, []);
+    return `J${String(nextNum).padStart(3, '0')}`;
+  };
+
   const checkDuplicateSKU = (product: Product, isNew: boolean): string | null => {
     const baseCode = product.codigo?.trim().toUpperCase();
-    const otherProducts = isNew ? store.products : store.products.filter(p => p.id !== product.id);
+    const otherProducts = isNew ? store.products : store.products.filter(p => String(p.id) !== String(product.id));
     
     // Map occupied codes with their owner's reference
     const occupied = new Map<string, string>();
@@ -2206,22 +2443,14 @@ export default function App() {
       }
     }
 
-    // 4. Check if any variant's SKU is identical to the product's main code
-    if (baseCode && product.variants) {
-      for (const v of product.variants) {
-        const vSku = v.sku?.trim().toUpperCase();
-        if (vSku === baseCode) {
-          return `El código de variante "${vSku}" no puede ser idéntico al código base de este mismo producto.`;
-        }
-      }
-    }
-
     return null;
   };
 
   // CRUD handlers - Products
-  const handleCreateProduct = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleCreateProduct = async (e?: any) => {
+    if (e && typeof e.preventDefault === "function") {
+      e.preventDefault();
+    }
     const errors: Record<string, string> = {};
 
     if (!newProduct.name || !newProduct.name.trim()) {
@@ -2247,6 +2476,11 @@ export default function App() {
 
     if (!actualCategoryId) {
       errors.category = "Debes seleccionar o crear una categoría primero.";
+    }
+
+    // SKU/Código validation
+    if (!newProduct.codigo || !newProduct.codigo.trim()) {
+      errors.codigo = "El Código Único / SKU Base es obligatorio.";
     }
 
     // Price validation
@@ -2277,15 +2511,15 @@ export default function App() {
       codigo: newProduct.codigo || "",
       name: newProduct.name!.trim(),
       description: newProduct.description || "",
-      price: Number(newProduct.price),
-      originalPrice: newProduct.originalPrice ? Number(newProduct.originalPrice) : Number(newProduct.price),
+      price: Number(newProduct.price || 0),
+      originalPrice: newProduct.originalPrice ? Number(newProduct.originalPrice) : undefined,
       category: actualCategory,
       categoria_id: actualCategoryId,
       subcategoria_id: newProduct.subcategoria_id || "all",
       categorias_adicionales: newProduct.categorias_adicionales || [],
       subcategorias_adicionales: newProduct.subcategorias_adicionales || [],
       imageUrl: newProduct.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80",
-      stock: Math.floor(Number(newProduct.stock ?? 10)),
+      stock: Math.floor(Number(newProduct.stock ?? 0)),
       featured: !!newProduct.featured,
       is3D: !!newProduct.is3D,
       hoursPerUnit: newProduct.hoursPerUnit,
@@ -2293,6 +2527,20 @@ export default function App() {
       createdAt: new Date().toISOString(),
       sizes: newProduct.sizes || [],
       colors: newProduct.colors || [],
+      variants: newProduct.variants || [],
+      imagenes: newProduct.imagenes || [],
+      
+      // Custom internal pricing and branch stock fields
+      precioCompra: Number(newProduct.precioCompra || 0),
+      precioCon40: Number(newProduct.precioCon40 || 0),
+      comisionML: Number(newProduct.comisionML || 0),
+      precioVentaML: Number(newProduct.precioVentaML || 0),
+      precioWeb: Number(newProduct.precioWeb || 0),
+      descuentoPorcentaje: Number(newProduct.descuentoPorcentaje || 0),
+      stockPinamar: Number(newProduct.stockPinamar || 0),
+      stockMontevideo: Number(newProduct.stockMontevideo || 0),
+      stockTotalActual: Number(newProduct.stockTotalActual || 0),
+
       sizeChartEnabled: newProduct.sizeChartEnabled !== false,
       sizeChartShowSuperior: newProduct.sizeChartShowSuperior !== false,
       sizeChartShowInferior: newProduct.sizeChartShowInferior !== false,
@@ -2322,10 +2570,10 @@ export default function App() {
       
       // Reset form
       setNewProduct({
-        codigo: "",
+        codigo: getNextAutoSKU(updatedState.products),
         name: "",
         description: "",
-        price: undefined,
+        price: 0,
         originalPrice: undefined,
         category: (store.dbCategories || [])[0]?.nombre || "",
         categoria_id: (store.dbCategories || [])[0]?.id || "",
@@ -2333,23 +2581,41 @@ export default function App() {
         categorias_adicionales: [],
         subcategorias_adicionales: [],
         imageUrl: "",
-        stock: 10,
+        stock: 0,
         featured: false,
         consultOnly: false,
         sizes: [],
-        colors: []
+        colors: [],
+        variants: [],
+        imagenes: [],
+        precioCompra: 0,
+        precioCon40: 0,
+        comisionML: 0,
+        precioVentaML: 0,
+        precioWeb: 0,
+        descuentoPorcentaje: 0,
+        stockPinamar: 0,
+        stockMontevideo: 0,
+        stockTotalActual: 0
       });
     } else {
       showAdminToast("Error al guardar el nuevo producto.", "error");
     }
   };
 
-  const handleUpdateProduct = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleUpdateProduct = async (e?: any) => {
+    if (e && typeof e.preventDefault === "function") {
+      e.preventDefault();
+    }
     if (!editingProduct) return;
 
     if (!editingProduct.name || !editingProduct.name.trim()) {
       showAdminToast("El nombre del producto es obligatorio.", "error");
+      return;
+    }
+
+    if (!editingProduct.codigo || !editingProduct.codigo.trim()) {
+      showAdminToast("El Código Único / SKU Base es obligatorio.", "error");
       return;
     }
 
@@ -2361,7 +2627,7 @@ export default function App() {
     }
 
     const updatedProducts = store.products.map((p) => {
-      if (p.id === editingProduct.id) {
+      if (String(p.id) === String(editingProduct.id)) {
         return editingProduct;
       }
       return p;
@@ -2377,34 +2643,53 @@ export default function App() {
     }
   };
 
-  const handleDeleteProduct = (productId: string) => {
-    if (!confirm("¿Estás seguro de que deseas eliminar este producto?")) return;
-    const updatedProducts = store.products.filter((p) => p.id !== productId);
-    const updatedState = { ...store, products: updatedProducts };
-    saveStateToServer(updatedState);
+  const handleDeleteProduct = (productId: string | number) => {
+    showCustomConfirm(
+      "Eliminar Producto",
+      "¿Estás seguro de que deseas eliminar este producto?",
+      async () => {
+        const updatedProducts = store.products.filter((p) => String(p.id) !== String(productId));
+        const updatedState = { ...store, products: updatedProducts };
+        
+        // Optimistic UI update for instant feedback
+        setStore(updatedState);
+        
+        const success = await saveStateToServer(updatedState);
+        if (success) {
+          showAdminToast("¡Producto eliminado correctamente! 🗑️", "success");
+        } else {
+          showAdminToast("Error al persistir la eliminación en el servidor.", "error");
+        }
+      }
+    );
   };
 
-  const handleTogglePause = (productId: string) => {
+  const handleTogglePause = async (productId: string | number) => {
     const updatedProducts = store.products.map((p) => {
-      if (p.id === productId) {
+      if (String(p.id) === String(productId)) {
         return { ...p, paused: !p.paused };
       }
       return p;
     });
     const updatedState = { ...store, products: updatedProducts };
-    saveStateToServer(updatedState);
+    const success = await saveStateToServer(updatedState);
+    if (success) {
+      showAdminToast("Estado de pausa actualizado correctamente.", "success");
+    }
   };
 
-  const handleQuickUpdateStock = (productId: string, newStock: number) => {
+  const handleQuickUpdateStock = async (productId: string | number, newStock: number) => {
     const updatedProducts = store.products.map((p) => {
-      if (p.id === productId) {
+      if (String(p.id) === String(productId)) {
         return { ...p, stock: Math.max(0, newStock) };
       }
       return p;
     });
     const updatedState = { ...store, products: updatedProducts };
-    saveStateToServer(updatedState);
-    showAdminToast("Stock rápido actualizado con éxito.", "success");
+    const success = await saveStateToServer(updatedState);
+    if (success) {
+      showAdminToast("Stock rápido actualizado con éxito.", "success");
+    }
   };
 
   const handleSaveLowStockThreshold = (newThreshold: number) => {
@@ -2413,6 +2698,67 @@ export default function App() {
     saveStateToServer(updatedState);
     setEditingSettings(updatedSettings);
     showAdminToast(`Límite de stock bajo configurado: ${newThreshold} unidades.`, "success");
+  };
+
+  const handleUpdateStockItem = async (item: any, field: string, value: any) => {
+    const updatedProducts = store.products.map(p => {
+      if (p.id !== item.productId) return p;
+
+      const updatedProduct = { ...p };
+
+      if (item.isVariant) {
+        updatedProduct.variants = (updatedProduct.variants || []).map(v => {
+          if (v.id !== item.variantId && v.sku !== item.sku) return v;
+          const updatedVariant = { ...v };
+
+          if (field === "stockMontevideo") {
+            updatedVariant.stockMontevideo = Math.max(0, parseInt(value) || 0);
+            updatedVariant.stock = (updatedVariant.stockMontevideo || 0) + (updatedVariant.stockPinamar || 0);
+          } else if (field === "stockPinamar") {
+            updatedVariant.stockPinamar = Math.max(0, parseInt(value) || 0);
+            updatedVariant.stock = (updatedVariant.stockMontevideo || 0) + (updatedVariant.stockPinamar || 0);
+          } else if (field === "price") {
+            updatedVariant.price = Math.max(0, parseFloat(value) || 0);
+          }
+          return updatedVariant;
+        });
+
+        // Sum up stocks for the product
+        updatedProduct.stockMontevideo = (updatedProduct.variants || []).reduce((sum, v) => sum + (v.stockMontevideo || 0), 0);
+        updatedProduct.stockPinamar = (updatedProduct.variants || []).reduce((sum, v) => sum + (v.stockPinamar || 0), 0);
+        updatedProduct.stock = (updatedProduct.variants || []).reduce((sum, v) => sum + (v.stock || 0), 0);
+
+        if (field === "precioCompra") {
+          updatedProduct.precioCompra = Math.max(0, parseFloat(value) || 0);
+        } else if (field === "precioVentaML") {
+          updatedProduct.precioVentaML = Math.max(0, parseFloat(value) || 0);
+        } else if (field === "comisionML") {
+          updatedProduct.comisionML = Math.max(0, parseFloat(value) || 0);
+        }
+      } else {
+        if (field === "stockMontevideo") {
+          updatedProduct.stockMontevideo = Math.max(0, parseInt(value) || 0);
+          updatedProduct.stock = (updatedProduct.stockMontevideo || 0) + (updatedProduct.stockPinamar || 0);
+        } else if (field === "stockPinamar") {
+          updatedProduct.stockPinamar = Math.max(0, parseInt(value) || 0);
+          updatedProduct.stock = (updatedProduct.stockMontevideo || 0) + (updatedProduct.stockPinamar || 0);
+        } else if (field === "precioCompra") {
+          updatedProduct.precioCompra = Math.max(0, parseFloat(value) || 0);
+        } else if (field === "price") {
+          updatedProduct.price = Math.max(0, parseFloat(value) || 0);
+        } else if (field === "precioVentaML") {
+          updatedProduct.precioVentaML = Math.max(0, parseFloat(value) || 0);
+        } else if (field === "comisionML") {
+          updatedProduct.comisionML = Math.max(0, parseFloat(value) || 0);
+        }
+      }
+
+      return updatedProduct;
+    });
+
+    const updatedState = { ...store, products: updatedProducts };
+    setStore(updatedState);
+    await saveStateToServer(updatedState);
   };
 
   // CRUD handlers - Coupons
@@ -2464,11 +2810,16 @@ export default function App() {
   };
 
   const handleDeleteCoupon = (code: string) => {
-    if (!confirm(`¿Estás seguro de que deseas eliminar el cupón ${code}?`)) return;
-    const updatedCoupons = (store.coupons || []).filter(c => c.code !== code);
-    const updatedState = { ...store, coupons: updatedCoupons };
-    saveStateToServer(updatedState);
-    showAdminToast("¡Cupón eliminado correctamente!", "success");
+    showCustomConfirm(
+      "Eliminar Cupón",
+      `¿Estás seguro de que deseas eliminar el cupón ${code}?`,
+      () => {
+        const updatedCoupons = (store.coupons || []).filter(c => c.code !== code);
+        const updatedState = { ...store, coupons: updatedCoupons };
+        saveStateToServer(updatedState);
+        showAdminToast("¡Cupón eliminado correctamente!", "success");
+      }
+    );
   };
 
   // CRUD handlers - Categories & Subcategories
@@ -3479,7 +3830,7 @@ export default function App() {
         <div className="flex-1 flex flex-col pb-16 lg:pb-0">
           {selectedProduct ? (
             <ProductDetails
-              product={store.products.find(p => p.id === selectedProduct.id) || selectedProduct}
+              product={store.products.find(p => String(p.id) === String(selectedProduct.id)) || selectedProduct}
               onClose={() => {
                 setSelectedProduct(null);
                 const catalogPath = getCatalogPath();
@@ -3535,7 +3886,7 @@ export default function App() {
                   }
                 } else if (slideLink.startsWith("product:")) {
                   const prodId = slideLink.replace("product:", "");
-                  const prod = store.products.find(p => p.id === prodId);
+                  const prod = store.products.find(p => String(p.id) === String(prodId));
                   if (prod) {
                     handleOpenProduct(prod);
                   }
@@ -4459,10 +4810,10 @@ export default function App() {
 
       {/* RENDER ADMIN DASHBOARD - PRIVATE CONTROL PANEL */}
       {activeTab === "admin" && authToken && (
-        <div className="flex-grow flex flex-col md:flex-row min-h-0">
+        <div className="dark flex-grow flex flex-col md:flex-row min-h-0 bg-zinc-950 text-zinc-100">
           
           {/* Left sidebar nav following Professional Polish theme instructions */}
-          <aside className="w-full md:w-64 bg-zinc-900 text-zinc-200 flex flex-col shrink-0 border-r border-zinc-800/80">
+          <aside className="w-full md:w-64 bg-zinc-950/90 text-zinc-200 flex flex-col shrink-0 border-r border-zinc-800/40 shadow-xl select-none">
             {/* Header de menú móvil visible sólo en pantallas chicas */}
             <div className="flex md:hidden items-center justify-between p-4 bg-zinc-950 border-b border-zinc-800 select-none">
               <div className="flex items-center gap-2">
@@ -4498,6 +4849,21 @@ export default function App() {
                   <span>Dashboard Principal</span>
                 </button>
 
+                <button
+                  onClick={() => setShowAIAssistantSidebar(!showAIAssistantSidebar)}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                    showAIAssistantSidebar
+                      ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
+                      : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Sparkles className="h-4 w-4 text-indigo-400" />
+                    <span>Asistente Copilot IA</span>
+                  </div>
+                  <span className={`w-1.5 h-1.5 rounded-full ${showAIAssistantSidebar ? "bg-indigo-450 animate-pulse" : "bg-zinc-600"}`} />
+                </button>
+
                 {/* Category Group 1 - Operaciones */}
                 <div className="space-y-1.5 pt-4">
                   <div className="text-[10px] uppercase tracking-widest text-zinc-505 font-extrabold mb-2 px-3 select-none">
@@ -4524,6 +4890,20 @@ export default function App() {
                   </button>
 
                   <button
+                    onClick={() => navigateAdminSection("shippings")}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                      adminSection === "shippings"
+                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
+                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Truck className="h-4 w-4 text-zinc-400" />
+                      <span>Planificación Envíos</span>
+                    </div>
+                  </button>
+
+                  <button
                     onClick={() => navigateAdminSection("stock")}
                     className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
                       adminSection === "stock"
@@ -4533,7 +4913,7 @@ export default function App() {
                   >
                     <div className="flex items-center gap-3">
                       <Box className="h-4 w-4" />
-                      <span>Inventario & Stock</span>
+                      <span>Stock Almacén</span>
                     </div>
                     {totalStockAlerts > 0 && (
                       <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold shrink-0 ${
@@ -4544,6 +4924,34 @@ export default function App() {
                         {totalStockAlerts}
                       </span>
                     )}
+                  </button>
+
+                  <button
+                    onClick={() => navigateAdminSection("bills")}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                      adminSection === "bills"
+                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
+                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Receipt className="h-4 w-4 text-zinc-400" />
+                      <span>Ingresar Boletas</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => navigateAdminSection("finances")}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                      adminSection === "finances"
+                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
+                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Scale className="h-4 w-4 text-zinc-400" />
+                      <span>Resumen General</span>
+                    </div>
                   </button>
                 </div>
                 
@@ -4746,80 +5154,85 @@ export default function App() {
           </aside>
 
           {/* Main admin Workspace workspace */}
-          <main className="flex-1 flex flex-col p-6 gap-6 bg-slate-100 dark:bg-zinc-900 border-zinc-805 overflow-y-auto">
+          <main className="flex-1 flex flex-col p-6 gap-6 bg-zinc-950 text-zinc-100 overflow-y-auto">
             
             {/* Header control summary */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-3 shrink-0">
-              <div>
-                <h2 className="text-2xl font-bold font-sans text-slate-900 dark:text-white">
-                  {adminSection === "dashboard" && "Dashboard General y Métricas"}
-                  {adminSection === "general" && "Diseño, Tipos y Colores de Marca"}
-                  {adminSection === "banner" && "Carrusel de Portada y Banners"}
-                  {adminSection === "footer" && "Configuración de Columnas del Footer"}
-                  {adminSection === "products" && "Catálogo General de Productos"}
-                  {adminSection === "categories" && "Gestión de Categorías y Subcategorías"}
-                  {adminSection === "promos" && "Herramientas de Cupones y Descuentos"}
-                  {adminSection === "security" && "Configuración y Seguridad de Acceso"}
-                  {adminSection === "stock" && "Nivel de Inventario y Alertas de Stock"}
-                  {adminSection === "payments" && "Administración de Métodos de Pago"}
-                  {adminSection === "reviews" && "Sincronización con Google e Integraciones"}
-                </h2>
-                <p className="text-slate-600 dark:text-zinc-400 text-xs flex flex-col sm:flex-row sm:items-center gap-3 mt-1.5 leading-relaxed">
-                  <span>Modifica los contenidos de tu tienda en tiempo real. Los cambios se sincronizarán directamente con tu base de datos central sin tocar código.</span>
-                  
-                  {adminSection !== "dashboard" && adminSection !== "sales" && adminSection !== "security" && adminSection !== "stock" && (
+            {adminSection !== "stock" && (
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-3 shrink-0">
+                <div>
+                  <h2 className="text-2xl font-bold font-sans text-zinc-100">
+                    {adminSection === "dashboard" && "Dashboard General y Métricas"}
+                    {adminSection === "general" && "Diseño, Tipos y Colores de Marca"}
+                    {adminSection === "banner" && "Carrusel de Portada y Banners"}
+                    {adminSection === "footer" && "Configuración de Columnas del Footer"}
+                    {adminSection === "products" && "Catálogo General de Productos"}
+                    {adminSection === "categories" && "Gestión de Categorías y Subcategorías"}
+                    {adminSection === "promos" && "Herramientas de Cupones y Descuentos"}
+                    {adminSection === "security" && "Configuración y Seguridad de Acceso"}
+                    {adminSection === "stock" && "Nivel de Inventario y Alertas de Stock"}
+                    {adminSection === "payments" && "Administración de Métodos de Pago"}
+                    {adminSection === "reviews" && "Sincronización con Google e Integraciones"}
+                    {adminSection === "assistant" && "Asistente Corporativo de IA"}
+                  </h2>
+                  <p className="text-slate-600 dark:text-zinc-400 text-xs flex flex-col sm:flex-row sm:items-center gap-3 mt-1.5 leading-relaxed">
+                    <span>Modifica los contenidos de tu tienda en tiempo real. Los cambios se sincronizarán directamente con tu base de datos central sin tocar código.</span>
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 self-stretch md:self-auto justify-end">
+                  {/* Persistent Assistant Button */}
+                  <button
+                    onClick={() => setShowAIAssistantSidebar(!showAIAssistantSidebar)}
+                    className={`px-4 py-2 border rounded-xl font-semibold transition-all flex items-center gap-2 text-xs shadow-xs cursor-pointer ${
+                      showAIAssistantSidebar
+                        ? "bg-indigo-600/20 text-indigo-450 border-indigo-500/50 hover:bg-indigo-600/30"
+                        : "bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                    }`}
+                  >
+                    <Sparkles className={`h-4 w-4 ${showAIAssistantSidebar ? "text-indigo-400 animate-pulse" : "text-zinc-400"}`} />
+                    <span>{showAIAssistantSidebar ? "Cerrar Copilot" : "Preguntar a Copilot"}</span>
+                  </button>
+
+                  {/* Instant action trigger */}
+                  {adminSection === "products" && !isNewProductMode && !editingProduct && (
                     <button
-                      type="button"
-                      onClick={() => setShowAdminDevicePreview(!showAdminDevicePreview)}
-                      className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-xs shrink-0 cursor-pointer self-start sm:self-center ${
-                        showAdminDevicePreview 
-                          ? "bg-[#5346ff]/10 text-[#5346ff] hover:bg-[#5346ff]/15 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-900/30"
-                          : "bg-emerald-100 text-emerald-700 hover:bg-emerald-250 dark:bg-emerald-950/20 dark:text-emerald-400 dark:hover:bg-emerald-900/30 border border-emerald-300/40 dark:border-emerald-800/40"
-                      }`}
+                      onClick={() => {
+                        setEditingProduct(null);
+                        setNewProductErrors({});
+                        const nextSku = getNextAutoSKU(store.products);
+                        setNewProduct({
+                          codigo: nextSku,
+                          name: "",
+                          description: "",
+                          price: 0,
+                          originalPrice: undefined,
+                          category: (store.dbCategories || [])[0]?.nombre || store.categories[0] || "",
+                          categoria_id: (store.dbCategories || [])[0]?.id || "",
+                          subcategoria_id: "all",
+                          imageUrl: "",
+                          stock: 0,
+                          featured: false,
+                          precioCompra: 0,
+                          precioCon40: 0,
+                          comisionML: 0,
+                          precioVentaML: 0,
+                          precioWeb: 0,
+                          descuentoPorcentaje: 0,
+                          stockPinamar: 0,
+                          stockMontevideo: 0,
+                          stockTotalActual: 0
+                        });
+                        setIsNewProductMode(true);
+                      }}
+                      className="px-5 py-2 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center gap-1.5 text-xs shadow-md shadow-blue-500/10 cursor-pointer"
                     >
-                      {showAdminDevicePreview ? (
-                        <>
-                          <EyeOff className="w-3.5 h-3.5" />
-                          <span>Ocultar Vista Previa (Expandir)</span>
-                        </>
-                      ) : (
-                        <>
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>Mostrar Vista Previa</span>
-                        </>
-                      )}
+                      <Plus className="h-4 w-4" />
+                      <span>Crea Nuevo Producto</span>
                     </button>
                   )}
-                </p>
+                </div>
               </div>
-
-              {/* Instant action trigger */}
-              {adminSection === "products" && !isNewProductMode && !editingProduct && (
-                <button
-                  onClick={() => {
-                    setEditingProduct(null);
-                    setNewProductErrors({});
-                    setNewProduct({
-                      name: "",
-                      description: "",
-                      price: undefined,
-                      originalPrice: undefined,
-                      category: (store.dbCategories || [])[0]?.nombre || store.categories[0] || "",
-                      categoria_id: (store.dbCategories || [])[0]?.id || "",
-                      subcategoria_id: "all",
-                      imageUrl: "",
-                      stock: 10,
-                      featured: false
-                    });
-                    setIsNewProductMode(true);
-                  }}
-                  className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center gap-1.5 text-xs shadow-md shadow-blue-500/10 cursor-pointer"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>Crea Nuevo Producto</span>
-                </button>
-              )}
-            </div>
+            )}
 
             {/* ERROR STATS BAR IF ANY */}
             {syncStatus === "error" && (
@@ -4836,7 +5249,7 @@ export default function App() {
                 navigateAdminSection={navigateAdminSection}
                 setStockFilterTab={setStockFilterTab}
                 setIsNewProductMode={setIsNewProductMode}
-                setEditingProduct={(p) => setEditingProduct(p as any)}
+                setEditingProduct={(p) => setEditingProduct(prepareProductForEditing(p as any))}
               />
             ) : adminSection === "sales" ? (
               <DashboardOrders
@@ -4855,10 +5268,19 @@ export default function App() {
                     if (response.ok && d.success) {
                       showAdminToast("Estado de pedido actualizado correctamente.", "success");
                       // Dynamically set state in store to prevent full refresh lag
-                      setStore(prev => ({
-                        ...prev,
-                        orders: (prev.orders || []).map(o => o.id === id ? { ...o, status: newStatus } : o)
-                      }));
+                      setStore(prev => {
+                        const targetOrder = (prev.orders || []).find(o => o.id === id);
+                        const oldStatus = targetOrder ? targetOrder.status : "";
+                        let updatedProducts = prev.products || [];
+                        if (newStatus === "pago_aprobado" && oldStatus !== "pago_aprobado" && targetOrder && targetOrder.items) {
+                          updatedProducts = deductProductsStockClient(prev.products || [], targetOrder.items, targetOrder.depositoOrigen || "Pinamar");
+                        }
+                        return {
+                          ...prev,
+                          orders: (prev.orders || []).map(o => o.id === id ? { ...o, status: newStatus } : o),
+                          products: updatedProducts
+                        };
+                      });
                     } else {
                       showAdminToast(d.message || "Error al actualizar estado.", "error");
                     }
@@ -4889,12 +5311,96 @@ export default function App() {
                     showAdminToast("Error de conexión al eliminar el pedido.", "error");
                   }
                 }}
+                onOrderCreated={(newOrder) => {
+                  showAdminToast("Venta manual registrada con éxito.", "success");
+                  setStore(prev => {
+                    const updatedOrders = [newOrder, ...(prev.orders || [])];
+                    let updatedProducts = prev.products || [];
+                    if (newOrder.status === "pago_aprobado" && newOrder.items) {
+                      updatedProducts = deductProductsStockClient(prev.products || [], newOrder.items, newOrder.depositoOrigen || "Pinamar");
+                    }
+                    return {
+                      ...prev,
+                      orders: updatedOrders,
+                      products: updatedProducts
+                    };
+                  });
+                }}
+              />
+            ) : adminSection === "bills" ? (
+              <DashboardBills
+                store={store}
+                onAddBill={(newBill) => {
+                  showAdminToast("Boleta registrada con éxito.", "success");
+                  setStore(prev => ({
+                    ...prev,
+                    bills: [newBill, ...(prev.bills || [])]
+                  }));
+                }}
+                onDeleteBill={async (id) => {
+                  try {
+                    const response = await fetch(`/api/bills/${id}`, {
+                      method: "DELETE",
+                      headers: {
+                        "Authorization": `Bearer ${localStorage.getItem("apex_admin_token")}`
+                      }
+                    });
+                    const d = await response.json();
+                    if (response.ok && d.success) {
+                      showAdminToast("Boleta eliminada correctamente.", "success");
+                      setStore(prev => ({
+                        ...prev,
+                        bills: (prev.bills || []).filter(b => b.id !== id)
+                      }));
+                    } else {
+                      showAdminToast(d.message || "Error al eliminar la boleta.", "error");
+                    }
+                  } catch (err) {
+                    showAdminToast("Error de conexión al eliminar la boleta.", "error");
+                  }
+                }}
+              />
+            ) : adminSection === "finances" ? (
+              <DashboardResumenGeneral
+                store={store}
+              />
+            ) : adminSection === "shippings" ? (
+              <DashboardShippings
+                store={store}
+                onAddShipping={(newShip) => {
+                  setStore(prev => ({
+                    ...prev,
+                    shippings: [newShip, ...(prev.shippings || [])]
+                  }));
+                  showAdminToast("Envío registrado correctamente.", "success");
+                }}
+                onUpdateShipping={(updatedShip) => {
+                  setStore(prev => ({
+                    ...prev,
+                    shippings: (prev.shippings || []).map(s => s.id === updatedShip.id ? updatedShip : s)
+                  }));
+                  showAdminToast("Envío actualizado correctamente.", "success");
+                }}
+                onDeleteShipping={(id) => {
+                  setStore(prev => ({
+                    ...prev,
+                    shippings: (prev.shippings || []).filter(s => s.id !== id)
+                  }));
+                  showAdminToast("Envío eliminado correctamente.", "success");
+                }}
+                onUpdateOrigins={(updatedOrigins) => {
+                  setStore(prev => ({
+                    ...prev,
+                    shippingOrigins: updatedOrigins
+                  }));
+                  showAdminToast("Remitentes actualizados correctamente.", "success");
+                }}
               />
             ) : (
               <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               
               {/* SECTION A: THE PRINCIPAL CONTROL FORM */}
-              <div className={`${showAdminDevicePreview ? "lg:col-span-7" : "lg:col-span-12"} space-y-4`}>
+              <div className="lg:col-span-12 space-y-4">
                 
                 {/* 1. GENERAL & BRANDING EDITOR */}
                 {adminSection === "general" && (
@@ -6194,7 +6700,7 @@ export default function App() {
                               </button>
                               <button
                                 onClick={() => {
-                                  setEditingProduct(p);
+                                  setEditingProduct(prepareProductForEditing(p));
                                   setEditingProductStep(1);
                                 }}
                                 className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 hover:text-white text-zinc-300 transition cursor-pointer"
@@ -6219,7 +6725,15 @@ export default function App() {
 
                 {/* 3. NEW PRODUCT FORM DISPLAY */}
                 {adminSection === "products" && isNewProductMode && (
-                  <form onSubmit={handleCreateProduct} className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
+                  <form
+                    onSubmit={(e) => e.preventDefault()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.target as HTMLElement).tagName !== "TEXTAREA") {
+                        e.preventDefault();
+                      }
+                    }}
+                    className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4"
+                  >
                     <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3 mb-2">
                       <div className="flex items-center gap-2">
                         <Plus className="h-4 w-4 text-emerald-400" />
@@ -6282,7 +6796,7 @@ export default function App() {
                     {newProductStep === 1 && (
                       <div className="space-y-4 animate-fade-in unique-step-one">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
+                      <div className="md:col-span-2">
                         <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
                           <span>Nombre del Producto *</span>
                           {newProductErrors.name && <span className="text-red-500 text-[9px] font-semibold lowercase">obligatorio</span>}
@@ -6310,44 +6824,6 @@ export default function App() {
                         {newProductErrors.name && (
                           <p className="text-[10px] text-red-505 dark:text-red-400 mt-1 font-semibold flex items-center gap-1">
                             <span>⚠</span> {newProductErrors.name}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
-                          <span className="flex items-center gap-1">
-                            <span>Código Único / SKU Base (Opcional)</span>
-                            <span className="px-1 py-0.2 bg-zinc-500/10 text-zinc-500 text-[8px] font-mono rounded font-extrabold">OPCIONAL</span>
-                          </span>
-                        </label>
-                        <input
-                          type="text"
-                          value={newProduct.codigo || ""}
-                          onChange={(e) => {
-                            setNewProduct({ ...newProduct, codigo: e.target.value.toUpperCase() });
-                            if (newProductErrors.codigo) {
-                              setNewProductErrors(prev => {
-                                const copy = { ...prev };
-                                delete copy.codigo;
-                                return copy;
-                              });
-                            }
-                          }}
-                          className={`w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border rounded-lg text-xs outline-none focus:ring-1 focus:ring-[#5346ff] text-slate-900 dark:text-white transition-all font-mono uppercase font-bold placeholder-zinc-400 ${
-                            newProductErrors.codigo 
-                              ? "border-red-500 dark:border-red-650 ring-1 ring-red-500/30" 
-                              : "border-slate-200 dark:border-zinc-800"
-                          }`}
-                          placeholder="p.ej. REMERA-SLIM"
-                        />
-                        {newProductErrors.codigo ? (
-                          <p className="text-[10px] text-red-505 dark:text-red-400 mt-1 font-semibold flex items-center gap-1">
-                            <span>⚠</span> {newProductErrors.codigo}
-                          </p>
-                        ) : (
-                          <p className="text-[9px] text-zinc-400 dark:text-zinc-500 mt-1 leading-normal">
-                            Para productos simples, este es el código que verá el cliente. Para variantes de talles/colores, sirva de referencia, o déjelo vacío si cada variante tiene su código propio.
                           </p>
                         )}
                       </div>
@@ -6440,112 +6916,149 @@ export default function App() {
                       {/* Categorías secundarias adicionales para Nuevo Producto */}
                       <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60 flex flex-col">
                         <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">
-                          Categorías Adicionales / Secundarias <span className="text-zinc-400 dark:text-zinc-500 font-normal lowercase">(los artículos aparecerán en todas las categorías marcadas)</span>
+                          Categorías Adicionales / Secundarias <span className="text-zinc-400 dark:text-zinc-500 font-normal lowercase">(elige del menú desplegable)</span>
                         </label>
-                        <div className="flex flex-wrap gap-2 mt-1">
+                        <select
+                          value=""
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val) {
+                              const list = newProduct.categorias_adicionales || [];
+                              if (!list.includes(val)) {
+                                setNewProduct({
+                                  ...newProduct,
+                                  categorias_adicionales: [...list, val]
+                                });
+                              }
+                            }
+                          }}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white transition-all font-semibold cursor-pointer"
+                        >
+                          <option value="">-- Seleccionar categoría adicional --</option>
                           {(store.dbCategories || [])
                             .sort((a,b) => (a.orden || 0) - (b.orden || 0))
-                            .filter(c => c.id !== newProduct.categoria_id)
-                            .map((c) => {
-                              const isChecked = !!(newProduct.categorias_adicionales && newProduct.categorias_adicionales.includes(c.id));
-                              return (
+                            .filter(c => c.id !== newProduct.categoria_id && !(newProduct.categorias_adicionales && newProduct.categorias_adicionales.includes(c.id)))
+                            .map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.nombre}
+                              </option>
+                            ))}
+                        </select>
+                        <div className="flex flex-wrap gap-1.5 mt-2.5">
+                          {(newProduct.categorias_adicionales || []).map((catId) => {
+                            const cat = (store.dbCategories || []).find(c => c.id === catId);
+                            if (!cat) return null;
+                            return (
+                              <span
+                                key={catId}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#5346ff]/10 text-[#5346ff] dark:bg-[#5346ff]/20 dark:text-[#9086ff] border border-[#5346ff]/30 rounded-lg text-xs font-semibold"
+                              >
+                                <span>{cat.nombre}</span>
                                 <button
                                   type="button"
-                                  key={c.id}
                                   onClick={() => {
-                                    const list = newProduct.categorias_adicionales || [];
-                                    const updated = list.includes(c.id)
-                                      ? list.filter(id => id !== c.id)
-                                      : [...list, c.id];
                                     setNewProduct({
                                       ...newProduct,
-                                      categorias_adicionales: updated
+                                      categorias_adicionales: (newProduct.categorias_adicionales || []).filter(id => id !== catId)
                                     });
                                   }}
-                                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all cursor-pointer select-none active:scale-95 ${
-                                    isChecked
-                                      ? "bg-[#5346ff]/10 text-[#5346ff] border-[#5346ff]/40 dark:bg-[#5346ff]/20 dark:text-[#9086ff] dark:border-[#5346ff]/60"
-                                      : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-800"
-                                  }`}
+                                  className="text-sm font-bold hover:text-red-500 transition-colors ml-1 focus:outline-none cursor-pointer"
                                 >
-                                  <span>{c.nombre}</span>
-                                  {isChecked && <span className="text-[#5346ff] dark:text-[#9086ff]">✓</span>}
+                                  ×
                                 </button>
-                              );
-                            })}
-                          {(store.dbCategories || []).filter(c => c.id !== newProduct.categoria_id).length === 0 && (
-                            <span className="text-[10px] text-zinc-400 italic">No hay otras categorías creadas para seleccionar.</span>
+                              </span>
+                            );
+                          })}
+                          {(newProduct.categorias_adicionales || []).length === 0 && (
+                            <span className="text-[10px] text-zinc-400 italic">No hay categorías adicionales seleccionadas.</span>
                           )}
                         </div>
                       </div>
 
                       {/* Subcategorías secundarias adicionales para Nuevo Producto */}
                       <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60 flex flex-col">
-                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex flex-wrap items-center justify-between gap-1">
-                          <span>Subcategorías Adicionales / Secundarias</span>
-                          <span className="text-zinc-400 dark:text-zinc-500 font-normal lowercase">(haz clic para desplegar cada menú y marcar)</span>
+                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">
+                          Subcategorías Adicionales / Secundarias <span className="text-zinc-400 dark:text-zinc-500 font-normal lowercase">(elige categoría principal primero)</span>
                         </label>
-                        <div className="space-y-2 mt-2">
-                          {(store.dbCategories || [])
-                            .sort((a,b) => (a.orden || 0) - (b.orden || 0))
-                            .map((cat) => {
-                              // Find subcategories belonging to this category
-                              const subs = (store.dbSubcategories || []).filter(
-                                s => s.categoria_id === cat.id && s.id !== newProduct.subcategoria_id
-                              );
-                              if (subs.length === 0) return null;
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                          <div>
+                            <select
+                              value={newSubSecCategoryFilter}
+                              onChange={(e) => setNewSubSecCategoryFilter(e.target.value)}
+                              className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white transition-all font-semibold cursor-pointer"
+                            >
+                              <option value="">-- Categoría de Filtro --</option>
+                              {(store.dbCategories || [])
+                                .sort((a,b) => (a.orden || 0) - (b.orden || 0))
+                                .map((cat) => (
+                                  <option key={cat.id} value={cat.id}>
+                                    {cat.nombre}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                          <div>
+                            <select
+                              value=""
+                              disabled={!newSubSecCategoryFilter}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val) {
+                                  const list = newProduct.subcategorias_adicionales || [];
+                                  if (!list.includes(val)) {
+                                    setNewProduct({
+                                      ...newProduct,
+                                      subcategorias_adicionales: [...list, val]
+                                    });
+                                  }
+                                }
+                              }}
+                              className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white disabled:opacity-50 transition-all font-semibold cursor-pointer"
+                            >
+                              <option value="">-- Elige Subcategoría --</option>
+                              {(store.dbSubcategories || [])
+                                .filter(s => s.categoria_id === newSubSecCategoryFilter && s.id !== newProduct.subcategoria_id && !(newProduct.subcategorias_adicionales && newProduct.subcategorias_adicionales.includes(s.id)))
+                                .map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.nombre}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                        </div>
 
-                              const activeSubCount = subs.filter(
-                                s => !!(newProduct.subcategorias_adicionales && newProduct.subcategorias_adicionales.includes(s.id))
-                              ).length;
-                              
-                              return (
-                                <details key={cat.id} className="group border border-slate-200/50 dark:border-zinc-800/50 rounded-lg bg-white dark:bg-zinc-950/40 overflow-hidden" open={activeSubCount > 0}>
-                                  <summary className="flex items-center justify-between px-3 py-2 text-[11px] text-slate-700 dark:text-zinc-300 font-extrabold cursor-pointer select-none hover:bg-slate-100/50 dark:hover:bg-zinc-900/50 duration-150 list-none [&::-webkit-details-marker]:hidden">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="text-[9px] text-slate-400 dark:text-zinc-500 transition-transform duration-200 group-open:rotate-90">▶</span>
-                                      <span className="uppercase text-[10px] tracking-wider font-mono">{cat.nombre}</span>
-                                    </div>
-                                    {activeSubCount > 0 && (
-                                      <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-[#5346ff]/10 text-[#5346ff] dark:bg-[#5346ff]/20 dark:text-[#9086ff]">
-                                        {activeSubCount} {activeSubCount === 1 ? "seleccionada" : "seleccionadas"}
-                                      </span>
-                                    )}
-                                  </summary>
-                                  <div className="p-2.5 border-t border-slate-100 dark:border-zinc-800/30 bg-slate-50/40 dark:bg-zinc-950/20 flex flex-wrap gap-1.5">
-                                    {subs.map((s) => {
-                                      const isChecked = !!(newProduct.subcategorias_adicionales && newProduct.subcategorias_adicionales.includes(s.id));
-                                      return (
-                                        <button
-                                          type="button"
-                                          key={s.id}
-                                          onClick={() => {
-                                            const list = newProduct.subcategorias_adicionales || [];
-                                            const updated = list.includes(s.id)
-                                              ? list.filter(id => id !== s.id)
-                                              : [...list, s.id];
-                                            setNewProduct({
-                                              ...newProduct,
-                                              subcategorias_adicionales: updated
-                                            });
-                                          }}
-                                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 border transition-all cursor-pointer select-none active:scale-95 ${
-                                            isChecked
-                                              ? "bg-[#5346ff]/10 text-[#5346ff] border-[#5346ff]/35 dark:bg-[#5346ff]/20 dark:text-[#9086ff] dark:border-[#5346ff]/50"
-                                              : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-800"
-                                          }`}
-                                        >
-                                          <span>{s.nombre}</span>
-                                          {isChecked && <span className="text-[#5346ff] dark:text-[#9086ff]">✓</span>}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </details>
-                              );
-                            })}
-                          {!(store.dbSubcategories && store.dbSubcategories.length > 0) && (
-                            <span className="text-[10px] text-zinc-400 italic">No hay subcategorías registradas en la tienda para seleccionar.</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(newProduct.subcategorias_adicionales || []).map((subId) => {
+                            const sub = (store.dbSubcategories || []).find(s => s.id === subId);
+                            if (!sub) return null;
+                            const cat = (store.dbCategories || []).find(c => c.id === sub.categoria_id);
+                            return (
+                              <span
+                                key={subId}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#5346ff]/10 text-[#5346ff] dark:bg-[#5346ff]/20 dark:text-[#9086ff] border border-[#5346ff]/30 rounded-lg text-xs font-semibold"
+                              >
+                                <span className="text-[10px] opacity-75 mr-1 font-mono uppercase">
+                                  {cat ? cat.nombre : ""}
+                                </span>
+                                <span>{sub.nombre}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setNewProduct({
+                                      ...newProduct,
+                                      subcategorias_adicionales: (newProduct.subcategorias_adicionales || []).filter(id => id !== subId)
+                                    });
+                                  }}
+                                  className="text-sm font-bold hover:text-red-500 transition-colors ml-1 focus:outline-none cursor-pointer"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            );
+                          })}
+                          {(newProduct.subcategorias_adicionales || []).length === 0 && (
+                            <span className="text-[10px] text-zinc-400 italic">No hay subcategorías adicionales seleccionadas.</span>
                           )}
                         </div>
                       </div>
@@ -6567,98 +7080,182 @@ export default function App() {
                     )}
 
                     {newProductStep === 2 && (
-                      <div className="space-y-4 animate-fade-in unique-step-two">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div>
-                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Precio de Lista / Antes</label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={newProduct.originalPrice === undefined ? "" : newProduct.originalPrice}
-                              onChange={(e) => {
-                                const val = e.target.value === "" ? undefined : Number(e.target.value);
-                                setNewProduct({ ...newProduct, originalPrice: val });
-                              }}
-                              className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono"
-                              placeholder="ej. 99.99"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Descuento (%)</label>
-                            <div className="relative">
+                      <div className="space-y-6 animate-fade-in unique-step-two">
+                        
+                        {/* Finanzas y Precios */}
+                        <div className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/40 space-y-4">
+                          <h4 className="text-xs font-black text-indigo-500 uppercase tracking-wider flex items-center gap-2">
+                            <span>💵</span> Finanzas, Costos y Precios
+                          </h4>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Precio Compra ($)</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={newProduct.precioCompra || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value === "" ? 0 : Number(e.target.value);
+                                  setNewProduct(updateProductCalculations({ ...newProduct, precioCompra: val }));
+                                }}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
+                                placeholder="Costo de compra"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-400 dark:text-zinc-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                                <span>Precio con 40%</span>
+                                <span className="text-[8px] bg-slate-100 dark:bg-zinc-800 px-1 py-0.2 rounded font-normal lowercase text-slate-500">auto</span>
+                              </label>
+                              <input
+                                type="number"
+                                readOnly
+                                disabled
+                                value={newProduct.precioCon40 || ""}
+                                className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950/80 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs text-slate-500 font-mono font-bold cursor-not-allowed select-none"
+                                placeholder="Precio Compra + 40%"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Descuento (%)</label>
                               <input
                                 type="number"
                                 min="0"
                                 max="99"
-                                value={
-                                  newProduct.originalPrice && newProduct.price && newProduct.originalPrice > newProduct.price
-                                    ? Math.round(((newProduct.originalPrice - newProduct.price) / newProduct.originalPrice) * 100)
-                                    : ""
-                                }
+                                value={newProduct.descuentoPorcentaje || ""}
                                 onChange={(e) => {
-                                  const pct = e.target.value === "" ? 0 : Number(e.target.value);
-                                  if (pct >= 0 && pct < 100) {
-                                    if (newProduct.originalPrice) {
-                                      const computedPrice = Number((newProduct.originalPrice * (1 - pct / 100)).toFixed(2));
-                                      setNewProduct({ ...newProduct, price: computedPrice });
-                                    } else if (newProduct.price) {
-                                      const computedOriginal = Number((newProduct.price / (1 - pct / 100)).toFixed(2));
-                                      setNewProduct({ ...newProduct, originalPrice: computedOriginal });
-                                    }
-                                  }
+                                  const val = e.target.value === "" ? 0 : Math.min(99, Math.max(0, Number(e.target.value)));
+                                  setNewProduct(updateProductCalculations({ ...newProduct, descuentoPorcentaje: val }));
                                 }}
-                                className="w-full px-3 py-2 pr-8 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold text-indigo-500 dark:text-indigo-400"
-                                placeholder="Calculado"
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-indigo-600 dark:text-indigo-400 font-mono font-bold"
+                                placeholder="Ej. 15%"
                               />
-                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">%</span>
                             </div>
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
-                              <span>Precio de Venta ($) *</span>
-                              {newProductErrors.price && <span className="text-red-500 text-[9px] font-semibold lowercase">inválido</span>}
-                            </label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={newProduct.price === undefined ? "" : newProduct.price}
-                              onChange={(e) => {
-                                const val = e.target.value === "" ? undefined : Number(e.target.value);
-                                setNewProduct({ ...newProduct, price: val });
-                                if (newProductErrors.price) {
-                                  setNewProductErrors(prev => {
-                                    const copy = { ...prev };
-                                    delete copy.price;
-                                    return copy;
-                                  });
-                                }
-                              }}
-                              className={`w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white transition-all font-mono ${
-                                newProductErrors.price
-                                  ? "border-red-500 dark:border-red-650 ring-1 ring-red-500/30"
-                                  : "border-slate-200 dark:border-zinc-800"
-                              }`}
-                              placeholder="69.99"
-                            />
-                            {newProductErrors.price && (
-                              <p className="text-[10px] text-red-550 dark:text-red-400 mt-1 font-semibold flex items-center gap-1">
-                                <span>⚠</span> {newProductErrors.price}
-                              </p>
-                            )}
+
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Comisión ML ($)</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={newProduct.comisionML || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value === "" ? 0 : Number(e.target.value);
+                                  setNewProduct(updateProductCalculations({ ...newProduct, comisionML: val }));
+                                }}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
+                                placeholder="Comisión de MercadoLibre"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Precio Venta ML ($)</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={newProduct.precioVentaML || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value === "" ? 0 : Number(e.target.value);
+                                  setNewProduct(updateProductCalculations({ ...newProduct, precioVentaML: val }));
+                                }}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
+                                placeholder="Precio en MercadoLibre"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-[#5346ff] dark:text-[#9086ff] uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                                <span>Precio Web ($)</span>
+                                <span className="text-[8px] bg-indigo-50 dark:bg-indigo-950/50 px-1 py-0.2 rounded font-normal lowercase text-indigo-500">auto</span>
+                              </label>
+                              <input
+                                type="number"
+                                readOnly
+                                disabled
+                                value={newProduct.precioWeb || ""}
+                                className="w-full px-3 py-2 bg-indigo-50/40 dark:bg-indigo-950/10 border border-indigo-100 dark:border-indigo-900/50 rounded-lg text-xs text-indigo-600 dark:text-indigo-400 font-mono font-black cursor-not-allowed select-none"
+                                placeholder="Calculado: ML - Comisión"
+                              />
+                            </div>
                           </div>
                         </div>
 
-                        <ImageGalleryEditor
-                          images={[newProduct.imageUrl || "", ...(newProduct.imagenes || [])].filter(Boolean)}
-                          onChange={(updatedImages) => {
-                            setNewProduct({
-                              ...newProduct,
-                              imageUrl: updatedImages[0] || "",
-                              imagenes: updatedImages.slice(1)
-                            });
-                          }}
-                          isThemeDark={store.settings.themeMode === "dark"}
-                        />
+                        {/* Distribución de Stock */}
+                        <div className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/40 space-y-4">
+                          <h4 className="text-xs font-black text-emerald-500 uppercase tracking-wider flex items-center gap-2">
+                            <span>📦</span> Almacenes y Stock por Sucursal
+                          </h4>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Stock Pinamar</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={newProduct.stockPinamar || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value === "" ? 0 : Number(e.target.value);
+                                  setNewProduct(updateProductCalculations({ ...newProduct, stockPinamar: val }));
+                                }}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
+                                placeholder="Unidades en Pinamar"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Stock Montevideo</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={newProduct.stockMontevideo || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value === "" ? 0 : Number(e.target.value);
+                                  setNewProduct(updateProductCalculations({ ...newProduct, stockMontevideo: val }));
+                                }}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
+                                placeholder="Unidades en Montevideo"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-emerald-500 dark:text-emerald-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                                <span>Stock Total Actual</span>
+                                <span className="text-[8px] bg-emerald-50 dark:bg-emerald-950/50 px-1 py-0.2 rounded font-normal lowercase text-emerald-500">auto</span>
+                              </label>
+                              <input
+                                type="number"
+                                readOnly
+                                disabled
+                                value={newProduct.stockTotalActual || ""}
+                                className="w-full px-3 py-2 bg-emerald-50/40 dark:bg-emerald-950/10 border border-emerald-100 dark:border-emerald-900/50 rounded-lg text-xs text-emerald-600 dark:text-emerald-400 font-mono font-extrabold cursor-not-allowed select-none"
+                                placeholder="Calculado: Suma stock"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Galería de imágenes */}
+                        <div className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/40 space-y-4">
+                          <h4 className="text-xs font-black text-slate-500 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                            <span>🖼</span> Galería de Fotos del Artículo
+                          </h4>
+                          <ImageGalleryEditor
+                            images={[newProduct.imageUrl || "", ...(newProduct.imagenes || [])].filter(Boolean)}
+                            onChange={(updatedImages) => {
+                              setNewProduct({
+                                ...newProduct,
+                                imageUrl: updatedImages[0] || "",
+                                imagenes: updatedImages.slice(1)
+                              });
+                            }}
+                            isThemeDark={store.settings.themeMode === "dark"}
+                          />
+                        </div>
                       </div>
                     )}
 
@@ -7122,7 +7719,7 @@ export default function App() {
                           <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">
                             Gestor de Stock de Variantes (Combinación Exacto)
                           </label>
-                          <p className="text-[9px] text-zinc-400 mt-0.5">Asigna inventarios individuales por talle y color, y un precio diferente por variante si lo requiere</p>
+                          <p className="text-[9px] text-zinc-400 mt-0.5">Asigna inventarios individuales por talle, color y sucursal, y un precio diferente por variante si lo requiere</p>
                         </div>
                         <button
                           type="button"
@@ -7138,20 +7735,26 @@ export default function App() {
                             const sizesList = curSizes.length > 0 ? curSizes : ["Único"];
                             const colorsList = curColors.length > 0 ? curColors : ["General"];
                             
+                            let isFirst = (newProduct.variants || []).length === 0;
+                            const currentSkus = (newProduct.variants || []).map(v => v.sku).filter(Boolean) as string[];
+
                             for (const sz of sizesList) {
                               for (const col of colorsList) {
                                 const exists = (newProduct.variants || []).some(v => v.size === sz && v.color === col);
                                 if (!exists) {
-                                  const baseCode = newProduct.codigo || "PROD";
-                                  const sizePart = sz === 'Único' ? '' : `-${sz}`;
-                                  const colorPart = col === 'General' ? '' : `-${col}`;
-                                  const generatedSku = `${baseCode}${sizePart}${colorPart}`.toUpperCase();
+                                  const nextNum = getNextAvailableSKUNumber(store.products, currentSkus);
+                                  const generatedSku = `J${String(nextNum).padStart(3, '0')}`;
+                                  currentSkus.push(generatedSku);
+                                  const sp = Math.floor(Number(newProduct.stockPinamar !== undefined ? newProduct.stockPinamar : 5));
+                                  const sm = Math.floor(Number(newProduct.stockMontevideo !== undefined ? newProduct.stockMontevideo : 0));
                                   generated.push({
                                     size: sz,
                                     color: col,
                                     colorCode: col === "Negro" ? "#000000" : col === "Blanco" ? "#ffffff" : col === "Rojo" ? "#ef4444" : col === "Azul" ? "#3b82f6" : col === "Verde" ? "#22c55e" : col === "Gris" ? "#6b7280" : col === "Beige" ? "#f5f5dc" : col === "Rosa" ? "#f472b6" : "#9ca3af",
                                     sku: generatedSku,
-                                    stock: Math.floor(Number(newProduct.stock || 5)),
+                                    stockPinamar: sp,
+                                    stockMontevideo: sm,
+                                    stock: sp + sm,
                                     priceDelta: 0
                                   });
                                 }
@@ -7159,11 +7762,10 @@ export default function App() {
                             }
                             
                             const combined = [...(newProduct.variants || []), ...generated];
-                            setNewProduct({
+                            setNewProduct(updateProductCalculations({
                               ...newProduct,
-                              variants: combined,
-                              stock: combined.reduce((sum, v) => sum + v.stock, 0)
-                            });
+                              variants: combined
+                            }));
                             showAdminToast(`Se autogeneraron ${generated.length} combinaciones con códigos sugeridos.`, "success");
                           }}
                           className="text-[9px] px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded shadow transition-all cursor-pointer self-start sm:self-center"
@@ -7172,10 +7774,15 @@ export default function App() {
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 bg-slate-100/30 dark:bg-zinc-950 p-2.5 rounded-lg border border-slate-200 dark:border-zinc-800">
+                      <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 bg-slate-100/30 dark:bg-zinc-950 p-2.5 rounded-lg border border-slate-200 dark:border-zinc-800">
                         <div>
                           <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Talle</label>
-                          <select id="new-var-size" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold text-zinc-800 dark:text-zinc-200">
+                          <select
+                            id="new-var-size"
+                            value={newVarSize}
+                            onChange={(e) => setNewVarSize(e.target.value)}
+                            className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold text-zinc-800 dark:text-zinc-200"
+                          >
                             {((newProduct.sizes || []).length > 0 ? (newProduct.sizes || []) : ["Único"]).map(sz => (
                               <option key={sz} value={sz}>{sz}</option>
                             ))}
@@ -7183,19 +7790,39 @@ export default function App() {
                         </div>
                         <div>
                           <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Color</label>
-                          <select id="new-var-color" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold text-zinc-800 dark:text-zinc-200">
+                          <select
+                            id="new-var-color"
+                            value={newVarColor}
+                            onChange={(e) => setNewVarColor(e.target.value)}
+                            className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold text-zinc-800 dark:text-zinc-200"
+                          >
                             {((newProduct.colors || []).length > 0 ? (newProduct.colors || []) : ["General"]).map(col => (
                               <option key={col} value={col}>{col}</option>
                             ))}
                           </select>
                         </div>
                         <div>
-                          <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Código / SKU Variant</label>
-                          <input id="new-var-sku" type="text" placeholder="p.ej. J001-N-M" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold font-mono text-zinc-800 dark:text-zinc-200 uppercase" />
+                          <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Código / SKU Variant (Sistema)</label>
+                          <input
+                            id="new-var-sku"
+                            type="text"
+                            readOnly
+                            value={(() => {
+                              const currentNewSkus = (newProduct.variants || []).map(v => v.sku).filter(Boolean) as string[];
+                              const nextNewNum = getNextAvailableSKUNumber(store.products, currentNewSkus);
+                              return `J${String(nextNewNum).padStart(3, '0')}`;
+                            })()}
+                            className="w-full text-xs bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold font-mono text-zinc-500 dark:text-zinc-400 uppercase cursor-not-allowed opacity-75"
+                            placeholder="Autogenerado"
+                          />
                         </div>
                         <div>
-                          <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Stock Físico</label>
-                          <input id="new-var-stock" type="number" defaultValue="5" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-mono font-bold" />
+                          <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Stock Pinamar</label>
+                          <input id="new-var-stock-pinamar" type="number" defaultValue="5" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-mono font-bold" />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Stock Montevideo</label>
+                          <input id="new-var-stock-montevideo" type="number" defaultValue="0" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-mono font-bold" />
                         </div>
                         <div className="flex items-end">
                           <button
@@ -7203,47 +7830,22 @@ export default function App() {
                             onClick={() => {
                               const szEl = document.getElementById('new-var-size') as HTMLSelectElement;
                               const colEl = document.getElementById('new-var-color') as HTMLSelectElement;
-                              const skuEl = document.getElementById('new-var-sku') as HTMLInputElement;
-                              const stkEl = document.getElementById('new-var-stock') as HTMLInputElement;
+                              const stkPinEl = document.getElementById('new-var-stock-pinamar') as HTMLInputElement;
+                              const stkMonEl = document.getElementById('new-var-stock-montevideo') as HTMLInputElement;
                               
-                              if (szEl && colEl && stkEl) {
+                              if (szEl && colEl && stkPinEl && stkMonEl) {
                                 const sz = szEl.value;
                                 const col = colEl.value;
-                                const sku = skuEl ? skuEl.value.trim().toUpperCase() : "";
-                                const stk = Math.floor(Number(stkEl.value || 0));
+                                const currentNewSkus = (newProduct.variants || []).map(v => v.sku).filter(Boolean) as string[];
+                                const nextNewNum = getNextAvailableSKUNumber(store.products, currentNewSkus);
+                                const sku = `J${String(nextNewNum).padStart(3, '0')}`;
+                                const stkPin = Math.max(0, Math.floor(Number(stkPinEl.value || 0)));
+                                const stkMon = Math.max(0, Math.floor(Number(stkMonEl.value || 0)));
                                 
                                 const current = newProduct.variants || [];
                                 if (current.some(v => v.size === sz && v.color === col)) {
                                   showAdminToast(`La combinación ${sz} - ${col} ya existe.`, "error");
                                   return;
-                                }
-
-                                if (sku) {
-                                  // 1. Check if SKU matches this product's own code
-                                  if (newProduct.codigo && newProduct.codigo.trim().toUpperCase() === sku) {
-                                    showAdminToast(`El código de variante "${sku}" no puede ser idéntico al código base de este producto.`, "error");
-                                    return;
-                                  }
-                                  // 2. Check if SKU is already in use by another variant of this product
-                                  if (current.some(v => v.sku && v.sku.trim().toUpperCase() === sku)) {
-                                    showAdminToast(`El código de variante "${sku}" ya está registrado en otra variante de este artículo.`, "error");
-                                    return;
-                                  }
-                                  // 3. Check other products and their variants
-                                  const otherProducts = store.products;
-                                  for (const p of otherProducts) {
-                                    if (p.codigo && p.codigo.trim().toUpperCase() === sku) {
-                                      showAdminToast(`El código "${sku}" ya está en uso como código base de "${p.name}".`, "error");
-                                      return;
-                                    }
-                                    if (p.variants) {
-                                      const dupV = p.variants.find(v => v.sku && v.sku.trim().toUpperCase() === sku);
-                                      if (dupV) {
-                                        showAdminToast(`El código "${sku}" ya está en uso por la variante "${dupV.size} ${dupV.color}" de "${p.name}".`, "error");
-                                        return;
-                                      }
-                                    }
-                                  }
                                 }
                                 
                                 const newV: ProductVariant = {
@@ -7251,16 +7853,16 @@ export default function App() {
                                   color: col,
                                   colorCode: col === "Negro" ? "#000000" : col === "Blanco" ? "#ffffff" : col === "Rojo" ? "#ef4444" : col === "Azul" ? "#3b82f6" : col === "Verde" ? "#22c55e" : col === "Gris" ? "#6b7280" : col === "Beige" ? "#f5f5dc" : col === "Rosa" ? "#f472b6" : "#9ca3af",
                                   sku: sku,
-                                  stock: stk,
+                                  stockPinamar: stkPin,
+                                  stockMontevideo: stkMon,
+                                  stock: stkPin + stkMon,
                                   priceDelta: 0
                                 };
                                 const updated = [...current, newV];
-                                setNewProduct({
+                                setNewProduct(updateProductCalculations({
                                   ...newProduct,
-                                  variants: updated,
-                                  stock: updated.reduce((sum, v) => sum + v.stock, 0)
-                                });
-                                if (skuEl) skuEl.value = "";
+                                  variants: updated
+                                }));
                                 showAdminToast("Combinación añadida", "success");
                               }
                             }}
@@ -7279,7 +7881,9 @@ export default function App() {
                                 <th className="p-2">Talle</th>
                                 <th className="p-2">Color / Tono</th>
                                 <th className="p-2">Código / SKU Variant</th>
-                                <th className="p-2">Stock Disponible</th>
+                                <th className="p-2">Stock Pinamar</th>
+                                <th className="p-2">Stock Montevideo</th>
+                                <th className="p-2">Total</th>
                                 <th className="p-2">Precio Diferente (Opcional)</th>
                                 <th className="p-2">Foto URL (Opcional)</th>
                                 <th className="p-2 text-right">Acciones</th>
@@ -7300,30 +7904,53 @@ export default function App() {
                                       value={v.sku || ""}
                                       onChange={(e) => {
                                         const nextArr = JSON.parse(JSON.stringify(newProduct.variants || []));
-                                        nextArr[i].sku = e.target.value.toUpperCase();
-                                        setNewProduct({
+                                        nextArr[i].sku = e.target.value.trim().toUpperCase();
+                                        setNewProduct(updateProductCalculations({
                                           ...newProduct,
                                           variants: nextArr
-                                        });
+                                        }));
                                       }}
-                                      className="w-44 px-2 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none uppercase text-zinc-800 dark:text-zinc-200 focus:ring-1 focus:ring-[#5346ff]"
+                                      className="w-44 px-2 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none uppercase text-slate-800 dark:text-zinc-100 focus:ring-1 focus:ring-indigo-500"
                                     />
                                   </td>
                                   <td className="p-2">
                                     <input
                                       type="number"
-                                      value={v.stock}
+                                      value={v.stockPinamar !== undefined ? v.stockPinamar : v.stock}
                                       onChange={(e) => {
-                                        const nextStockArr = JSON.parse(JSON.stringify(newProduct.variants || []));
-                                        nextStockArr[i].stock = Math.max(0, Math.floor(Number(e.target.value || 0)));
-                                        setNewProduct({
+                                        const nextArr = JSON.parse(JSON.stringify(newProduct.variants || []));
+                                        const sp = Math.max(0, Math.floor(Number(e.target.value || 0)));
+                                        const sm = nextArr[i].stockMontevideo !== undefined ? nextArr[i].stockMontevideo : 0;
+                                        nextArr[i].stockPinamar = sp;
+                                        nextArr[i].stock = sp + sm;
+                                        setNewProduct(updateProductCalculations({
                                           ...newProduct,
-                                          variants: nextStockArr,
-                                          stock: nextStockArr.reduce((sum: number, item: any) => sum + item.stock, 0)
-                                        });
+                                          variants: nextArr
+                                        }));
                                       }}
                                       className="w-16 px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none"
                                     />
+                                  </td>
+                                  <td className="p-2">
+                                    <input
+                                      type="number"
+                                      value={v.stockMontevideo !== undefined ? v.stockMontevideo : 0}
+                                      onChange={(e) => {
+                                        const nextArr = JSON.parse(JSON.stringify(newProduct.variants || []));
+                                        const sp = nextArr[i].stockPinamar !== undefined ? nextArr[i].stockPinamar : nextArr[i].stock;
+                                        const sm = Math.max(0, Math.floor(Number(e.target.value || 0)));
+                                        nextArr[i].stockMontevideo = sm;
+                                        nextArr[i].stock = sp + sm;
+                                        setNewProduct(updateProductCalculations({
+                                          ...newProduct,
+                                          variants: nextArr
+                                        }));
+                                      }}
+                                      className="w-16 px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none"
+                                    />
+                                  </td>
+                                  <td className="p-2 font-mono font-bold text-zinc-500">
+                                    {v.stock}
                                   </td>
                                   <td className="p-2">
                                     <div className="flex items-center gap-1">
@@ -7504,35 +8131,16 @@ const resText = await uploadRes.text();
 
                 {newProductStep === 4 && (
                   <div className="space-y-4 animate-fade-in unique-step-four">
-                    {/* General Stock Input moved to step 4 */}
+                    {/* General Stock Input (Read Only Visor) */}
                     <div className="p-4 bg-slate-50 dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 rounded-xl space-y-2">
                       <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest flex items-center justify-between">
-                        <span>Stock Físico General *</span>
-                        {newProductErrors.stock && <span className="text-red-500 text-[9px] font-semibold lowercase">el stock es obligatorio</span>}
+                        <span>Stock Físico General (Pinamar + Montevideo)</span>
                       </label>
-                      <input
-                        type="number"
-                        value={newProduct.stock === undefined ? "" : newProduct.stock}
-                        onChange={(e) => {
-                          const val = e.target.value === "" ? undefined : Number(e.target.value);
-                          setNewProduct({ ...newProduct, stock: val });
-                          if (newProductErrors.stock) {
-                            setNewProductErrors(prev => {
-                              const copy = { ...prev };
-                              delete copy.stock;
-                              return copy;
-                            });
-                          }
-                        }}
-                        className={`w-full max-w-sm px-3 py-1.5 bg-slate-100 dark:bg-zinc-950 border rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-905 dark:text-white transition-all font-mono ${
-                          newProductErrors.stock
-                            ? "border-red-500 dark:border-red-650 ring-1 ring-red-500/30"
-                            : "border-slate-200 dark:border-zinc-800"
-                        }`}
-                        placeholder="ej. 15"
-                      />
+                      <div className="text-sm font-bold font-mono text-slate-800 dark:text-zinc-200">
+                        {newProduct.stock || 0} unidades disponibles
+                      </div>
                       <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-sans leading-normal">
-                        Este inventario general de respaldo se utilizará para productos simples. Si creaste variantes en el Paso 3, el stock real del artículo se calculará de forma sumatoria y automatizada.
+                        El stock total es calculado de forma automatizada en base a las sucursales definidas en el Paso 2 (Precios y Fotos).
                       </p>
                     </div>
 
@@ -7626,6 +8234,7 @@ const resText = await uploadRes.text();
                     )}
                     {newProductStep < 4 ? (
                       <button
+                        key="btn-new-next"
                         type="button"
                         onClick={() => {
                           if (newProductStep === 1) {
@@ -7653,7 +8262,9 @@ const resText = await uploadRes.text();
                       </button>
                     ) : (
                       <button
-                        type="submit"
+                        key="btn-new-submit"
+                        type="button"
+                        onClick={handleCreateProduct}
                         disabled={saving}
                         className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-emerald-500/10"
                       >
@@ -7667,7 +8278,15 @@ const resText = await uploadRes.text();
 
                 {/* 4. EDIT PRODUCT FORM DISPLAY */}
                 {adminSection === "products" && editingProduct && (
-                  <form onSubmit={handleUpdateProduct} className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4">
+                  <form
+                    onSubmit={(e) => e.preventDefault()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.target as HTMLElement).tagName !== "TEXTAREA") {
+                        e.preventDefault();
+                      }
+                    }}
+                    className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4"
+                  >
                     <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3 mb-2">
                       <div className="flex items-center gap-2">
                         <Edit className="h-4 w-4 text-amber-500" />
@@ -7733,7 +8352,7 @@ const resText = await uploadRes.text();
                     {editingProductStep === 1 && (
                       <div className="space-y-4 animate-fade-in unique-step-one">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
+                      <div className="md:col-span-2">
                         <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Nombre del Producto *</label>
                         <input
                           required
@@ -7742,24 +8361,6 @@ const resText = await uploadRes.text();
                           onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
                           className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-semibold"
                         />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
-                          <span className="flex items-center gap-1">
-                            <span>Código Único / SKU Base (Opcional)</span>
-                            <span className="px-1 py-0.2 bg-zinc-500/10 text-zinc-500 text-[8px] font-mono rounded font-extrabold">OPCIONAL</span>
-                          </span>
-                        </label>
-                        <input
-                          type="text"
-                          value={editingProduct.codigo || ""}
-                          onChange={(e) => setEditingProduct({ ...editingProduct, codigo: e.target.value.toUpperCase() })}
-                          className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-[#5346ff] text-slate-900 dark:text-white transition-all font-mono uppercase font-bold placeholder-zinc-400"
-                          placeholder="p.ej. REMERA-SLIM"
-                        />
-                        <p className="text-[9px] text-zinc-400 dark:text-zinc-500 mt-1 leading-normal">
-                          Para productos simples, este es el código que verá el cliente. Para variantes de talles/colores, sirva de referencia, o déjelo vacío si cada variante tiene su código propio.
-                        </p>
                       </div>
                       <div>
                         <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Categoría Principal *</label>
@@ -7825,112 +8426,149 @@ const resText = await uploadRes.text();
                       {/* Categorías secundarias adicionales para Editar Producto */}
                       <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60 flex flex-col">
                         <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">
-                          Categorías Adicionales / Secundarias <span className="text-zinc-400 dark:text-zinc-500 font-normal lowercase">(los artículos aparecerán en todas las categorías marcadas)</span>
+                          Categorías Adicionales / Secundarias <span className="text-zinc-400 dark:text-zinc-500 font-normal lowercase">(elige del menú desplegable)</span>
                         </label>
-                        <div className="flex flex-wrap gap-2 mt-1">
+                        <select
+                          value=""
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val) {
+                              const list = editingProduct.categorias_adicionales || [];
+                              if (!list.includes(val)) {
+                                setEditingProduct({
+                                  ...editingProduct,
+                                  categorias_adicionales: [...list, val]
+                                });
+                              }
+                            }
+                          }}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white transition-all font-semibold cursor-pointer"
+                        >
+                          <option value="">-- Seleccionar categoría adicional --</option>
                           {(store.dbCategories || [])
                             .sort((a,b) => (a.orden || 0) - (b.orden || 0))
-                            .filter(c => c.id !== editingProduct.categoria_id)
-                            .map((c) => {
-                              const isChecked = !!(editingProduct.categorias_adicionales && editingProduct.categorias_adicionales.includes(c.id));
-                              return (
+                            .filter(c => c.id !== editingProduct.categoria_id && !(editingProduct.categorias_adicionales && editingProduct.categorias_adicionales.includes(c.id)))
+                            .map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.nombre}
+                              </option>
+                            ))}
+                        </select>
+                        <div className="flex flex-wrap gap-1.5 mt-2.5">
+                          {(editingProduct.categorias_adicionales || []).map((catId) => {
+                            const cat = (store.dbCategories || []).find(c => c.id === catId);
+                            if (!cat) return null;
+                            return (
+                              <span
+                                key={catId}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#5346ff]/10 text-[#5346ff] dark:bg-[#5346ff]/20 dark:text-[#9086ff] border border-[#5346ff]/30 rounded-lg text-xs font-semibold"
+                              >
+                                <span>{cat.nombre}</span>
                                 <button
                                   type="button"
-                                  key={c.id}
                                   onClick={() => {
-                                    const list = editingProduct.categorias_adicionales || [];
-                                    const updated = list.includes(c.id)
-                                      ? list.filter(id => id !== c.id)
-                                      : [...list, c.id];
                                     setEditingProduct({
                                       ...editingProduct,
-                                      categorias_adicionales: updated
+                                      categorias_adicionales: (editingProduct.categorias_adicionales || []).filter(id => id !== catId)
                                     });
                                   }}
-                                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all cursor-pointer select-none active:scale-95 ${
-                                    isChecked
-                                      ? "bg-[#5346ff]/10 text-[#5346ff] border-[#5346ff]/40 dark:bg-[#5346ff]/20 dark:text-[#9086ff] dark:border-[#5346ff]/60"
-                                      : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-800"
-                                  }`}
+                                  className="text-sm font-bold hover:text-red-500 transition-colors ml-1 focus:outline-none cursor-pointer"
                                 >
-                                  <span>{c.nombre}</span>
-                                  {isChecked && <span className="text-[#5346ff] dark:text-[#9086ff]">✓</span>}
+                                  ×
                                 </button>
-                              );
-                            })}
-                          {(store.dbCategories || []).filter(c => c.id !== editingProduct.categoria_id).length === 0 && (
-                            <span className="text-[10px] text-zinc-400 italic">No hay otras categorías creadas para seleccionar.</span>
+                              </span>
+                            );
+                          })}
+                          {(editingProduct.categorias_adicionales || []).length === 0 && (
+                            <span className="text-[10px] text-zinc-400 italic">No hay categorías adicionales seleccionadas.</span>
                           )}
                         </div>
                       </div>
 
                       {/* Subcategorías secundarias adicionales para Editar Producto */}
                       <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60 flex flex-col">
-                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex flex-wrap items-center justify-between gap-1">
-                          <span>Subcategorías Adicionales / Secundarias</span>
-                          <span className="text-zinc-400 dark:text-zinc-500 font-normal lowercase">(haz clic para desplegar cada menú y marcar)</span>
+                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">
+                          Subcategorías Adicionales / Secundarias <span className="text-zinc-400 dark:text-zinc-500 font-normal lowercase">(elige categoría principal primero)</span>
                         </label>
-                        <div className="space-y-2 mt-2">
-                          {(store.dbCategories || [])
-                            .sort((a,b) => (a.orden || 0) - (b.orden || 0))
-                            .map((cat) => {
-                              // Find subcategories belonging to this category
-                              const subs = (store.dbSubcategories || []).filter(
-                                s => s.categoria_id === cat.id && s.id !== editingProduct.subcategoria_id
-                              );
-                              if (subs.length === 0) return null;
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                          <div>
+                            <select
+                              value={editSubSecCategoryFilter}
+                              onChange={(e) => setEditSubSecCategoryFilter(e.target.value)}
+                              className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white transition-all font-semibold cursor-pointer"
+                            >
+                              <option value="">-- Categoría de Filtro --</option>
+                              {(store.dbCategories || [])
+                                .sort((a,b) => (a.orden || 0) - (b.orden || 0))
+                                .map((cat) => (
+                                  <option key={cat.id} value={cat.id}>
+                                    {cat.nombre}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                          <div>
+                            <select
+                              value=""
+                              disabled={!editSubSecCategoryFilter}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val) {
+                                  const list = editingProduct.subcategorias_adicionales || [];
+                                  if (!list.includes(val)) {
+                                    setEditingProduct({
+                                      ...editingProduct,
+                                      subcategorias_adicionales: [...list, val]
+                                    });
+                                  }
+                                }
+                              }}
+                              className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white disabled:opacity-50 transition-all font-semibold cursor-pointer"
+                            >
+                              <option value="">-- Elige Subcategoría --</option>
+                              {(store.dbSubcategories || [])
+                                .filter(s => s.categoria_id === editSubSecCategoryFilter && s.id !== editingProduct.subcategoria_id && !(editingProduct.subcategorias_adicionales && editingProduct.subcategorias_adicionales.includes(s.id)))
+                                .map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.nombre}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                        </div>
 
-                              const activeSubCount = subs.filter(
-                                s => !!(editingProduct.subcategorias_adicionales && editingProduct.subcategorias_adicionales.includes(s.id))
-                              ).length;
-                              
-                              return (
-                                <details key={cat.id} className="group border border-slate-200/50 dark:border-zinc-800/50 rounded-lg bg-white dark:bg-zinc-950/40 overflow-hidden" open={activeSubCount > 0}>
-                                  <summary className="flex items-center justify-between px-3 py-2 text-[11px] text-slate-700 dark:text-zinc-300 font-extrabold cursor-pointer select-none hover:bg-slate-100/50 dark:hover:bg-zinc-900/50 duration-150 list-none [&::-webkit-details-marker]:hidden">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="text-[9px] text-slate-400 dark:text-zinc-500 transition-transform duration-200 group-open:rotate-90">▶</span>
-                                      <span className="uppercase text-[10px] tracking-wider font-mono">{cat.nombre}</span>
-                                    </div>
-                                    {activeSubCount > 0 && (
-                                      <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-[#5346ff]/10 text-[#5346ff] dark:bg-[#5346ff]/20 dark:text-[#9086ff]">
-                                        {activeSubCount} {activeSubCount === 1 ? "seleccionada" : "seleccionadas"}
-                                      </span>
-                                    )}
-                                  </summary>
-                                  <div className="p-2.5 border-t border-slate-100 dark:border-zinc-800/30 bg-slate-50/40 dark:bg-zinc-950/20 flex flex-wrap gap-1.5">
-                                    {subs.map((s) => {
-                                      const isChecked = !!(editingProduct.subcategorias_adicionales && editingProduct.subcategorias_adicionales.includes(s.id));
-                                      return (
-                                        <button
-                                          type="button"
-                                          key={s.id}
-                                          onClick={() => {
-                                            const list = editingProduct.subcategorias_adicionales || [];
-                                            const updated = list.includes(s.id)
-                                              ? list.filter(id => id !== s.id)
-                                              : [...list, s.id];
-                                            setEditingProduct({
-                                              ...editingProduct,
-                                              subcategorias_adicionales: updated
-                                            });
-                                          }}
-                                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 border transition-all cursor-pointer select-none active:scale-95 ${
-                                            isChecked
-                                              ? "bg-[#5346ff]/10 text-[#5346ff] border-[#5346ff]/35 dark:bg-[#5346ff]/20 dark:text-[#9086ff] dark:border-[#5346ff]/50"
-                                              : "bg-white dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-zinc-800 hover:bg-slate-100 dark:hover:bg-zinc-800"
-                                          }`}
-                                        >
-                                          <span>{s.nombre}</span>
-                                          {isChecked && <span className="text-[#5346ff] dark:text-[#9086ff]">✓</span>}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </details>
-                              );
-                            })}
-                          {!(store.dbSubcategories && store.dbSubcategories.length > 0) && (
-                            <span className="text-[10px] text-zinc-400 italic">No hay subcategorías registradas en la tienda para seleccionar.</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(editingProduct.subcategorias_adicionales || []).map((subId) => {
+                            const sub = (store.dbSubcategories || []).find(s => s.id === subId);
+                            if (!sub) return null;
+                            const cat = (store.dbCategories || []).find(c => c.id === sub.categoria_id);
+                            return (
+                              <span
+                                key={subId}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#5346ff]/10 text-[#5346ff] dark:bg-[#5346ff]/20 dark:text-[#9086ff] border border-[#5346ff]/30 rounded-lg text-xs font-semibold"
+                              >
+                                <span className="text-[10px] opacity-75 mr-1 font-mono uppercase">
+                                  {cat ? cat.nombre : ""}
+                                </span>
+                                <span>{sub.nombre}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingProduct({
+                                      ...editingProduct,
+                                      subcategorias_adicionales: (editingProduct.subcategorias_adicionales || []).filter(id => id !== subId)
+                                    });
+                                  }}
+                                  className="text-sm font-bold hover:text-red-500 transition-colors ml-1 focus:outline-none cursor-pointer"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            );
+                          })}
+                          {(editingProduct.subcategorias_adicionales || []).length === 0 && (
+                            <span className="text-[10px] text-zinc-400 italic">No hay subcategorías adicionales seleccionadas.</span>
                           )}
                         </div>
                       </div>
@@ -7939,74 +8577,183 @@ const resText = await uploadRes.text();
                     )}
 
                     {editingProductStep === 2 && (
-                      <div className="space-y-4 animate-fade-in unique-step-two">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div>
-                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Precio de Lista / Antes</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={editingProduct.originalPrice || ""}
-                          onChange={(e) => setEditingProduct({ ...editingProduct, originalPrice: e.target.value ? Number(e.target.value) : undefined })}
-                          className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono"
-                          placeholder="ej. 99.99"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Descuento (%)</label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            min="0"
-                            max="99"
-                            value={
-                              editingProduct.originalPrice && editingProduct.price && editingProduct.originalPrice > editingProduct.price
-                                ? Math.round(((editingProduct.originalPrice - editingProduct.price) / editingProduct.originalPrice) * 100)
-                                : ""
-                            }
-                            onChange={(e) => {
-                              const pct = e.target.value === "" ? 0 : Number(e.target.value);
-                              if (pct >= 0 && pct < 100) {
-                                if (editingProduct.originalPrice) {
-                                  const computedPrice = Number((editingProduct.originalPrice * (1 - pct / 100)).toFixed(2));
-                                  setEditingProduct({ ...editingProduct, price: computedPrice });
-                                } else if (editingProduct.price) {
-                                  const computedOriginal = Number((editingProduct.price / (1 - pct / 100)).toFixed(2));
-                                  setEditingProduct({ ...editingProduct, originalPrice: computedOriginal });
-                                }
-                              }
+                      <div className="space-y-6 animate-fade-in unique-step-two">
+                        
+                        {/* Finanzas y Precios */}
+                        <div className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/40 space-y-4">
+                          <h4 className="text-xs font-black text-indigo-500 uppercase tracking-wider flex items-center gap-2">
+                            <span>💵</span> Finanzas, Costos y Precios
+                          </h4>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Precio Compra ($)</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={editingProduct.precioCompra || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value === "" ? 0 : Number(e.target.value);
+                                  setEditingProduct(updateProductCalculations({ ...editingProduct, precioCompra: val }) as Product);
+                                }}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
+                                placeholder="Costo de compra"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-400 dark:text-zinc-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                                <span>Precio con 40%</span>
+                                <span className="text-[8px] bg-slate-100 dark:bg-zinc-800 px-1 py-0.2 rounded font-normal lowercase text-slate-500">auto</span>
+                              </label>
+                              <input
+                                type="number"
+                                readOnly
+                                disabled
+                                value={editingProduct.precioCon40 || ""}
+                                className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950/80 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs text-slate-500 font-mono font-bold cursor-not-allowed select-none"
+                                placeholder="Precio Compra + 40%"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Descuento (%)</label>
+                              <input
+                                type="number"
+                                min="0"
+                                max="99"
+                                value={editingProduct.descuentoPorcentaje || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value === "" ? 0 : Math.min(99, Math.max(0, Number(e.target.value)));
+                                  setEditingProduct(updateProductCalculations({ ...editingProduct, descuentoPorcentaje: val }) as Product);
+                                }}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-indigo-600 dark:text-indigo-400 font-mono font-bold"
+                                placeholder="Ej. 15%"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Comisión ML ($)</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={editingProduct.comisionML || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value === "" ? 0 : Number(e.target.value);
+                                  setEditingProduct(updateProductCalculations({ ...editingProduct, comisionML: val }) as Product);
+                                }}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
+                                placeholder="Comisión de MercadoLibre"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Precio Venta ML ($)</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={editingProduct.precioVentaML || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value === "" ? 0 : Number(e.target.value);
+                                  setEditingProduct(updateProductCalculations({ ...editingProduct, precioVentaML: val }) as Product);
+                                }}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
+                                placeholder="Precio en MercadoLibre"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-[#5346ff] dark:text-[#9086ff] uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                                <span>Precio Web ($)</span>
+                                <span className="text-[8px] bg-indigo-50 dark:bg-indigo-950/50 px-1 py-0.2 rounded font-normal lowercase text-indigo-500">auto</span>
+                              </label>
+                              <input
+                                type="number"
+                                readOnly
+                                disabled
+                                value={editingProduct.precioWeb || ""}
+                                className="w-full px-3 py-2 bg-indigo-50/40 dark:bg-indigo-950/10 border border-indigo-100 dark:border-indigo-900/50 rounded-lg text-xs text-indigo-600 dark:text-indigo-400 font-mono font-black cursor-not-allowed select-none"
+                                placeholder="Calculado: ML - Comisión"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Distribución de Stock */}
+                        <div className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/40 space-y-4">
+                          <h4 className="text-xs font-black text-emerald-500 uppercase tracking-wider flex items-center gap-2">
+                            <span>📦</span> Almacenes y Stock por Sucursal
+                          </h4>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Stock Pinamar</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={editingProduct.stockPinamar || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value === "" ? 0 : Number(e.target.value);
+                                  setEditingProduct(updateProductCalculations({ ...editingProduct, stockPinamar: val }) as Product);
+                                }}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
+                                placeholder="Unidades en Pinamar"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Stock Montevideo</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={editingProduct.stockMontevideo || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value === "" ? 0 : Number(e.target.value);
+                                  setEditingProduct(updateProductCalculations({ ...editingProduct, stockMontevideo: val }) as Product);
+                                }}
+                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
+                                placeholder="Unidades en Montevideo"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-extrabold text-emerald-500 dark:text-emerald-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                                <span>Stock Total Actual</span>
+                                <span className="text-[8px] bg-emerald-50 dark:bg-emerald-950/50 px-1 py-0.2 rounded font-normal lowercase text-emerald-500">auto</span>
+                              </label>
+                              <input
+                                type="number"
+                                readOnly
+                                disabled
+                                value={editingProduct.stockTotalActual || ""}
+                                className="w-full px-3 py-2 bg-emerald-50/40 dark:bg-emerald-950/10 border border-emerald-100 dark:border-emerald-900/50 rounded-lg text-xs text-emerald-600 dark:text-emerald-400 font-mono font-extrabold cursor-not-allowed select-none"
+                                placeholder="Calculado: Suma stock"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Galería de imágenes */}
+                        <div className="p-4 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950/40 space-y-4">
+                          <h4 className="text-xs font-black text-slate-500 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                            <span>🖼</span> Galería de Fotos del Artículo
+                          </h4>
+                          <ImageGalleryEditor
+                            images={[editingProduct.imageUrl || "", ...(editingProduct.imagenes || [])].filter(Boolean)}
+                            onChange={(updatedImages) => {
+                              setEditingProduct({
+                                ...editingProduct,
+                                imageUrl: updatedImages[0] || "",
+                                imagenes: updatedImages.slice(1)
+                              });
                             }}
-                            className="w-full px-3 py-2 pr-8 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold text-indigo-500 dark:text-indigo-400"
-                            placeholder="Calculado"
+                            isThemeDark={store.settings.themeMode === "dark"}
                           />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">%</span>
                         </div>
                       </div>
-                      <div>
-                        <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Precio de Venta ($) *</label>
-                        <input
-                          required
-                          type="number"
-                          step="0.01"
-                          value={editingProduct.price}
-                          onChange={(e) => setEditingProduct({ ...editingProduct, price: Number(e.target.value) })}
-                          className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono"
-                        />
-                      </div>
-                    </div>
-
-                    <ImageGalleryEditor
-                      images={[editingProduct.imageUrl || "", ...(editingProduct.imagenes || [])].filter(Boolean)}
-                      onChange={(updatedImages) => {
-                        setEditingProduct({
-                          ...editingProduct,
-                          imageUrl: updatedImages[0] || "",
-                          imagenes: updatedImages.slice(1)
-                        });
-                      }}
-                      isThemeDark={store.settings.themeMode === "dark"}
-                    />
-                    </div>
                     )}
 
                     {editingProductStep === 1 && (
@@ -8483,7 +9230,7 @@ const resText = await uploadRes.text();
                           <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">
                             Gestor de Stock de Variantes (Combinación Exacto)
                           </label>
-                          <p className="text-[9px] text-zinc-400 mt-0.5 font-sans">Asigna inventarios individuales por talle y color, y un precio diferente por variante si lo requiere</p>
+                          <p className="text-[9px] text-zinc-400 mt-0.5 font-sans">Asigna inventarios individuales por talle, color y sucursal, y un precio diferente por variante si lo requiere</p>
                         </div>
                         <button
                           type="button"
@@ -8499,20 +9246,26 @@ const resText = await uploadRes.text();
                             const sizesList = curSizes.length > 0 ? curSizes : ["Único"];
                             const colorsList = curColors.length > 0 ? curColors : ["General"];
                             
+                            let isFirst = (editingProduct.variants || []).length === 0;
+                            const currentSkus = (editingProduct.variants || []).map(v => v.sku).filter(Boolean) as string[];
+
                             for (const sz of sizesList) {
                               for (const col of colorsList) {
                                 const exists = (editingProduct.variants || []).some(v => v.size === sz && v.color === col);
                                 if (!exists) {
-                                  const baseCode = editingProduct.codigo || "PROD";
-                                  const sizePart = sz === 'Único' ? '' : `-${sz}`;
-                                  const colorPart = col === 'General' ? '' : `-${col}`;
-                                  const generatedSku = `${baseCode}${sizePart}${colorPart}`.toUpperCase();
+                                  const nextNum = getNextAvailableSKUNumber(store.products, currentSkus);
+                                  const generatedSku = `J${String(nextNum).padStart(3, '0')}`;
+                                  currentSkus.push(generatedSku);
+                                  const sp = Math.floor(Number(editingProduct.stockPinamar !== undefined ? editingProduct.stockPinamar : 5));
+                                  const sm = Math.floor(Number(editingProduct.stockMontevideo !== undefined ? editingProduct.stockMontevideo : 0));
                                   generated.push({
                                     size: sz,
                                     color: col,
                                     colorCode: col === "Negro" ? "#000000" : col === "Blanco" ? "#ffffff" : col === "Rojo" ? "#ef4444" : col === "Azul" ? "#3b82f6" : col === "Verde" ? "#22c55e" : col === "Gris" ? "#6b7280" : col === "Beige" ? "#f5f5dc" : col === "Rosa" ? "#f472b6" : "#9ca3af",
                                     sku: generatedSku,
-                                    stock: Math.floor(Number(editingProduct.stock || 5)),
+                                    stockPinamar: sp,
+                                    stockMontevideo: sm,
+                                    stock: sp + sm,
                                     priceDelta: 0
                                   });
                                 }
@@ -8520,11 +9273,10 @@ const resText = await uploadRes.text();
                             }
                             
                             const combined = [...(editingProduct.variants || []), ...generated];
-                            setEditingProduct({
+                            setEditingProduct(updateProductCalculations({
                               ...editingProduct,
-                              variants: combined,
-                              stock: combined.reduce((sum, v) => sum + v.stock, 0)
-                            });
+                              variants: combined
+                            }) as Product);
                             showAdminToast(`Se autogeneraron ${generated.length} combinaciones con códigos sugeridos.`, "success");
                           }}
                           className="text-[9px] px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded shadow transition-all cursor-pointer self-start sm:self-center"
@@ -8533,10 +9285,15 @@ const resText = await uploadRes.text();
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 bg-slate-100/30 dark:bg-zinc-950 p-2.5 rounded-lg border border-slate-200 dark:border-zinc-800">
+                      <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 bg-slate-100/30 dark:bg-zinc-950 p-2.5 rounded-lg border border-slate-200/80">
                         <div>
                           <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Talle</label>
-                          <select id="edit-var-size" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold text-zinc-800 dark:text-zinc-200">
+                          <select
+                            id="edit-var-size"
+                            value={editVarSize}
+                            onChange={(e) => setEditVarSize(e.target.value)}
+                            className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold text-zinc-800 dark:text-zinc-200"
+                          >
                             {((editingProduct.sizes || []).length > 0 ? (editingProduct.sizes || []) : ["Único"]).map(sz => (
                               <option key={sz} value={sz}>{sz}</option>
                             ))}
@@ -8544,19 +9301,39 @@ const resText = await uploadRes.text();
                         </div>
                         <div>
                           <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Color</label>
-                          <select id="edit-var-color" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold text-zinc-800 dark:text-zinc-200">
+                          <select
+                            id="edit-var-color"
+                            value={editVarColor}
+                            onChange={(e) => setEditVarColor(e.target.value)}
+                            className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold text-zinc-800 dark:text-zinc-200"
+                          >
                             {((editingProduct.colors || []).length > 0 ? (editingProduct.colors || []) : ["General"]).map(col => (
                               <option key={col} value={col}>{col}</option>
                             ))}
                           </select>
                         </div>
                         <div>
-                          <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Código / SKU Variant</label>
-                          <input id="edit-var-sku" type="text" placeholder="p.ej. J001-N-M" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold font-mono text-zinc-800 dark:text-zinc-200 uppercase" />
+                          <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Código / SKU Variant (Sistema)</label>
+                          <input
+                            id="edit-var-sku"
+                            type="text"
+                            readOnly
+                            value={(() => {
+                              const currentEditSkus = (editingProduct.variants || []).map(v => v.sku).filter(Boolean) as string[];
+                              const nextEditNum = getNextAvailableSKUNumber(store.products, currentEditSkus);
+                              return `J${String(nextEditNum).padStart(3, '0')}`;
+                            })()}
+                            className="w-full text-xs bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 p-1 rounded font-semibold font-mono text-zinc-500 dark:text-zinc-400 uppercase cursor-not-allowed opacity-75"
+                            placeholder="Autogenerado"
+                          />
                         </div>
                         <div>
-                          <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Stock Físico</label>
-                          <input id="edit-var-stock" type="number" defaultValue="5" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-mono font-bold" />
+                          <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Stock Pinamar</label>
+                          <input id="edit-var-stock-pinamar" type="number" defaultValue="5" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-mono font-bold" />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Stock Montevideo</label>
+                          <input id="edit-var-stock-montevideo" type="number" defaultValue="0" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-mono font-bold" />
                         </div>
                         <div className="flex items-end">
                           <button
@@ -8564,47 +9341,22 @@ const resText = await uploadRes.text();
                             onClick={() => {
                               const szEl = document.getElementById('edit-var-size') as HTMLSelectElement;
                               const colEl = document.getElementById('edit-var-color') as HTMLSelectElement;
-                              const skuEl = document.getElementById('edit-var-sku') as HTMLInputElement;
-                              const stkEl = document.getElementById('edit-var-stock') as HTMLInputElement;
+                              const stkPinEl = document.getElementById('edit-var-stock-pinamar') as HTMLInputElement;
+                              const stkMonEl = document.getElementById('edit-var-stock-montevideo') as HTMLInputElement;
                               
-                              if (szEl && colEl && stkEl) {
+                              if (szEl && colEl && stkPinEl && stkMonEl) {
                                 const sz = szEl.value;
                                 const col = colEl.value;
-                                const sku = skuEl ? skuEl.value.trim().toUpperCase() : "";
-                                const stk = Math.floor(Number(stkEl.value || 0));
+                                const currentEditSkus = (editingProduct.variants || []).map(v => v.sku).filter(Boolean) as string[];
+                                const nextEditNum = getNextAvailableSKUNumber(store.products, currentEditSkus);
+                                const sku = `J${String(nextEditNum).padStart(3, '0')}`;
+                                const stkPin = Math.max(0, Math.floor(Number(stkPinEl.value || 0)));
+                                const stkMon = Math.max(0, Math.floor(Number(stkMonEl.value || 0)));
                                 
                                 const current = editingProduct.variants || [];
                                 if (current.some(v => v.size === sz && v.color === col)) {
                                   showAdminToast(`La combinación ${sz} - ${col} ya existe.`, "error");
                                   return;
-                                }
-
-                                if (sku) {
-                                  // 1. Check if SKU matches this product's own code
-                                  if (editingProduct.codigo && editingProduct.codigo.trim().toUpperCase() === sku) {
-                                    showAdminToast(`El código de variante "${sku}" no puede ser idéntico al código base de este producto.`, "error");
-                                    return;
-                                  }
-                                  // 2. Check if SKU is already in use by another variant of this product
-                                  if (current.some(v => v.sku && v.sku.trim().toUpperCase() === sku)) {
-                                    showAdminToast(`El código de variante "${sku}" ya está registrado en otra variante de este artículo.`, "error");
-                                    return;
-                                  }
-                                  // 3. Check other products and their variants
-                                  const otherProducts = store.products.filter(p => p.id !== editingProduct.id);
-                                  for (const p of otherProducts) {
-                                    if (p.codigo && p.codigo.trim().toUpperCase() === sku) {
-                                      showAdminToast(`El código "${sku}" ya está en uso como código base de "${p.name}".`, "error");
-                                      return;
-                                    }
-                                    if (p.variants) {
-                                      const dupV = p.variants.find(v => v.sku && v.sku.trim().toUpperCase() === sku);
-                                      if (dupV) {
-                                        showAdminToast(`El código "${sku}" ya está en uso por la variante "${dupV.size} ${dupV.color}" de "${p.name}".`, "error");
-                                        return;
-                                      }
-                                    }
-                                  }
                                 }
                                 
                                 const newV: ProductVariant = {
@@ -8612,16 +9364,16 @@ const resText = await uploadRes.text();
                                   color: col,
                                   colorCode: col === "Negro" ? "#000000" : col === "Blanco" ? "#ffffff" : col === "Rojo" ? "#ef4444" : col === "Azul" ? "#3b82f6" : col === "Verde" ? "#22c55e" : col === "Gris" ? "#6b7280" : col === "Beige" ? "#f5f5dc" : col === "Rosa" ? "#f472b6" : "#9ca3af",
                                   sku: sku,
-                                  stock: stk,
+                                  stockPinamar: stkPin,
+                                  stockMontevideo: stkMon,
+                                  stock: stkPin + stkMon,
                                   priceDelta: 0
                                 };
                                 const updated = [...current, newV];
-                                setEditingProduct({
+                                setEditingProduct(updateProductCalculations({
                                   ...editingProduct,
-                                  variants: updated,
-                                  stock: updated.reduce((sum, v) => sum + v.stock, 0)
-                                });
-                                if (skuEl) skuEl.value = "";
+                                  variants: updated
+                                }) as Product);
                                 showAdminToast("Combinación añadida", "success");
                               }
                             }}
@@ -8640,7 +9392,9 @@ const resText = await uploadRes.text();
                                 <th className="p-2">Talle</th>
                                 <th className="p-2">Color / Tono</th>
                                 <th className="p-2">Código / SKU Variant</th>
-                                <th className="p-2">Stock Disponible</th>
+                                <th className="p-2">Stock Pinamar</th>
+                                <th className="p-2">Stock Montevideo</th>
+                                <th className="p-2">Total</th>
                                 <th className="p-2">Precio Diferente (Opcional)</th>
                                 <th className="p-2">Foto URL (Opcional)</th>
                                 <th className="p-2 text-right">Acciones</th>
@@ -8661,30 +9415,53 @@ const resText = await uploadRes.text();
                                       value={v.sku || ""}
                                       onChange={(e) => {
                                         const nextArr = JSON.parse(JSON.stringify(editingProduct.variants || []));
-                                        nextArr[i].sku = e.target.value.toUpperCase();
-                                        setEditingProduct({
+                                        nextArr[i].sku = e.target.value.trim().toUpperCase();
+                                        setEditingProduct(updateProductCalculations({
                                           ...editingProduct,
                                           variants: nextArr
-                                        });
+                                        }) as Product);
                                       }}
-                                      className="w-44 px-2 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none uppercase text-zinc-800 dark:text-zinc-200 focus:ring-1 focus:ring-[#5346ff]"
+                                      className="w-44 px-2 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none uppercase text-slate-800 dark:text-zinc-100 focus:ring-1 focus:ring-indigo-500"
                                     />
                                   </td>
                                   <td className="p-2">
                                     <input
                                       type="number"
-                                      value={v.stock}
+                                      value={v.stockPinamar !== undefined ? v.stockPinamar : v.stock}
                                       onChange={(e) => {
-                                        const nextStockArr = JSON.parse(JSON.stringify(editingProduct.variants || []));
-                                        nextStockArr[i].stock = Math.max(0, Math.floor(Number(e.target.value || 0)));
-                                        setEditingProduct({
+                                        const nextArr = JSON.parse(JSON.stringify(editingProduct.variants || []));
+                                        const sp = Math.max(0, Math.floor(Number(e.target.value || 0)));
+                                        const sm = nextArr[i].stockMontevideo !== undefined ? nextArr[i].stockMontevideo : 0;
+                                        nextArr[i].stockPinamar = sp;
+                                        nextArr[i].stock = sp + sm;
+                                        setEditingProduct(updateProductCalculations({
                                           ...editingProduct,
-                                          variants: nextStockArr,
-                                          stock: nextStockArr.reduce((sum: number, item: any) => sum + item.stock, 0)
-                                        });
+                                          variants: nextArr
+                                        }) as Product);
                                       }}
                                       className="w-16 px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none"
                                     />
+                                  </td>
+                                  <td className="p-2">
+                                    <input
+                                      type="number"
+                                      value={v.stockMontevideo !== undefined ? v.stockMontevideo : 0}
+                                      onChange={(e) => {
+                                        const nextArr = JSON.parse(JSON.stringify(editingProduct.variants || []));
+                                        const sp = nextArr[i].stockPinamar !== undefined ? nextArr[i].stockPinamar : nextArr[i].stock;
+                                        const sm = Math.max(0, Math.floor(Number(e.target.value || 0)));
+                                        nextArr[i].stockMontevideo = sm;
+                                        nextArr[i].stock = sp + sm;
+                                        setEditingProduct(updateProductCalculations({
+                                          ...editingProduct,
+                                          variants: nextArr
+                                        }) as Product);
+                                      }}
+                                      className="w-16 px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none"
+                                    />
+                                  </td>
+                                  <td className="p-2 font-mono font-bold text-zinc-500">
+                                    {v.stock}
                                   </td>
                                   <td className="p-2">
                                     <div className="flex items-center gap-1">
@@ -8866,15 +9643,16 @@ const resText = await uploadRes.text();
                     {editingProductStep === 4 && (
                       <div className="space-y-4 animate-fade-in unique-step-four">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-[10px] font-extrabold text-[#5346ff] dark:text-[#9086ff] uppercase tracking-widest mb-1.5 font-bold">Stock Físico Real del Producto *</label>
-                            <input
-                              required
-                              type="number"
-                              value={editingProduct.stock}
-                              onChange={(e) => setEditingProduct({ ...editingProduct, stock: Number(e.target.value) })}
-                              className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono"
-                            />
+                          <div className="p-4 bg-slate-50 dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 rounded-xl space-y-2 w-full">
+                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest flex items-center justify-between">
+                              <span>Stock Físico General (Pinamar + Montevideo)</span>
+                            </label>
+                            <div className="text-sm font-bold font-mono text-slate-800 dark:text-zinc-200">
+                              {editingProduct.stock || 0} unidades disponibles
+                            </div>
+                            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-sans leading-normal">
+                              El stock total es calculado de forma automatizada en base a las sucursales definidas en el Paso 2 (Precios y Fotos).
+                            </p>
                           </div>
                         </div>
 
@@ -8972,6 +9750,7 @@ const resText = await uploadRes.text();
                       <div className="flex gap-2">
                         {editingProductStep < 4 ? (
                           <button
+                            key="btn-edit-next"
                             type="button"
                             onClick={() => {
                               if (editingProductStep === 1) {
@@ -8994,7 +9773,9 @@ const resText = await uploadRes.text();
                           </button>
                         ) : (
                           <button
-                            type="submit"
+                            key="btn-edit-submit"
+                            type="button"
+                            onClick={handleUpdateProduct}
                             disabled={saving}
                             className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg text-xs transition shadow-md flex items-center gap-1.5 cursor-pointer"
                           >
@@ -9693,259 +10474,800 @@ const resText = await uploadRes.text();
                 </div>
               )}
 
-                {/* 9. GESTION DE ALERTAS Y STOCK BAJO (GESTION DEL NEGOCIO) */}
-                {adminSection === "stock" && (
-                  <div className="space-y-6">
-                    
-                    {/* Alertas Diagnóstico de Negocio */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl flex items-center gap-4">
-                        <div className="h-10 w-10 rounded-xl bg-red-500/20 text-red-500 flex items-center justify-center text-lg font-bold">
-                          {outOfStockProducts.length}
-                        </div>
-                        <div>
-                          <h4 className="text-[10px] font-extrabold uppercase tracking-widest text-red-500">Sin Stock (Crítico)</h4>
-                          <p className="text-xs text-zinc-500 dark:text-zinc-400 font-semibold mt-0.5">Productos agotados</p>
-                        </div>
-                      </div>
+                {/* 9. GESTION DE STOCK GENERAL (DEPOSITO MONTEVIDEO Y PINAMAR) */}
+                {adminSection === "stock" && (() => {
+                  const stockItems = (() => {
+                    const list: any[] = [];
+                    (store.products || []).filter(p => p.active !== false).forEach(product => {
+                      const hasVariants = product.variants && product.variants.length > 0;
+                      if (hasVariants) {
+                        product.variants!.forEach(variant => {
+                          list.push({
+                            id: `${product.id}-${variant.id || variant.sku}`,
+                            productId: product.id,
+                            variantId: variant.id,
+                            sku: variant.sku || product.codigo || "SIN-SKU",
+                            name: product.name,
+                            variantName: `${variant.size} / ${variant.color}`,
+                            imageUrl: variant.imageUrl || product.imageUrl,
+                            precioCompra: product.precioCompra || 0,
+                            price: variant.price || product.price,
+                            precioVentaML: product.precioVentaML || 0,
+                            comisionML: product.comisionML || 0,
+                            stockMontevideo: variant.stockMontevideo || 0,
+                            stockPinamar: variant.stockPinamar || 0,
+                            isVariant: true,
+                            variantObj: variant,
+                            productObj: product
+                          });
+                        });
+                      } else {
+                        list.push({
+                          id: product.id,
+                          productId: product.id,
+                          variantId: undefined,
+                          sku: product.codigo || "SIN-SKU",
+                          name: product.name,
+                          variantName: "",
+                          imageUrl: product.imageUrl,
+                          precioCompra: product.precioCompra || 0,
+                          price: product.price,
+                          precioVentaML: product.precioVentaML || 0,
+                          comisionML: product.comisionML || 0,
+                          stockMontevideo: product.stockMontevideo || 0,
+                          stockPinamar: product.stockPinamar || 0,
+                          isVariant: false,
+                          variantObj: undefined,
+                          productObj: product
+                        });
+                      }
+                    });
+                    return list;
+                  })();
 
-                      <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl flex items-center gap-4">
-                        <div className="h-10 w-10 rounded-xl bg-amber-500/20 text-amber-500 flex items-center justify-center text-lg font-bold">
-                          {lowStockProducts.length}
-                        </div>
-                        <div>
-                          <h4 className="text-[10px] font-extrabold uppercase tracking-widest text-amber-500">Stock Bajo (Advertencia)</h4>
-                          <p className="text-xs text-zinc-500 dark:text-zinc-400 font-semibold mt-0.5">Límite de {lowStockThresholdSetting} u o menos</p>
-                        </div>
-                      </div>
+                  const filteredStockItems = stockItems.filter(item => {
+                    // Global search query
+                    const query = stockSearchQuery.toLowerCase().trim();
+                    if (query) {
+                      const matchGlobal = (
+                        item.sku.toLowerCase().includes(query) ||
+                        item.name.toLowerCase().includes(query) ||
+                        item.variantName.toLowerCase().includes(query)
+                      );
+                      if (!matchGlobal) return false;
+                    }
 
-                      <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl flex items-center gap-4">
-                        <div className="h-10 w-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg font-bold">
-                          {store.products.filter(p => p.active !== false && p.stock > lowStockThresholdSetting).length}
-                        </div>
-                        <div>
-                          <h4 className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-400">Stock Saludable</h4>
-                          <p className="text-xs text-zinc-500 dark:text-zinc-400 font-semibold mt-0.5">Niveles de stock correctos</p>
-                        </div>
-                      </div>
-                    </div>
+                    // Column SKU Filter
+                    if (stockSkuFilter) {
+                      if (!item.sku.toLowerCase().includes(stockSkuFilter.toLowerCase().trim())) {
+                        return false;
+                      }
+                    }
 
-                    {/* Selector de límite de Alerta de Stock Bajo */}
-                    <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Sliders className="h-4.5 w-4.5 text-indigo-500" />
-                          <h4 className="font-bold text-xs uppercase tracking-wider text-slate-950 dark:text-zinc-200">Límite de Alerta de Stock Bajo</h4>
-                        </div>
-                        <span className="text-[10px] font-mono text-zinc-500 dark:text-zinc-400 font-bold">Configuración persistente</span>
-                      </div>
+                    // Column Name Filter
+                    if (stockNameFilter) {
+                      const fullItemName = `${item.name} ${item.variantName}`.toLowerCase();
+                      if (!fullItemName.includes(stockNameFilter.toLowerCase().trim())) {
+                        return false;
+                      }
+                    }
+
+                    // Column Cost Filter
+                    if (stockCostFilter !== "all") {
+                      if (stockCostFilter === "hasCost" && (!item.precioCompra || item.precioCompra <= 0)) return false;
+                      if (stockCostFilter === "noCost" && item.precioCompra > 0) return false;
+                    }
+
+                    // Column Local Price Filter
+                    if (stockLocalFilter !== "all") {
+                      if (stockLocalFilter === "hasPrice" && (!item.price || item.price <= 0)) return false;
+                      if (stockLocalFilter === "noPrice" && item.price > 0) return false;
+                    }
+
+                    // Column ML Price Filter
+                    if (stockMlFilter !== "all") {
+                      if (stockMlFilter === "hasPriceML" && (!item.precioVentaML || item.precioVentaML <= 0)) return false;
+                      if (stockMlFilter === "noPriceML" && item.precioVentaML > 0) return false;
+                    }
+
+                    // Column MVD Stock Filter
+                    if (stockMvdFilter !== "all") {
+                      const mvdLow = typeof store.settings?.lowStockThreshold === 'number' ? store.settings.lowStockThreshold : 5;
+                      if (stockMvdFilter === "out" && item.stockMontevideo > 0) return false;
+                      if (stockMvdFilter === "low" && (item.stockMontevideo <= 0 || item.stockMontevideo > mvdLow)) return false;
+                      if (stockMvdFilter === "ok" && item.stockMontevideo <= mvdLow) return false;
+                    }
+
+                    // Column PIN Stock Filter
+                    if (stockPinFilter !== "all") {
+                      const pinLow = typeof store.settings?.lowStockThreshold === 'number' ? store.settings.lowStockThreshold : 5;
+                      if (stockPinFilter === "out" && item.stockPinamar > 0) return false;
+                      if (stockPinFilter === "low" && (item.stockPinamar <= 0 || item.stockPinamar > pinLow)) return false;
+                      if (stockPinFilter === "ok" && item.stockPinamar <= pinLow) return false;
+                    }
+
+                    return true;
+                  });
+
+                  // Sort items if sortField is selected
+                  const sortedStockItems = [...filteredStockItems];
+                  if (sortField) {
+                    sortedStockItems.sort((a, b) => {
+                      let valA: any = "";
+                      let valB: any = "";
                       
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed font-semibold">
-                        Define las unidades a partir de las cuales se marcará de forma automática el aviso "ÚLTIMAS" en tu catálogo público y se detonarán alertas de reposición en este espacio de gestión del negocio.
-                      </p>
+                      switch (sortField) {
+                        case "codigo":
+                          valA = (a.sku || "").toLowerCase();
+                          valB = (b.sku || "").toLowerCase();
+                          break;
+                        case "nombre":
+                          valA = `${a.name} ${a.variantName}`.toLowerCase();
+                          valB = `${b.name} ${b.variantName}`.toLowerCase();
+                          break;
+                        case "costo":
+                          valA = a.precioCompra || 0;
+                          valB = b.precioCompra || 0;
+                          break;
+                        case "precio_venta":
+                          valA = a.price || 0;
+                          valB = b.price || 0;
+                          break;
+                        case "precio_venta_ml":
+                          valA = a.precioVentaML || 0;
+                          valB = b.precioVentaML || 0;
+                          break;
+                        case "comision_ml":
+                          valA = a.comisionML || 0;
+                          valB = b.comisionML || 0;
+                          break;
+                        case "mvd_stock":
+                          valA = a.stockMontevideo || 0;
+                          valB = b.stockMontevideo || 0;
+                          break;
+                        case "pin_stock":
+                          valA = a.stockPinamar || 0;
+                          valB = b.stockPinamar || 0;
+                          break;
+                        default:
+                          break;
+                      }
 
-                      <div className="flex items-center gap-4 pt-1.5">
-                        <input
-                          type="range"
-                          min="1"
-                          max="25"
-                          value={lowStockThresholdSetting}
-                          onChange={(e) => handleSaveLowStockThreshold(Number(e.target.value))}
-                          className="flex-1 accent-indigo-600 h-2 bg-slate-200 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer"
-                        />
-                        <div className="px-3.5 py-1.5 bg-indigo-600 text-white font-mono font-bold text-xs rounded-lg shrink-0 shadow-md shadow-indigo-500/10">
-                          {lowStockThresholdSetting} unidades
-                        </div>
-                      </div>
-                    </div>
+                      if (typeof valA === "string" && typeof valB === "string") {
+                        return sortDirection === "asc"
+                          ? valA.localeCompare(valB)
+                          : valB.localeCompare(valA);
+                      } else {
+                        return sortDirection === "asc"
+                          ? Number(valA) - Number(valB)
+                          : Number(valB) - Number(valA);
+                      }
+                    });
+                  }
 
-                    {/* Alertas List View & Interactive Stock Adjustment */}
-                    <div className="bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm overflow-hidden space-y-4">
-                      
-                      {/* Filter Pills with labels and counters */}
-                      <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  // Pagination mathematics
+                  const itemsPerPage = 10;
+                  const totalPages = Math.ceil(sortedStockItems.length / itemsPerPage) || 1;
+                  const safePage = Math.min(stockPage, totalPages);
+                  const startIndex = (safePage - 1) * itemsPerPage;
+                  const paginatedItems = sortedStockItems.slice(startIndex, startIndex + itemsPerPage);
+
+                  return (
+                    <div className="space-y-6">
+                      {/* HEADER EXCLUSIVO PARA STOCK GENERAL */}
+                      <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 pb-2 border-b border-slate-200 dark:border-zinc-800">
                         <div>
-                          <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500 dark:text-zinc-400">Registro del Inventario de Negocio</h4>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h1 className="text-2xl font-bold font-sans tracking-tight text-slate-900 dark:text-white">
+                              Panel de Control Administrativo
+                            </h1>
+                            <span className="px-2 py-0.5 text-[11px] font-extrabold uppercase bg-indigo-600 text-white rounded-full tracking-wider shadow-xs">
+                              v3.5 Live
+                            </span>
+                          </div>
+                          <p className="text-slate-600 dark:text-zinc-400 text-xs mt-1 font-semibold">
+                            Sincronización multi-depósito de existencias Montevideo / Pinamar
+                          </p>
                         </div>
 
-                        {/* Switch bar */}
-                        <div className="flex flex-wrap gap-1">
-                          {[
-                            { id: "alerts", label: "Solo Alertas ⚠", count: totalStockAlerts, color: "text-red-500" },
-                            { id: "outOfStock", label: "Agotado", count: outOfStockProducts.length, color: "text-red-400" },
-                            { id: "lowStock", label: "Stock Bajo", count: lowStockProducts.length, color: "text-amber-400" },
-                            { id: "all", label: "Todo el Catálogo", count: store.products.filter(p => p.active !== false).length, color: "text-zinc-400" }
-                          ].map(tab => (
-                            <button
-                              key={tab.id}
-                              onClick={() => setStockFilterTab(tab.id as any)}
-                              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                                stockFilterTab === tab.id
-                                  ? "bg-indigo-600 text-white shadow"
-                                  : "border border-slate-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-900"
-                              }`}
-                            >
-                              <span>{tab.label}</span>
-                              <span className={`px-1 rounded-md text-[10px] font-mono ${stockFilterTab === tab.id ? 'bg-indigo-700 text-white' : 'bg-slate-100 dark:bg-zinc-900'}`}>{tab.count}</span>
-                            </button>
-                          ))}
+                        {/* Controles de la derecha */}
+                        <div className="flex items-center gap-2 self-stretch xl:self-auto justify-end">
+                          <div className="relative flex-1 sm:flex-initial">
+                            <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
+                            <input
+                              type="text"
+                              placeholder="Buscar artículo, SKU..."
+                              value={stockSearchQuery}
+                              onChange={(e) => {
+                                setStockSearchQuery(e.target.value);
+                                setStockPage(1);
+                              }}
+                              className="w-full sm:w-64 pl-9 pr-4 py-2 text-xs bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-900 dark:text-white"
+                            />
+                          </div>
+
+                          <button
+                            onClick={async () => {
+                              showToast("Actualizando existencias...", "info");
+                              try {
+                                const res = await fetch("/api/store");
+                                if (res.ok) {
+                                  const data = await res.json();
+                                  setStore(data);
+                                  showToast("¡Existencias actualizadas en tiempo real!", "success");
+                                }
+                              } catch (err) {
+                                showToast("Error al conectar con la base de datos", "error");
+                              }
+                            }}
+                            className="p-2.5 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl hover:bg-slate-50 dark:hover:bg-zinc-900 transition text-zinc-600 dark:text-zinc-400 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                            title="Actualizar existencias"
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setShowAIAssistantSidebar(!showAIAssistantSidebar);
+                              showToast(!showAIAssistantSidebar ? "Abriendo Asistente de IA..." : "Cerrando Asistente de IA...", "info");
+                            }}
+                            className={`px-4 py-2 rounded-xl font-bold hover:scale-[1.02] active:scale-[0.98] transition flex items-center gap-1.5 text-xs shadow-sm cursor-pointer ${
+                              showAIAssistantSidebar
+                                ? "bg-indigo-650 text-white"
+                                : "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                            }`}
+                          >
+                            <Sparkles className={`h-4 w-4 ${showAIAssistantSidebar ? "text-white animate-pulse" : "text-amber-500"}`} />
+                            <span>{showAIAssistantSidebar ? "Cerrar Copilot" : "Asistente IA"}</span>
+                          </button>
                         </div>
                       </div>
 
-                      {/* Filter products matching state tab picker */}
-                      {(() => {
-                        let displayedStockProducts = store.products.filter(p => p.active !== false);
-                        if (stockFilterTab === "alerts") {
-                          displayedStockProducts = displayedStockProducts.filter(p => p.stock <= lowStockThresholdSetting);
-                        } else if (stockFilterTab === "outOfStock") {
-                          displayedStockProducts = displayedStockProducts.filter(p => p.stock <= 0);
-                        } else if (stockFilterTab === "lowStock") {
-                          displayedStockProducts = displayedStockProducts.filter(p => p.stock > 0 && p.stock <= lowStockThresholdSetting);
-                        }
+                      {/* TABLA PRINCIPAL DE INVENTARIO */}
+                      <div className="bg-white dark:bg-zinc-950 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+                        <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-50/50 dark:bg-zinc-950/50">
+                          <div className="flex items-center gap-2.5">
+                            <span className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse"></span>
+                            <h3 className="font-extrabold text-xs uppercase text-slate-900 dark:text-zinc-200 tracking-wider">
+                              INVENTARIO CENTRAL RESUMIDO
+                            </h3>
+                            <span className="px-2 py-0.5 text-[10px] font-bold bg-slate-200 dark:bg-zinc-850 text-slate-700 dark:text-zinc-300 rounded-full font-mono">
+                              {filteredStockItems.length} items listados
+                            </span>
+                          </div>
+                        </div>
 
-                        if (displayedStockProducts.length === 0) {
-                          return (
-                            <div className="p-8 text-center text-zinc-500">
-                              <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2 opacity-80" />
-                              <p className="text-xs font-bold">¡Tu negocio está completamente al día!</p>
-                              <p className="text-[11px] text-zinc-400 mt-0.5">Ningún artículo registrado coincide con los filtros de alertas seleccionados.</p>
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <div className="divide-y divide-slate-200 dark:divide-zinc-800">
-                            {displayedStockProducts.map((p) => {
-                              const isOutOfStock = p.stock <= 0;
-                              const isLowStock = p.stock > 0 && p.stock <= lowStockThresholdSetting;
-                              const hasVariants = p.variants && p.variants.length > 0;
-
-                              return (
-                                <div key={p.id} className="p-4 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between hover:bg-slate-100/50 dark:hover:bg-zinc-900/10 transition">
-                                  
-                                  {/* Thumbnail & Title metadata */}
-                                  <div className="flex gap-3 items-center min-w-0 flex-1">
-                                    <img
-                                      src={p.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=100&q=80"}
-                                      alt={p.name}
-                                      className="h-9 w-9 rounded-lg object-cover bg-zinc-800 shrink-0 border border-slate-200 dark:border-zinc-800"
-                                    />
-                                    <div className="min-w-0">
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <h5 className="font-bold text-xs text-slate-900 dark:text-zinc-200 truncate">{p.name}</h5>
-                                        {p.paused && (
-                                          <span className="bg-amber-500/15 text-amber-500 text-[8px] font-bold uppercase py-0.5 px-1.5 rounded tracking-wide border border-amber-500/20">
-                                            Pausado
-                                          </span>
-                                        )}
-                                      </div>
-                                      <p className="text-[10px] text-zinc-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
-                                        <span className="bg-slate-100 dark:bg-zinc-900 px-1.5 py-0.5 rounded font-bold uppercase">{p.category}</span>
-                                        {p.categorias_adicionales && p.categorias_adicionales.map(catId => {
-                                          const name = (store.dbCategories || []).find(c => c.id === catId)?.nombre;
-                                          if (!name) return null;
-                                          return (
-                                            <span key={catId} className="bg-[#5346ff]/10 text-[#5346ff] border border-[#5346ff]/25 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase">
-                                              + {name}
-                                            </span>
-                                          );
-                                        })}
-                                        {p.subcategorias_adicionales && p.subcategorias_adicionales.map(subId => {
-                                          const name = (store.dbSubcategories || []).find(s => s.id === subId)?.nombre;
-                                          if (!name) return null;
-                                          return (
-                                            <span key={subId} className="bg-teal-550/15 text-teal-605 border border-teal-500/25 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase dark:bg-teal-500/10 dark:text-teal-400">
-                                              + {name}
-                                            </span>
-                                          );
-                                        })}
-                                        <span>Precio: <strong>${p.price.toFixed(2)}</strong></span>
-                                        {hasVariants && (
-                                          <span className="text-zinc-500">({p.variants?.length} combinaciones registradas)</span>
-                                        )}
-                                      </p>
-                                    </div>
+                        {/* Spreadsheet Table Container */}
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse">
+                            <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 shadow-sm">
+                              <tr className="bg-slate-50 dark:bg-zinc-900 text-slate-500 dark:text-zinc-400 font-bold uppercase text-[10px] tracking-wider select-none">
+                                
+                                {/* Columna 1: SKU / Imagen (Ancho fijo de 36, alineación izquierda) */}
+                                <th 
+                                  onClick={() => toggleSort('codigo')}
+                                  className="py-3 px-5 text-left w-36 bg-slate-50 dark:bg-zinc-900 sticky top-0 cursor-pointer hover:bg-slate-100 dark:hover:bg-zinc-800 transition-all group"
+                                  title="Ordenar por SKU"
+                                >
+                                  <div className="flex items-center gap-1">
+                                    <span>SKU / Imagen</span>
+                                    <span className="text-[9px] text-indigo-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 font-bold transition-transform">
+                                      {sortField === 'codigo' ? (sortDirection === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+                                    </span>
                                   </div>
+                                </th>
 
-                                  {/* Current Stock status column */}
-                                  <div className="flex items-center gap-4 shrink-0 mt-2 md:mt-0 w-full md:w-auto justify-between md:justify-end">
-                                    <div className="text-left md:text-right">
-                                      {isOutOfStock ? (
-                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500/10 text-red-500 text-[10px] font-extrabold tracking-wide uppercase border border-red-500/25">
-                                          ● SIN STOCK
-                                        </span>
-                                      ) : isLowStock ? (
-                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-extrabold tracking-wide uppercase border border-amber-500/25">
-                                          ⚠ BAJO STOCK ({p.stock}u)
-                                        </span>
-                                      ) : (
-                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[10px] font-extrabold tracking-wide uppercase border border-emerald-500/25">
-                                          ✓ CORRECTO
-                                        </span>
-                                      )}
-                                      
-                                      {/* Sub-variant status descriptions if any */}
-                                      {hasVariants && (
-                                        <div className="text-[9px] text-indigo-400 font-bold mt-1 font-mono">
-                                          {p.variants?.map((v, idx) => (
-                                            <span key={idx} className="block">
-                                              Talle {v.size} / {v.color}: {v.stock <= 0 ? "Agotado 🚫" : v.stock <= lowStockThresholdSetting ? `Bajo (${v.stock}u) ⚠` : `${v.stock}u` }{typeof v.price === "number" && v.price > 0 ? ` | Precio: $${v.price}` : ""}
-                                            </span>
-                                          ))}
+                                {/* Columna 2: Producto (Nombre, ocupa el espacio restante) */}
+                                <th 
+                                  onClick={() => toggleSort('nombre')}
+                                  className="py-3 px-4 bg-slate-50 dark:bg-zinc-900 sticky top-0 cursor-pointer hover:bg-slate-100 dark:hover:bg-zinc-800 transition-all group"
+                                  title="Ordenar por Nombre"
+                                >
+                                  <div className="flex items-center gap-1">
+                                    <span>Producto</span>
+                                    <span className="text-[9px] text-indigo-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 font-bold transition-transform">
+                                      {sortField === 'nombre' ? (sortDirection === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+                                    </span>
+                                  </div>
+                                </th>
+
+                                {/* Columna 3: Compra / Costo (Alineado a la derecha) */}
+                                <th 
+                                  onClick={() => toggleSort('costo')}
+                                  className="py-3 px-4 text-right bg-slate-50 dark:bg-zinc-900 sticky top-0 cursor-pointer hover:bg-slate-100 dark:hover:bg-zinc-800 transition-all group"
+                                  title="Ordenar por Costo de Compra"
+                                >
+                                  <div className="inline-flex items-center justify-end gap-1 w-full">
+                                    <span>Compra (Costo)</span>
+                                    <span className="text-[9px] text-indigo-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 font-bold transition-transform">
+                                      {sortField === 'costo' ? (sortDirection === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+                                    </span>
+                                  </div>
+                                </th>
+
+                                {/* Columna 4: Venta Local (Alineado a la derecha) */}
+                                <th 
+                                  onClick={() => toggleSort('precio_venta')}
+                                  className="py-3 px-4 text-right bg-slate-50 dark:bg-zinc-900 sticky top-0 cursor-pointer hover:bg-slate-100 dark:hover:bg-zinc-800 transition-all group"
+                                  title="Ordenar por Venta Local"
+                                >
+                                  <div className="inline-flex items-center justify-end gap-1 w-full">
+                                    <span>Venta Local</span>
+                                    <span className="text-[9px] text-indigo-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 font-bold transition-transform">
+                                      {sortField === 'precio_venta' ? (sortDirection === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+                                    </span>
+                                  </div>
+                                </th>
+
+                                {/* Columna 5: Venta MercadoLibre (Alineado a la derecha) */}
+                                <th 
+                                  onClick={() => toggleSort('precio_venta_ml')}
+                                  className="py-3 px-4 text-right bg-slate-50 dark:bg-zinc-900 sticky top-0 cursor-pointer hover:bg-slate-100 dark:hover:bg-zinc-800 transition-all group"
+                                  title="Ordenar por Venta ML"
+                                >
+                                  <div className="inline-flex items-center justify-end gap-1 w-full">
+                                    <span>Venta ML</span>
+                                    <span className="text-[9px] text-indigo-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 font-bold transition-transform">
+                                      {sortField === 'precio_venta_ml' ? (sortDirection === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+                                    </span>
+                                  </div>
+                                </th>
+
+                                {/* Columna 6: Comisión MercadoLibre (Alineado a la derecha) */}
+                                <th 
+                                  onClick={() => toggleSort('comision_ml')}
+                                  className="py-3 px-4 text-right bg-slate-50 dark:bg-zinc-900 sticky top-0 cursor-pointer hover:bg-slate-100 dark:hover:bg-zinc-800 transition-all group"
+                                  title="Ordenar por Comisión ML"
+                                >
+                                  <div className="inline-flex items-center justify-end gap-1 w-full">
+                                    <span>Comisión ML</span>
+                                    <span className="text-[9px] text-indigo-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 font-bold transition-transform">
+                                      {sortField === 'comision_ml' ? (sortDirection === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+                                    </span>
+                                  </div>
+                                </th>
+
+                                {/* Columna 7: Stock Montevideo (Centrado) */}
+                                <th 
+                                  onClick={() => toggleSort('mvd_stock')}
+                                  className="py-3 px-4 text-center text-slate-550 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-900 sticky top-0 cursor-pointer hover:bg-slate-100 dark:hover:bg-zinc-800 transition-all group"
+                                  title="Ordenar por Stock Montevideo"
+                                >
+                                  <div className="inline-flex items-center justify-center gap-1 w-full">
+                                    <span>Stock Mvd</span>
+                                    <span className="text-[9px] text-indigo-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 font-bold transition-transform">
+                                      {sortField === 'mvd_stock' ? (sortDirection === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+                                    </span>
+                                  </div>
+                                </th>
+
+                                {/* Columna 8: Stock Pinamar (Centrado) */}
+                                <th 
+                                  onClick={() => toggleSort('pin_stock')}
+                                  className="py-3 px-4 text-center text-slate-550 dark:text-zinc-400 bg-slate-50 dark:bg-zinc-900 sticky top-0 cursor-pointer hover:bg-slate-100 dark:hover:bg-zinc-800 transition-all group"
+                                  title="Ordenar por Stock Pinar"
+                                >
+                                  <div className="inline-flex items-center justify-center gap-1 w-full">
+                                    <span>Stock Pin</span>
+                                    <span className="text-[9px] text-indigo-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 font-bold transition-transform">
+                                      {sortField === 'pin_stock' ? (sortDirection === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+                                    </span>
+                                  </div>
+                                </th>
+
+                              </tr>
+
+                              {/* Fila de Filtros en el thead */}
+                              <tr className="bg-slate-50/50 dark:bg-zinc-900/50 border-b border-slate-200 dark:border-zinc-800">
+                                <td className="py-2 px-4">
+                                  <input
+                                    type="text"
+                                    placeholder="Filtrar SKU..."
+                                    value={stockSkuFilter}
+                                    onChange={(e) => {
+                                      setStockSkuFilter(e.target.value);
+                                      setStockPage(1);
+                                    }}
+                                    className="w-full px-2 py-1 text-[10px] font-semibold bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-md focus:outline-hidden text-slate-800 dark:text-white placeholder-slate-400 font-mono normal-case"
+                                  />
+                                </td>
+                                <td className="py-2 px-4">
+                                  <input
+                                    type="text"
+                                    placeholder="Filtrar nombre..."
+                                    value={stockNameFilter}
+                                    onChange={(e) => {
+                                      setStockNameFilter(e.target.value);
+                                      setStockPage(1);
+                                    }}
+                                    className="w-full px-2 py-1 text-[10px] font-semibold bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-md focus:outline-hidden text-slate-800 dark:text-white placeholder-slate-400 normal-case"
+                                  />
+                                </td>
+                                <td className="py-2 px-4 text-right">
+                                  <select
+                                    value={stockCostFilter}
+                                    onChange={(e) => {
+                                      setStockCostFilter(e.target.value);
+                                      setStockPage(1);
+                                    }}
+                                    className="w-full min-w-[70px] max-w-[90px] ml-auto px-1 py-1 text-[10px] font-semibold bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-md focus:outline-hidden text-slate-700 dark:text-zinc-300 normal-case"
+                                  >
+                                    <option value="all">Todos</option>
+                                    <option value="hasCost">Con Costo</option>
+                                    <option value="noCost">Sin Costo</option>
+                                  </select>
+                                </td>
+                                <td className="py-2 px-4 text-right">
+                                  <select
+                                    value={stockLocalFilter}
+                                    onChange={(e) => {
+                                      setStockLocalFilter(e.target.value);
+                                      setStockPage(1);
+                                    }}
+                                    className="w-full min-w-[70px] max-w-[90px] ml-auto px-1 py-1 text-[10px] font-semibold bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-md focus:outline-hidden text-slate-700 dark:text-zinc-300 normal-case"
+                                  >
+                                    <option value="all">Todos</option>
+                                    <option value="hasPrice">Con Precio</option>
+                                    <option value="noPrice">Sin Precio</option>
+                                  </select>
+                                </td>
+                                <td className="py-2 px-4 text-right">
+                                  <select
+                                    value={stockMlFilter}
+                                    onChange={(e) => {
+                                      setStockMlFilter(e.target.value);
+                                      setStockPage(1);
+                                    }}
+                                    className="w-full min-w-[70px] max-w-[90px] ml-auto px-1 py-1 text-[10px] font-semibold bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-md focus:outline-hidden text-slate-700 dark:text-zinc-300 normal-case"
+                                  >
+                                    <option value="all">Todos</option>
+                                    <option value="hasPriceML">Con Precio</option>
+                                    <option value="noPriceML">Sin Precio</option>
+                                  </select>
+                                </td>
+                                <td className="py-2 px-4 text-right text-[10px] text-zinc-400 font-mono">
+                                  -
+                                </td>
+                                <td className="py-2 px-4 text-center">
+                                  <select
+                                    value={stockMvdFilter}
+                                    onChange={(e) => {
+                                      setStockMvdFilter(e.target.value);
+                                      setStockPage(1);
+                                    }}
+                                    className="w-full min-w-[80px] max-w-[100px] mx-auto px-1 py-1 text-[10px] font-semibold bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-md focus:outline-hidden text-slate-700 dark:text-zinc-300 normal-case"
+                                  >
+                                    <option value="all">Todos</option>
+                                    <option value="out">Sin Stock</option>
+                                    <option value="low">Stock Bajo</option>
+                                    <option value="ok">Saludable</option>
+                                  </select>
+                                </td>
+                                <td className="py-2 px-4 text-center">
+                                  <select
+                                    value={stockPinFilter}
+                                    onChange={(e) => {
+                                      setStockPinFilter(e.target.value);
+                                      setStockPage(1);
+                                    }}
+                                    className="w-full min-w-[80px] max-w-[100px] mx-auto px-1 py-1 text-[10px] font-semibold bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-md focus:outline-hidden text-slate-700 dark:text-zinc-300 normal-case"
+                                  >
+                                    <option value="all">Todos</option>
+                                    <option value="out">Sin Stock</option>
+                                    <option value="low">Stock Bajo</option>
+                                    <option value="ok">Saludable</option>
+                                  </select>
+                                </td>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-150 dark:divide-zinc-850">
+                              {paginatedItems.length === 0 ? (
+                                <tr>
+                                  <td colSpan={8} className="p-8 text-center text-zinc-500 text-xs">
+                                    Ningún artículo coincide con tu búsqueda actual o filtros.
+                                  </td>
+                                </tr>
+                              ) : (
+                                paginatedItems.map((item) => {
+                                  return (
+                                    <tr
+                                      key={item.id}
+                                      className="hover:bg-slate-50/80 dark:hover:bg-zinc-900/30 transition text-xs group"
+                                    >
+                                      {/* SKU / IMAGEN */}
+                                      <td className="py-3 px-4">
+                                        <div className="flex items-center gap-2.5">
+                                          <img
+                                            src={item.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=100&q=80"}
+                                            alt={item.sku}
+                                            className="h-7 w-7 rounded-md object-cover bg-zinc-800 shrink-0 border border-slate-250 dark:border-zinc-800"
+                                          />
+                                          <span className="font-mono text-[11px] font-bold tracking-tight text-indigo-600 dark:text-indigo-400 truncate max-w-[100px]" title={item.sku}>
+                                            {item.sku}
+                                          </span>
                                         </div>
-                                      )}
-                                    </div>
+                                      </td>
 
-                                    {/* Action Counter Stock Changer */}
-                                    <div>
-                                      {hasVariants ? (
-                                        <div className="text-[10px] bg-indigo-500/5 text-indigo-400 border border-indigo-500/10 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5 font-semibold">
-                                          <span>Posee Variantes.</span>
+                                      {/* PRODUCTO */}
+                                      <td className="py-3 px-4 min-w-[200px]">
+                                        <div className="flex flex-col">
+                                          <span className="font-bold text-slate-800 dark:text-zinc-200 line-clamp-1 leading-snug">
+                                            {item.name}
+                                          </span>
+                                          {item.isVariant && (
+                                            <span className="text-[10px] font-extrabold font-mono mt-0.5 tracking-wide bg-indigo-550/5 dark:bg-indigo-450/5 text-indigo-500 py-0.5 px-1.5 rounded-sm self-start">
+                                              Variante: {item.variantName}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </td>
+
+                                      {/* COMPRA (COSTO) */}
+                                      <td className="py-3 px-4 text-right">
+                                        <div className="flex items-center justify-end gap-0.5 font-mono">
+                                          <span className="text-zinc-400 font-bold">$</span>
+                                          <input
+                                            type="number"
+                                            defaultValue={item.precioCompra}
+                                            onBlur={(e) => {
+                                              const val = parseFloat(e.target.value) || 0;
+                                              if (val !== item.precioCompra) {
+                                                handleUpdateStockItem(item, "precioCompra", val);
+                                                showToast(`Costo de ${item.sku} actualizado a $${val}`, "success");
+                                              }
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Enter") {
+                                                (e.target as HTMLInputElement).blur();
+                                              }
+                                            }}
+                                            className="w-16 text-right bg-transparent hover:bg-slate-100 dark:hover:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 px-1 py-0.5 rounded-md border-0 focus:ring-1 focus:ring-indigo-500 font-bold text-slate-700 dark:text-zinc-200 outline-hidden transition"
+                                          />
+                                        </div>
+                                      </td>
+
+                                      {/* VENTA LOCAL */}
+                                      <td className="py-3 px-4 text-right">
+                                        <div className="flex items-center justify-end gap-0.5 font-mono">
+                                          <span className="text-zinc-400 font-bold">$</span>
+                                          <input
+                                            type="number"
+                                            defaultValue={item.price}
+                                            onBlur={(e) => {
+                                              const val = parseFloat(e.target.value) || 0;
+                                              if (val !== item.price) {
+                                                handleUpdateStockItem(item, "price", val);
+                                                showToast(`Venta Local de ${item.sku} actualizada a $${val}`, "success");
+                                              }
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Enter") {
+                                                (e.target as HTMLInputElement).blur();
+                                              }
+                                            }}
+                                            className="w-16 text-right bg-transparent hover:bg-slate-100 dark:hover:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 px-1 py-0.5 rounded-md border-0 focus:ring-1 focus:ring-indigo-500 font-bold text-indigo-600 dark:text-indigo-400 outline-hidden transition"
+                                          />
+                                        </div>
+                                      </td>
+
+                                      {/* VENTA ML */}
+                                      <td className="py-3 px-4 text-right">
+                                        <div className="flex items-center justify-end gap-0.5 font-mono">
+                                          <span className="text-zinc-400 font-bold">$</span>
+                                          <input
+                                            type="number"
+                                            defaultValue={item.precioVentaML}
+                                            onBlur={(e) => {
+                                              const val = parseFloat(e.target.value) || 0;
+                                              if (val !== item.precioVentaML) {
+                                                handleUpdateStockItem(item, "precioVentaML", val);
+                                                showToast(`Precio ML de ${item.sku} actualizado a $${val}`, "success");
+                                              }
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Enter") {
+                                                (e.target as HTMLInputElement).blur();
+                                              }
+                                            }}
+                                            className="w-16 text-right bg-transparent hover:bg-slate-100 dark:hover:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 px-1 py-0.5 rounded-md border-0 focus:ring-1 focus:ring-indigo-500 font-bold text-slate-700 dark:text-zinc-200 outline-hidden transition"
+                                          />
+                                        </div>
+                                      </td>
+
+                                      {/* COMISIÓN ML */}
+                                      <td className="py-3 px-4 text-right">
+                                        <div className="flex flex-col items-end">
+                                          <div className="flex items-center justify-end gap-0.5 font-mono">
+                                            <span className="text-zinc-400 font-bold">$</span>
+                                            <input
+                                              type="number"
+                                              defaultValue={item.comisionML}
+                                              onBlur={(e) => {
+                                                const val = parseFloat(e.target.value) || 0;
+                                                if (val !== item.comisionML) {
+                                                  handleUpdateStockItem(item, "comisionML", val);
+                                                  showToast(`Comisión ML de ${item.sku} actualizada a $${val}`, "success");
+                                                }
+                                              }}
+                                              onKeyDown={(e) => {
+                                                if (e.key === "Enter") {
+                                                  (e.target as HTMLInputElement).blur();
+                                                }
+                                              }}
+                                              className="w-16 text-right bg-transparent hover:bg-slate-100 dark:hover:bg-zinc-900 focus:bg-white dark:focus:bg-zinc-950 px-1 py-0.5 rounded-md border-0 focus:ring-1 focus:ring-indigo-500 font-bold text-slate-700 dark:text-zinc-200 outline-hidden transition"
+                                            />
+                                          </div>
+                                          <span className="text-[8px] font-extrabold uppercase tracking-widest text-zinc-400 font-sans mr-2 select-none">
+                                            FIJO
+                                          </span>
+                                        </div>
+                                      </td>
+
+                                      {/* STOCK MVD */}
+                                      <td className="py-3 px-4 text-center">
+                                        <div className="flex items-center justify-center gap-1.5 font-mono">
                                           <button
                                             onClick={() => {
-                                              setEditingProduct(p);
-                                              setEditingProductStep(1);
-                                              setAdminSection("products");
+                                              const nextVal = Math.max(0, item.stockMontevideo - 1);
+                                              handleUpdateStockItem(item, "stockMontevideo", nextVal);
+                                              showToast(`MVD de ${item.sku}: ${nextVal}u`, "success");
                                             }}
-                                            className="underline text-[10px] text-indigo-300 font-extrabold hover:text-indigo-200 cursor-pointer"
-                                          >
-                                            Editar Ficha ×
-                                          </button>
-                                        </div>
-                                      ) : (
-                                        <div className="flex items-center gap-1 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded-xl">
-                                          <button
-                                            onClick={() => handleQuickUpdateStock(p.id, p.stock - 1)}
-                                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs font-bold font-mono text-zinc-500 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-zinc-700 transition active:scale-90"
+                                            className="w-5 h-5 flex items-center justify-center rounded-md bg-slate-100 dark:bg-zinc-800 text-zinc-500 hover:bg-red-500 hover:text-white transition opacity-0 group-hover:opacity-100 cursor-pointer"
                                             title="Descontar 1 unidad"
                                           >
                                             -
                                           </button>
                                           <input
                                             type="number"
-                                            value={p.stock}
-                                            onChange={(e) => handleQuickUpdateStock(p.id, Math.max(0, parseInt(e.target.value) || 0))}
-                                            className="w-10 text-center font-mono font-extrabold text-xs bg-transparent border-0 outline-none p-0 focus:ring-0 text-slate-900 dark:text-white"
+                                            value={item.stockMontevideo}
+                                            onChange={(e) => {
+                                              const val = Math.max(0, parseInt(e.target.value) || 0);
+                                              handleUpdateStockItem(item, "stockMontevideo", val);
+                                            }}
+                                            className={`w-12 text-center bg-transparent focus:bg-white dark:focus:bg-zinc-950 rounded-md border-0 focus:ring-1 focus:ring-indigo-500 font-extrabold p-0 focus:p-1 outline-hidden transition ${
+                                              item.stockMontevideo <= 0
+                                                ? "text-zinc-400 dark:text-zinc-600"
+                                                : "text-slate-800 dark:text-zinc-100"
+                                            }`}
                                           />
                                           <button
-                                            onClick={() => handleQuickUpdateStock(p.id, p.stock + 1)}
-                                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs font-bold font-mono text-zinc-500 hover:text-emerald-500 hover:bg-slate-100 dark:hover:bg-zinc-700 transition active:scale-90"
+                                            onClick={() => {
+                                              const nextVal = item.stockMontevideo + 1;
+                                              handleUpdateStockItem(item, "stockMontevideo", nextVal);
+                                              showToast(`MVD de ${item.sku}: ${nextVal}u`, "success");
+                                            }}
+                                            className="w-5 h-5 flex items-center justify-center rounded-md bg-slate-100 dark:bg-zinc-800 text-zinc-500 hover:bg-emerald-500 hover:text-white transition opacity-0 group-hover:opacity-100 cursor-pointer"
                                             title="Sumar 1 unidad"
                                           >
                                             +
                                           </button>
                                         </div>
-                                      )}
-                                    </div>
+                                      </td>
 
-                                  </div>
-                                </div>
+                                      {/* STOCK PIN */}
+                                      <td className="py-3 px-4 text-center">
+                                        <div className="flex items-center justify-center gap-1.5 font-mono">
+                                          <button
+                                            onClick={() => {
+                                              const nextVal = Math.max(0, item.stockPinamar - 1);
+                                              handleUpdateStockItem(item, "stockPinamar", nextVal);
+                                              showToast(`PIN de ${item.sku}: ${nextVal}u`, "success");
+                                            }}
+                                            className="w-5 h-5 flex items-center justify-center rounded-md bg-slate-100 dark:bg-zinc-800 text-zinc-500 hover:bg-red-500 hover:text-white transition opacity-0 group-hover:opacity-100 cursor-pointer"
+                                            title="Descontar 1 unidad"
+                                          >
+                                            -
+                                          </button>
+                                          <input
+                                            type="number"
+                                            value={item.stockPinamar}
+                                            onChange={(e) => {
+                                              const val = Math.max(0, parseInt(e.target.value) || 0);
+                                              handleUpdateStockItem(item, "stockPinamar", val);
+                                            }}
+                                            className={`w-12 text-center bg-transparent focus:bg-white dark:focus:bg-zinc-950 rounded-md border-0 focus:ring-1 focus:ring-indigo-500 font-extrabold p-0 focus:p-1 outline-hidden transition ${
+                                              item.stockPinamar <= 0
+                                                ? "text-zinc-400 dark:text-zinc-600"
+                                                : "text-slate-800 dark:text-zinc-100"
+                                            }`}
+                                          />
+                                          <button
+                                            onClick={() => {
+                                              const nextVal = item.stockPinamar + 1;
+                                              handleUpdateStockItem(item, "stockPinamar", nextVal);
+                                              showToast(`PIN de ${item.sku}: ${nextVal}u`, "success");
+                                            }}
+                                            className="w-5 h-5 flex items-center justify-center rounded-md bg-slate-100 dark:bg-zinc-800 text-zinc-500 hover:bg-emerald-500 hover:text-white transition opacity-0 group-hover:opacity-100 cursor-pointer"
+                                            title="Sumar 1 unidad"
+                                          >
+                                            +
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Pagination footer */}
+                        <div className="p-4 border-t border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-50/50 dark:bg-zinc-950/50">
+                          <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                            Mostrando <strong className="text-slate-800 dark:text-white">{filteredStockItems.length === 0 ? 0 : startIndex + 1}</strong> a <strong className="text-slate-800 dark:text-white">{Math.min(startIndex + itemsPerPage, filteredStockItems.length)}</strong> de <strong className="text-slate-800 dark:text-white">{filteredStockItems.length}</strong> artículos
+                          </div>
+
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              disabled={safePage <= 1}
+                              onClick={() => setStockPage(prev => Math.max(1, prev - 1))}
+                              className="px-3 py-1.5 text-xs font-bold border border-slate-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-950 text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
+                            >
+                              Anterior
+                            </button>
+
+                            {Array.from({ length: totalPages }, (_, idx) => idx + 1).map(pageNo => {
+                              const shouldShow = pageNo === 1 || pageNo === totalPages || Math.abs(pageNo - safePage) <= 1;
+                              if (!shouldShow) {
+                                if (pageNo === 2 || pageNo === totalPages - 1) {
+                                  return <span key={pageNo} className="px-1 text-xs text-zinc-450 dark:text-zinc-600 select-none font-bold">...</span>;
+                                }
+                                return null;
+                              }
+                              return (
+                                <button
+                                  key={pageNo}
+                                  onClick={() => setStockPage(pageNo)}
+                                  className={`w-8 h-8 flex items-center justify-center text-xs font-bold rounded-lg transition cursor-pointer ${
+                                    safePage === pageNo
+                                      ? "bg-indigo-600 text-white shadow-xs"
+                                      : "border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-900"
+                                  }`}
+                                >
+                                  {pageNo}
+                                </button>
                               );
                             })}
-                          </div>
-                        );
-                      })()}
 
+                            <button
+                              disabled={safePage >= totalPages}
+                              onClick={() => setStockPage(prev => Math.min(totalPages, prev + 1))}
+                              className="px-3 py-1.5 text-xs font-bold border border-slate-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-950 text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
+                            >
+                              Siguiente
+                            </button>
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* AI Assistant panel onboarding to the new sidebar */}
+                {adminSection === "assistant" && (
+                  <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-8 max-w-xl mx-auto text-center space-y-6 shadow-xl">
+                    <div className="w-16 h-16 bg-indigo-600/15 border border-indigo-500/30 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
+                      <Sparkles className="h-8 w-8 animate-pulse" />
+                    </div>
+                    <div className="space-y-2">
+                      <h3 className="text-lg font-black text-white tracking-tight">¡Copilot IA Integrado en Todo el Panel!</h3>
+                      <p className="text-zinc-400 text-xs leading-relaxed max-w-sm mx-auto">
+                        Para una experiencia más ágil, el Asistente de IA ahora vive en un panel lateral interactivo. Puedes abrirlo en **cualquier sección** (productos, pedidos, stock) sin perder de vista tu trabajo actual.
+                      </p>
+                    </div>
+                    <div className="pt-2">
+                      <button
+                        onClick={() => {
+                          setShowAIAssistantSidebar(true);
+                          navigateAdminSection("dashboard");
+                        }}
+                        className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-500 active:scale-95 transition-all shadow-md cursor-pointer inline-flex items-center gap-1.5"
+                      >
+                        <Sparkles className="h-4 w-4" />
+                        <span>Activar Copilot y Volver al Dashboard</span>
+                      </button>
                     </div>
                   </div>
                 )}
@@ -12127,8 +13449,8 @@ const resText = await uploadRes.text();
                 )}
               </div>
 
-              {/* SECTION B: LIVE PREVIEW COLUMN - EXTREMELY SOPHISTICATED LOOK */}
-              {showAdminDevicePreview && (
+              {/* SECTION B: LIVE PREVIEW COLUMN - REMOVED AS REQUESTED BY USER */}
+              {false && (
                 <div className="hidden lg:flex lg:col-span-5 flex-col gap-3 sticky top-4">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider flex items-center gap-1">
@@ -12455,6 +13777,58 @@ const resText = await uploadRes.text();
               </div>
             )}
           </main>
+
+          {/* Persistent AI Assistant Sidebar */}
+          <AnimatePresence>
+            {showAIAssistantSidebar && (
+              <motion.aside
+                initial={{ opacity: 0, x: 340 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 340 }}
+                transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                className="fixed top-0 right-0 h-full w-full md:w-[340px] border-l border-zinc-800 bg-zinc-950 flex flex-col z-[50] shadow-2xl"
+              >
+                <AIAssistant
+                  store={store}
+                  showToast={(msg, type) => {
+                    const adminType = type === "error" ? "error" : type === "success" ? "success" : "neutral";
+                    showAdminToast(msg, adminType);
+                  }}
+                  onClose={() => setShowAIAssistantSidebar(false)}
+                  adminSection={adminSection}
+                  onEditProduct={(p) => {
+                    setAdminSection("products");
+                    setEditingProduct(prepareProductForEditing(p));
+                    setEditingProductStep(1);
+                    setIsNewProductMode(false);
+                    showAdminToast(`Editando producto: ${p.name}`, "neutral");
+                  }}
+                />
+              </motion.aside>
+            )}
+          </AnimatePresence>
+
+          {/* Persistent minimized floating button (When collapsed, don't lose history, click to re-open) */}
+          <AnimatePresence>
+            {!showAIAssistantSidebar && (
+              <motion.button
+                initial={{ scale: 0, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0, opacity: 0, y: 20 }}
+                onClick={() => {
+                  setShowAIAssistantSidebar(true);
+                  showAdminToast("Abriendo Copilot JUEM...", "neutral");
+                }}
+                className="fixed bottom-6 right-6 z-40 bg-indigo-600 hover:bg-indigo-500 text-white p-3.5 rounded-full shadow-2xl border border-indigo-400/20 flex items-center gap-2 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer group"
+                title="Abrir Copilot JUEM"
+              >
+                <Sparkles className="h-5 w-5 text-amber-300 animate-pulse" />
+                <span className="text-xs font-bold pr-1 max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 ease-in-out whitespace-nowrap">
+                  Copilot JUEM
+                </span>
+              </motion.button>
+            )}
+          </AnimatePresence>
         </div>
       )}
 

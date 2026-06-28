@@ -195,7 +195,7 @@ Precio: $${Math.round(product.price)}
         {/* Stock warning */}
         {product.stock <= lowStockThreshold && product.stock > 0 && (
           <div className="absolute top-2 right-2 bg-gradient-to-r from-amber-500 to-yellow-400 text-[#050B1A] font-sans text-[8px] sm:text-[9.5px] font-black px-1.5 py-0.5 rounded-full tracking-wider shadow-lg z-30 uppercase pointer-events-none border border-black/10">
-            {product.stock === 1 ? "¡Última!" : `¡Últimas ${product.stock}!`}
+            {product.stock === 1 ? "¡Última!" : "¡Últimas!"}
           </div>
         )}
 

@@ -197,6 +197,8 @@ export default function ProductDetails({
 
   // Dynamic stock calculations based on Cartesian variant mapping
   let currentStock = product.stock;
+  let currentStockPinamar = product.stockPinamar !== undefined ? product.stockPinamar : product.stock;
+  let currentStockMontevideo = product.stockMontevideo !== undefined ? product.stockMontevideo : 0;
   let dynamicPrice = product.price;
   let matchedVariant: any = null;
 
@@ -210,24 +212,35 @@ export default function ProductDetails({
     if (matchedVariant) {
       if (selectedColor && exactMatch) {
         currentStock = matchedVariant.stock;
+        currentStockPinamar = matchedVariant.stockPinamar !== undefined ? matchedVariant.stockPinamar : matchedVariant.stock;
+        currentStockMontevideo = matchedVariant.stockMontevideo !== undefined ? matchedVariant.stockMontevideo : 0;
       } else {
-        currentStock = variants.filter(v => v.size === selectedSize).reduce((sum, v) => sum + v.stock, 0);
+        const matchingVars = variants.filter(v => v.size === selectedSize);
+        currentStock = matchingVars.reduce((sum, v) => sum + v.stock, 0);
+        currentStockPinamar = matchingVars.reduce((sum, v) => sum + (v.stockPinamar !== undefined ? v.stockPinamar : v.stock), 0);
+        currentStockMontevideo = matchingVars.reduce((sum, v) => sum + (v.stockMontevideo !== undefined ? v.stockMontevideo : 0), 0);
       }
       dynamicPrice = typeof matchedVariant.price === "number" && matchedVariant.price > 0
         ? matchedVariant.price
         : product.price + (matchedVariant.priceDelta || 0);
     } else {
       currentStock = 0;
+      currentStockPinamar = 0;
+      currentStockMontevideo = 0;
     }
   } else if (!is3D && hasVariants && selectedSize && selectedColor) {
     matchedVariant = variants.find(v => v.size === selectedSize && v.color === selectedColor);
     if (matchedVariant) {
       currentStock = matchedVariant.stock;
+      currentStockPinamar = matchedVariant.stockPinamar !== undefined ? matchedVariant.stockPinamar : matchedVariant.stock;
+      currentStockMontevideo = matchedVariant.stockMontevideo !== undefined ? matchedVariant.stockMontevideo : 0;
       dynamicPrice = typeof matchedVariant.price === "number" && matchedVariant.price > 0
         ? matchedVariant.price
         : product.price + (matchedVariant.priceDelta || 0);
     } else {
-      currentStock = 0; // This specific combo isn't defined or holds 0 stock
+      currentStock = 0;
+      currentStockPinamar = 0;
+      currentStockMontevideo = 0;
     }
   }
 
@@ -772,32 +785,50 @@ Me gustaría coordinar stock, fabricación y envío.`;
                     const threshold = typeof settings?.lowStockThreshold === 'number' ? settings.lowStockThreshold : 5;
                     const isLowStock = currentStock > 0 && currentStock <= threshold;
                     return (
-                      <span className={`text-[9px] font-semibold mt-0.5 ${
-                        product.consultOnly
-                          ? "text-emerald-500 font-bold font-mono uppercase tracking-wider"
-                          : is3D 
-                            ? (currentStock > 0 ? (isLowStock ? "text-amber-500 font-bold" : "text-emerald-500 font-bold") : "text-amber-500/80 font-bold")
-                            : (currentStock > 0 ? (isLowStock ? "text-amber-500 font-bold" : (isThemeDark ? "text-zinc-400" : "text-zinc-500")) : "text-red-500 font-bold")
-                      }`}>
-                        {product.consultOnly 
-                          ? "Artículo a pedido"
-                          : is3D 
-                            ? (currentStock > 0 
-                                ? (isLowStock 
-                                    ? `¡Últimas ${currentStock} unidades! (Fabricación bajo demanda también disponible)` 
-                                    : "Disponible (Fabricación bajo demanda disponible)"
-                                  )
-                                : "Fabricación bajo demanda / A pedido"
-                              )
-                            : (currentStock > 0 
-                                ? (isLowStock 
-                                    ? `¡Sólo quedan ${currentStock} unidades!` 
-                                    : "Disponible (En stock)"
-                                  )
-                                : "Agotado"
-                              )
-                        }
-                      </span>
+                      <div className="flex flex-col">
+                        <span className={`text-[9px] font-semibold mt-0.5 ${
+                          product.consultOnly
+                            ? "text-emerald-500 font-bold font-mono uppercase tracking-wider"
+                            : is3D 
+                              ? (currentStock > 0 ? (isLowStock ? "text-amber-500 font-bold" : "text-emerald-500 font-bold") : "text-amber-500/80 font-bold")
+                              : (currentStock > 0 ? (isLowStock ? "text-amber-500 font-bold" : (isThemeDark ? "text-zinc-400" : "text-zinc-500")) : "text-red-500 font-bold")
+                        }`}>
+                          {product.consultOnly 
+                            ? "Artículo a pedido"
+                            : is3D 
+                              ? (currentStock > 0 
+                                  ? (isLowStock 
+                                      ? "¡Pocas unidades! (Fabricación bajo demanda también disponible)" 
+                                      : "Disponible (Fabricación bajo demanda disponible)"
+                                    )
+                                  : "Fabricación bajo demanda / A pedido"
+                                )
+                              : (currentStock > 0 
+                                  ? (isLowStock 
+                                      ? "¡Pocas unidades disponibles!" 
+                                      : "Disponible (En stock)"
+                                    )
+                                  : "Agotado"
+                                )
+                          }
+                        </span>
+                        {!product.consultOnly && !is3D && currentStock > 0 && (
+                          <div className="flex flex-col gap-0.5 mt-1 text-[8.5px] text-zinc-400 font-medium">
+                            {currentStockPinamar > 0 && (
+                              <span className="flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/80"></span>
+                                Disponible en Pinamar
+                              </span>
+                            )}
+                            {currentStockMontevideo > 0 && (
+                              <span className="flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/80"></span>
+                                Disponible en Montevideo
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     );
                   })()}
                 </div>

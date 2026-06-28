@@ -26,14 +26,24 @@ import { MercadoPagoConfig, Preference, Payment } from "mercadopago";
 import { sendEmail, emailDeliveryLogs, generateOrderCreatedEmailHtml, generateOrderStatusChangedEmailHtml } from "./server_emails";
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY || "",
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
+let aiClient: GoogleGenAI | null = null;
+function getGeminiClient(): GoogleGenAI {
+  if (!aiClient) {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) {
+      throw new Error("La clave de API de Gemini (GEMINI_API_KEY) no está configurada en las variables de entorno del servidor.");
     }
+    aiClient = new GoogleGenAI({
+      apiKey: key,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
   }
-});
+  return aiClient;
+}
 
 
 const storage = multer.memoryStorage();
@@ -1699,7 +1709,7 @@ async function initPostgresStore(): Promise<ShopState | null> {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   // Verify mandatory credentials/secrets. In production, we generate secure runtime defaults to prevent container crashes while logging clear recommendations.
   if (!process.env.JWT_SECRET) {
@@ -2097,6 +2107,7 @@ REGLAS DE COMPORTAMIENTO:
         parts: [{ text: msg.text }]
       }));
 
+      const ai = getGeminiClient();
       const response = await ai.models.generateContent({
         model: "gemini-3.5-flash",
         contents: [

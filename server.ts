@@ -1777,6 +1777,11 @@ async function startServer() {
     return token === expectedToken || token === stableToken;
   }
 
+  // Serve metadata.json explicitly from the root folder
+  app.get("/metadata.json", (req, res) => {
+    res.sendFile(path.join(process.cwd(), "metadata.json"));
+  });
+
   // Cargar estado de Postgres si DATABASE_URL está definido
   if (process.env.DATABASE_URL) {
     try {
@@ -2129,6 +2134,63 @@ REGLAS DE COMPORTAMIENTO:
     }
   });
 
+  // GET /api/stock-search?q=... (Uses Gemini to find/generate valid Unsplash stock image URLs)
+  app.get("/api/stock-search", async (req, res) => {
+    try {
+      const q = (req.query.q as string || "").trim();
+      if (!q) {
+        return res.json({ success: true, images: [] });
+      }
+
+      const ai = getGeminiClient();
+      const prompt = `Devuelve exactamente un array JSON de 12 URLs de imágenes estéticas, nítidas y profesionales de Unsplash que correspondan perfectamente a la búsqueda: "${q}".
+Las imágenes deben ser de alta calidad y apropiadas para usar como fotos de producto en un e-commerce elegante (fondos limpios o contextuales premium, iluminación excelente).
+Usa IDs de fotos de Unsplash reales y existentes en la base de datos de Unsplash que coincidan con la búsqueda. Ejemplos de formato:
+https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=800&q=80 (zapatillas)
+https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80 (auriculares)
+
+Responde ÚNICAMENTE con el array de JSON en este formato exacto:
+[
+  "https://images.unsplash.com/photo-1234567890-abcdef?auto=format&fit=crop&w=800&q=80",
+  ...
+]
+No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON estructurado.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json"
+        }
+      });
+
+      const responseText = response.text || "[]";
+      try {
+        const images = JSON.parse(responseText.trim());
+        if (Array.isArray(images)) {
+          return res.json({ success: true, images });
+        } else {
+          throw new Error("El resultado no es un array");
+        }
+      } catch (parseErr) {
+        console.error("Error al parsear respuesta de stock images:", responseText);
+        // Fallback static images
+        const fallback = [
+          "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=800&q=80",
+          "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80",
+          "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80",
+          "https://images.unsplash.com/photo-1511499767150-a48a237f0083?auto=format&fit=crop&w=800&q=80",
+          "https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=800&q=80",
+          "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=800&q=80"
+        ];
+        return res.json({ success: true, images: fallback });
+      }
+    } catch (err: any) {
+      console.error("Error en stock search endpoint:", err);
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
   // POST upload to Cloudinary (Full-stack API proxy for credentials safety)
   app.post("/api/cloudinary/upload", (req, res, next) => {
     // Invoke multer manually to catch limits and filter errors gracefully
@@ -2185,10 +2247,12 @@ REGLAS DE COMPORTAMIENTO:
       api_secret: apiSecret
     });
 
+    const targetFolder = (req.body.folder || req.query.folder || "ventas_juem_cloudinary") as string;
+
     // Create stream and feed binary packet (force resource_type to image to reject fake non-image binary extensions)
     const uploadStream = cloudinary.uploader.upload_stream(
       {
-        folder: "ventas_juem_cloudinary",
+        folder: targetFolder,
         resource_type: "image"
       },
       (error, result) => {
@@ -2201,6 +2265,255 @@ REGLAS DE COMPORTAMIENTO:
     );
 
     uploadStream.end(req.file.buffer);
+  });
+
+  // GET explore Cloudinary assets and folders
+  app.get("/api/cloudinary/explore", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado: token inválido." });
+    }
+
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+    if (!cloudName || !apiKey || !apiSecret) {
+      return res.status(500).json({ 
+        success: false, 
+        message: "Configuración de Cloudinary incompleta en el servidor." 
+      });
+    }
+
+    // Lazy config
+    cloudinary.config({
+      cloud_name: cloudName,
+      api_key: apiKey,
+      api_secret: apiSecret
+    });
+
+    // Default to our main folder if empty
+    const currentFolder = (req.query.folder as string) || "ventas_juem_cloudinary";
+    const searchQuery = (req.query.search as string) || "";
+
+    try {
+      let folders: string[] = [];
+      let files: any[] = [];
+
+      if (searchQuery) {
+        // Global or prefix search in Cloudinary
+        // Note: Admin search API requires indexing, let's use the list resources API with prefix search as fallback, or simple search
+        const result = await cloudinary.api.resources({
+          type: "upload",
+          prefix: currentFolder,
+          max_results: 500
+        });
+
+        const queryLower = searchQuery.toLowerCase();
+        files = result.resources.filter((r: any) => 
+          r.public_id.toLowerCase().includes(queryLower)
+        );
+
+        // Also try to find unique folders within these search results
+        const folderSet = new Set<string>();
+        result.resources.forEach((r: any) => {
+          if (r.public_id.includes("/")) {
+            const parts = r.public_id.split("/");
+            parts.pop(); // remove file name
+            folderSet.add(parts.join("/"));
+          }
+        });
+        folders = Array.from(folderSet).filter(f => f.startsWith(currentFolder));
+      } else {
+        // 1. Fetch subfolders of the current folder
+        try {
+          const foldersResult = await cloudinary.api.sub_folders(currentFolder);
+          folders = foldersResult.folders.map((f: any) => f.path);
+        } catch (err: any) {
+          console.warn("Cloudinary sub_folders failed, falling back to deduction from file paths:", err.message);
+          // Deduce subfolders from all resources
+          const allResult = await cloudinary.api.resources({
+            type: "upload",
+            prefix: currentFolder,
+            max_results: 500
+          });
+          const subSet = new Set<string>();
+          allResult.resources.forEach((r: any) => {
+            if (r.public_id.includes("/")) {
+              const parts = r.public_id.split("/");
+              parts.pop();
+              const fPath = parts.join("/");
+              if (fPath.startsWith(currentFolder) && fPath !== currentFolder) {
+                const relative = fPath.slice(currentFolder.length + 1);
+                const sub = relative.split("/")[0];
+                subSet.add(currentFolder + "/" + sub);
+              }
+            }
+          });
+          folders = Array.from(subSet);
+        }
+
+        // 2. Fetch files directly inside this folder
+        const resourcesResult = await cloudinary.api.resources({
+          type: "upload",
+          prefix: currentFolder ? currentFolder + "/" : "",
+          max_results: 500,
+          direction: "desc"
+        });
+
+        // Filter files so they belong EXACTLY to currentFolder (no subfolders)
+        files = resourcesResult.resources.filter((r: any) => {
+          const parts = r.public_id.split("/");
+          parts.pop();
+          const fileFolder = parts.join("/");
+          return fileFolder === currentFolder;
+        });
+      }
+
+      res.json({
+        success: true,
+        currentFolder,
+        folders: folders.sort(),
+        files: files.map((r: any) => ({
+          public_id: r.public_id,
+          name: r.public_id.split("/").pop(),
+          url: r.secure_url,
+          format: r.format,
+          bytes: r.bytes,
+          width: r.width,
+          height: r.height,
+          created_at: r.created_at
+        }))
+      });
+
+    } catch (error: any) {
+      console.error("Error explorando Cloudinary:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: "Error al explorar archivos en Cloudinary: " + (error.message || error) 
+      });
+    }
+  });
+
+  // POST create a new folder in Cloudinary
+  app.post("/api/cloudinary/folders", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado: token inválido." });
+    }
+
+    const { folder } = req.body;
+    if (!folder) {
+      return res.status(400).json({ success: false, message: "Falta el nombre o ruta de la carpeta." });
+    }
+
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+    if (!cloudName || !apiKey || !apiSecret) {
+      return res.status(500).json({ success: false, message: "Configuración de Cloudinary incompleta." });
+    }
+
+    cloudinary.config({
+      cloud_name: cloudName,
+      api_key: apiKey,
+      api_secret: apiSecret
+    });
+
+    try {
+      const result = await cloudinary.api.create_folder(folder);
+      res.json({ success: true, message: "Carpeta creada con éxito.", data: result });
+    } catch (error: any) {
+      console.error("Error creando carpeta en Cloudinary:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: "Error al crear la carpeta en Cloudinary: " + (error.message || error) 
+      });
+    }
+  });
+
+  // DELETE a file from Cloudinary
+  app.delete("/api/cloudinary/files", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado: token inválido." });
+    }
+
+    const { public_id } = req.body;
+    if (!public_id) {
+      return res.status(400).json({ success: false, message: "Falta el public_id del archivo a eliminar." });
+    }
+
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+    if (!cloudName || !apiKey || !apiSecret) {
+      return res.status(500).json({ success: false, message: "Configuración de Cloudinary incompleta." });
+    }
+
+    cloudinary.config({
+      cloud_name: cloudName,
+      api_key: apiKey,
+      api_secret: apiSecret
+    });
+
+    try {
+      const result = await cloudinary.uploader.destroy(public_id);
+      if (result.result === "ok") {
+        res.json({ success: true, message: "Archivo eliminado con éxito de Cloudinary." });
+      } else {
+        res.json({ 
+          success: false, 
+          message: `Cloudinary retornó el estado: ${result.result}. Es posible que el archivo ya haya sido eliminado.` 
+        });
+      }
+    } catch (error: any) {
+      console.error("Error eliminando archivo en Cloudinary:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: "Error al eliminar el archivo de Cloudinary: " + (error.message || error) 
+      });
+    }
+  });
+
+  // DELETE a folder from Cloudinary (must be empty)
+  app.delete("/api/cloudinary/folders", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado: token inválido." });
+    }
+
+    const { folder } = req.body;
+    if (!folder) {
+      return res.status(400).json({ success: false, message: "Falta el nombre o ruta de la carpeta a eliminar." });
+    }
+
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+    if (!cloudName || !apiKey || !apiSecret) {
+      return res.status(500).json({ success: false, message: "Configuración de Cloudinary incompleta." });
+    }
+
+    cloudinary.config({
+      cloud_name: cloudName,
+      api_key: apiKey,
+      api_secret: apiSecret
+    });
+
+    try {
+      const result = await cloudinary.api.delete_folder(folder);
+      res.json({ success: true, message: "Carpeta eliminada con éxito de Cloudinary.", data: result });
+    } catch (error: any) {
+      console.error("Error eliminando carpeta en Cloudinary:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: "Error al eliminar la carpeta en Cloudinary. Asegúrate de que esté vacía (sin subcarpetas ni archivos)." 
+      });
+    }
   });
 
   // GET store state

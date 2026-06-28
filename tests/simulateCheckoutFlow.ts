@@ -27,7 +27,7 @@ async function run() {
       notes: "Simulación de compra real Mercado Pago Sandbox",
       items: [
         {
-          productId: "10", // Poncho Buzo Canguro Pijama Plush C/ Capucha Corderito
+          productId: "62", // Poncho Buzo Manta Canguro Pijama Plush C/ Capucha Corderito (Active)
           quantity: 2
         }
       ]

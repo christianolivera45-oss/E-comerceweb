@@ -7,13 +7,19 @@ import {
   ChevronLeft, 
   ChevronRight, 
   Image as ImageIcon,
-  CheckCircle2
+  CheckCircle2,
+  FolderOpen,
+  Search,
+  Sparkles,
+  Loader2,
+  Plus
 } from "lucide-react";
 
 export interface ImageGalleryEditorProps {
   images: string[];
   onChange: (updatedImages: string[]) => void;
   isThemeDark: boolean;
+  onOpenCloudinarySelector?: () => void;
 }
 
 const PRESET_STOCK_IMAGES = [
@@ -25,13 +31,50 @@ const PRESET_STOCK_IMAGES = [
   { title: "Lentes Premium", url: "https://images.unsplash.com/photo-1511499767150-a48a237f0083?auto=format&fit=crop&w=800&q=80" }
 ];
 
-export default function ImageGalleryEditor({ images, onChange, isThemeDark }: ImageGalleryEditorProps) {
+export default function ImageGalleryEditor({ images, onChange, isThemeDark, onOpenCloudinarySelector }: ImageGalleryEditorProps) {
   const [urlInput, setUrlInput] = useState("");
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [isDraggingOverZone, setIsDraggingOverZone] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ text: string; isError: boolean } | null>(null);
   const [uploadProgress, setUploadProgress] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // IA Stock Search states
+  const [stockSearchQuery, setStockSearchQuery] = useState("");
+  const [stockResults, setStockResults] = useState<string[]>([]);
+  const [searchingStock, setSearchingStock] = useState(false);
+  const [showStockPanel, setShowStockPanel] = useState(false);
+
+  const searchStockImages = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const query = stockSearchQuery.trim();
+    if (!query) return;
+
+    setSearchingStock(true);
+    try {
+      const res = await fetch(`/api/stock-search?q=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.images)) {
+        setStockResults(data.images);
+      } else {
+        showStatus("No se pudieron obtener imágenes de stock.", true);
+      }
+    } catch (err) {
+      console.error("Error searching stock images:", err);
+      showStatus("Error al conectar con el motor de búsqueda.", true);
+    } finally {
+      setSearchingStock(false);
+    }
+  };
+
+  const addStockImage = (url: string) => {
+    if (images.includes(url)) {
+      showStatus("Esta imagen ya está en la galería.", true);
+      return;
+    }
+    onChange([...images, url]);
+    showStatus("Imagen de stock añadida correctamente.");
+  };
 
   const showStatus = (text: string, isError = false) => {
     setStatusMsg({ text, isError });
@@ -323,6 +366,95 @@ export default function ImageGalleryEditor({ images, onChange, isThemeDark }: Im
         )}
       </div>
 
+      {/* SECCIÓN DE BÚSQUEDA DE IMÁGENES DE STOCK CON IA */}
+      <div className="bg-slate-50 dark:bg-zinc-900/30 p-3.5 rounded-xl border border-slate-200/60 dark:border-zinc-800/80 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-zinc-200">
+            <Sparkles className="h-4 w-4 text-amber-500 dark:text-amber-400" />
+            <span>¿Te faltan fotos? Buscar imágenes reales en internet con IA</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowStockPanel(!showStockPanel)}
+            className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-bold cursor-pointer"
+          >
+            {showStockPanel ? "Ocultar Buscador" : "Mostrar Buscador"}
+          </button>
+        </div>
+
+        {showStockPanel && (
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3 inset-y-0 flex items-center pointer-events-none">
+                  <Search className="h-3.5 w-3.5 text-slate-400 dark:text-zinc-500" />
+                </span>
+                <input
+                  type="text"
+                  value={stockSearchQuery}
+                  onChange={(e) => setStockSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      searchStockImages();
+                    }
+                  }}
+                  placeholder="Ej: lentes aviador dorados, zapatillas running rojas, etc..."
+                  className="w-full pl-8.5 pr-3 py-1.5 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-850/80 rounded-xl text-xs outline-none text-slate-900 dark:text-white focus:ring-1 focus:ring-indigo-500/55"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => searchStockImages()}
+                disabled={searchingStock}
+                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 text-white font-semibold rounded-xl text-xs transition-all flex items-center gap-1 cursor-pointer shrink-0"
+              >
+                {searchingStock ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Buscando...</span>
+                  </>
+                ) : (
+                  <span>Buscar</span>
+                )}
+              </button>
+            </div>
+
+            {stockResults.length > 0 ? (
+              <div className="space-y-1.5">
+                <div className="text-[10px] text-zinc-400 font-medium">Haz clic en una foto para añadirla a la galería:</div>
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                  {stockResults.map((url, index) => (
+                    <button
+                      key={url + "-" + index}
+                      type="button"
+                      onClick={() => addStockImage(url)}
+                      className="relative aspect-square rounded-lg overflow-hidden border border-slate-200 dark:border-zinc-800 hover:border-indigo-500 hover:scale-105 hover:shadow transition-all group cursor-pointer"
+                    >
+                      <img
+                        src={url}
+                        alt="Resultado de stock"
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                        <Plus className="h-4 w-4 text-white font-bold" />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              !searchingStock && (
+                <p className="text-[10px] text-zinc-450 italic">
+                  Ingresa palabras clave del producto para encontrar imágenes de stock profesionales de Unsplash integradas automáticamente por IA.
+                </p>
+              )
+            )}
+          </div>
+        )}
+      </div>
+
       {/* URL INPUT OR PRESET PANEL */}
       <div className="space-y-2">
         <div className="flex gap-2">
@@ -351,6 +483,16 @@ export default function ImageGalleryEditor({ images, onChange, isThemeDark }: Im
           >
             Añadir URL
           </button>
+          {onOpenCloudinarySelector && (
+            <button
+              type="button"
+              onClick={onOpenCloudinarySelector}
+              className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+            >
+              <FolderOpen className="h-4 w-4" />
+              <span>Cloudinary</span>
+            </button>
+          )}
         </div>
 
         {/* MOCK TEMPLATES PANEL */}

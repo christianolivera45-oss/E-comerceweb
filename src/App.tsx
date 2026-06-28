@@ -108,6 +108,9 @@ import WhatsAppWidget from "./components/WhatsAppWidget";
 import ImageGalleryEditor from "./components/ImageGalleryEditor";
 import GoogleReviewsCompact from "./components/GoogleReviewsCompact";
 import AddToCartModal from "./components/AddToCartModal";
+import CloudinaryExplorer from "./components/CloudinaryExplorer";
+import CommaSeparatedInput from "./components/CommaSeparatedInput";
+import { FolderOpen } from "lucide-react";
 
 
 export const normalizeText = (text: string): string => {
@@ -822,7 +825,7 @@ export default function App() {
 
   // Search & Navigation
   const [activeTab, setActiveTab] = useState<"storefront" | "admin" | "checkout">("storefront");
-  const [adminSection, setAdminSection] = useState<"general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales" | "reviews" | "bills" | "finances" | "shippings" | "assistant">("dashboard");
+  const [adminSection, setAdminSection] = useState<"general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales" | "reviews" | "bills" | "finances" | "shippings" | "assistant" | "cloudinary_explorer">("dashboard");
   const [showAIAssistantSidebar, setShowAIAssistantSidebar] = useState(false);
   const [showAdminDevicePreview, setShowAdminDevicePreview] = useState(true);
   const [mobileAdminMenuOpen, setMobileAdminMenuOpen] = useState(false);
@@ -839,6 +842,7 @@ export default function App() {
   const [uploadingSlideIdx, setUploadingSlideIdx] = useState<number | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingEmailHeader, setUploadingEmailHeader] = useState(false);
+  const [cloudinarySelectorConfig, setCloudinarySelectorConfig] = useState<{ isOpen: boolean; onSelect: (url: string) => void } | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>("todos");
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>("all");
   const [showAllProductsFlat, setShowAllProductsFlat] = useState<boolean>(true);
@@ -910,7 +914,7 @@ export default function App() {
     }
   };
 
-  const navigateAdminSection = (section: "general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales" | "reviews" | "emails" | "bills" | "finances" | "shippings" | "assistant") => {
+  const navigateAdminSection = (section: "general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales" | "reviews" | "emails" | "bills" | "finances" | "shippings" | "assistant" | "cloudinary_explorer") => {
     setAdminSection(section);
     setEditingProduct(null);
     setIsNewProductMode(false);
@@ -5044,6 +5048,18 @@ export default function App() {
                     <Layout className="h-4 w-4 text-zinc-400" />
                     <span>Pie de Página (Footer)</span>
                   </button>
+
+                  <button
+                    onClick={() => navigateAdminSection("cloudinary_explorer")}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                      adminSection === "cloudinary_explorer"
+                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
+                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    <FolderOpen className="h-4 w-4 text-amber-500" />
+                    <span>Explorador Cloudinary</span>
+                  </button>
                 </div>
 
                 {/* Category Group 4 - Configuración */}
@@ -6268,6 +6284,12 @@ export default function App() {
                   </div>
                 )}
 
+                {adminSection === "cloudinary_explorer" && (
+                  <div className="animate-fade-in space-y-4">
+                    <CloudinaryExplorer />
+                  </div>
+                )}
+
                 {/* Colors section remains combined with general branding */}
                 {adminSection === "general" && (
                   <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm space-y-4 animate-fade-in mt-4">
@@ -6577,60 +6599,7 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* Dropdown Filters Row */}
-                        <div className="flex flex-wrap gap-2.5 items-center">
-                          <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest shrink-0">Filtrar por:</span>
-                          
-                          {/* Category Filter */}
-                          <select
-                            value={adminProductCategoryFilter}
-                            onChange={(e) => setAdminProductCategoryFilter(e.target.value)}
-                            className="bg-white dark:bg-zinc-950 text-[11px] font-semibold border border-slate-250 dark:border-zinc-800 rounded px-2.5 py-1 text-slate-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-[#5346ff]"
-                          >
-                            <option value="all">Todas las Categorías</option>
-                            {(store.dbCategories || []).map(c => (
-                              <option key={c.id} value={c.id}>{c.nombre}</option>
-                            ))}
-                          </select>
-
-                          {/* Stock Status Filter */}
-                          <select
-                            value={adminProductStockFilter}
-                            onChange={(e) => setAdminProductStockFilter(e.target.value)}
-                            className="bg-white dark:bg-zinc-950 text-[11px] font-semibold border border-slate-250 dark:border-zinc-800 rounded px-2.5 py-1 text-slate-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-[#5346ff]"
-                          >
-                            <option value="all">Stock: Todos</option>
-                            <option value="instock">Con Stock disponible</option>
-                            <option value="outofstock">Sin Stock (Agotados)</option>
-                          </select>
-
-                          {/* Publication Status Filter */}
-                          <select
-                            value={adminProductStatusFilter}
-                            onChange={(e) => setAdminProductStatusFilter(e.target.value)}
-                            className="bg-white dark:bg-zinc-950 text-[11px] font-semibold border border-slate-250 dark:border-zinc-800 rounded px-2.5 py-1 text-slate-700 dark:text-zinc-300 outline-none focus:ring-1 focus:ring-[#5346ff]"
-                          >
-                            <option value="all">Estado: Todos</option>
-                            <option value="active">Activos / Visibles</option>
-                            <option value="paused">Pausados / Ocultos</option>
-                          </select>
-
-                          {/* Reset filters button if any filter active */}
-                          {(adminProductCategoryFilter !== "all" || adminProductStockFilter !== "all" || adminProductStatusFilter !== "all" || adminProductSearchQuery) && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setAdminProductCategoryFilter("all");
-                                setAdminProductStockFilter("all");
-                                setAdminProductStatusFilter("all");
-                                setAdminProductSearchQuery("");
-                              }}
-                              className="text-[10px] text-red-500 font-bold hover:underline py-1 px-2 hover:bg-red-550/5 rounded transition-all flex items-center gap-1 cursor-pointer"
-                            >
-                              <span>✕ Limpiar todos los filtros</span>
-                            </button>
-                          )}
-                        </div>
+                        {/* Dropdown Filters Row removed as per user request */}
                       </div>
 
                       <div className="divide-y divide-slate-100 dark:divide-zinc-800">
@@ -7254,6 +7223,22 @@ export default function App() {
                               });
                             }}
                             isThemeDark={store.settings.themeMode === "dark"}
+                            onOpenCloudinarySelector={() => {
+                              setCloudinarySelectorConfig({
+                                isOpen: true,
+                                onSelect: (url) => {
+                                  const currentImages = [newProduct.imageUrl || "", ...(newProduct.imagenes || [])].filter(Boolean);
+                                  if (!currentImages.includes(url)) {
+                                    const updated = [...currentImages, url];
+                                    setNewProduct({
+                                      ...newProduct,
+                                      imageUrl: updated[0] || "",
+                                      imagenes: updated.slice(1)
+                                    });
+                                  }
+                                }
+                              });
+                            }}
                           />
                         </div>
                       </div>
@@ -7269,13 +7254,9 @@ export default function App() {
                             <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1">
                               Materiales 3D Disponibles
                             </label>
-                            <input
-                              type="text"
-                              value={(newProduct.sizes || []).join(", ")}
-                              onChange={(e) => {
-                                const arr = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
-                                setNewProduct({ ...newProduct, sizes: arr });
-                              }}
+                            <CommaSeparatedInput
+                              value={newProduct.sizes || []}
+                              onChange={(arr) => setNewProduct({ ...newProduct, sizes: arr })}
                               placeholder="p.ej. PLA, PETG, ABS, TPU (Separados por comas)"
                               className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
                             />
@@ -7631,13 +7612,9 @@ export default function App() {
                         ) : (
                           <div>
                             <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1">Talles / Tamaños Disponibles</label>
-                            <input
-                              type="text"
-                              value={(newProduct.sizes || []).join(", ")}
-                              onChange={(e) => {
-                                const arr = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
-                                setNewProduct({ ...newProduct, sizes: arr });
-                              }}
+                            <CommaSeparatedInput
+                              value={newProduct.sizes || []}
+                              onChange={(arr) => setNewProduct({ ...newProduct, sizes: arr })}
                               placeholder="p.ej. S, M, L, XL (Separados por comas)"
                               className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
                             />
@@ -7673,13 +7650,9 @@ export default function App() {
 
                       <div>
                         <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1">Colores Disponibles</label>
-                        <input
-                          type="text"
-                          value={(newProduct.colors || []).join(", ")}
-                          onChange={(e) => {
-                            const arr = e.target.value.split(",").map(c => c.trim()).filter(Boolean);
-                            setNewProduct({ ...newProduct, colors: arr });
-                          }}
+                        <CommaSeparatedInput
+                          value={newProduct.colors || []}
+                          onChange={(arr) => setNewProduct({ ...newProduct, colors: arr })}
                           placeholder="p.ej. Negro, Blanco, Gris, Rojo (Separados por comas)"
                           className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
                         />
@@ -7818,11 +7791,11 @@ export default function App() {
                         </div>
                         <div>
                           <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Stock Pinamar</label>
-                          <input id="new-var-stock-pinamar" type="number" defaultValue="5" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-mono font-bold" />
+                          <input id="new-var-stock-pinamar" type="number" defaultValue="5" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-mono font-bold text-slate-800 dark:text-zinc-100" />
                         </div>
                         <div>
                           <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Stock Montevideo</label>
-                          <input id="new-var-stock-montevideo" type="number" defaultValue="0" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-mono font-bold" />
+                          <input id="new-var-stock-montevideo" type="number" defaultValue="0" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-mono font-bold text-slate-800 dark:text-zinc-100" />
                         </div>
                         <div className="flex items-end">
                           <button
@@ -7910,7 +7883,7 @@ export default function App() {
                                           variants: nextArr
                                         }));
                                       }}
-                                      className="w-44 px-2 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none uppercase text-slate-800 dark:text-zinc-100 focus:ring-1 focus:ring-indigo-500"
+                                      className="w-44 px-2 py-0.5 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none uppercase text-slate-950 dark:text-zinc-50 focus:ring-1 focus:ring-indigo-500"
                                     />
                                   </td>
                                   <td className="p-2">
@@ -7928,7 +7901,7 @@ export default function App() {
                                           variants: nextArr
                                         }));
                                       }}
-                                      className="w-16 px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none"
+                                      className="w-16 px-1.5 py-0.5 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none text-slate-950 dark:text-zinc-50"
                                     />
                                   </td>
                                   <td className="p-2">
@@ -7946,7 +7919,7 @@ export default function App() {
                                           variants: nextArr
                                         }));
                                       }}
-                                      className="w-16 px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none"
+                                      className="w-16 px-1.5 py-0.5 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none text-slate-950 dark:text-zinc-50"
                                     />
                                   </td>
                                   <td className="p-2 font-mono font-bold text-zinc-500">
@@ -7972,7 +7945,7 @@ export default function App() {
                                             variants: nextArr
                                           });
                                         }}
-                                        className="w-20 px-1 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none"
+                                        className="w-20 px-1 py-0.5 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none text-slate-950 dark:text-zinc-50"
                                       />
                                     </div>
                                   </td>
@@ -8025,7 +7998,7 @@ export default function App() {
                                                     variants: nextArr
                                                   });
                                                 }}
-                                                className="w-full px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-[10px] outline-none font-mono"
+                                                className="w-full px-1.5 py-0.5 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded text-[10px] outline-none font-mono text-slate-950 dark:text-zinc-50"
                                               />
                                               <div className="flex items-center gap-1 mt-1">
                                                 <span className="text-[8px] text-zinc-400 font-bold uppercase shrink-0">Subir:</span>
@@ -8751,6 +8724,22 @@ const resText = await uploadRes.text();
                               });
                             }}
                             isThemeDark={store.settings.themeMode === "dark"}
+                            onOpenCloudinarySelector={() => {
+                              setCloudinarySelectorConfig({
+                                isOpen: true,
+                                onSelect: (url) => {
+                                  const currentImages = [editingProduct.imageUrl || "", ...(editingProduct.imagenes || [])].filter(Boolean);
+                                  if (!currentImages.includes(url)) {
+                                    const updated = [...currentImages, url];
+                                    setEditingProduct({
+                                      ...editingProduct,
+                                      imageUrl: updated[0] || "",
+                                      imagenes: updated.slice(1)
+                                    });
+                                  }
+                                }
+                              });
+                            }}
                           />
                         </div>
                       </div>
@@ -8780,13 +8769,9 @@ const resText = await uploadRes.text();
                             <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1">
                               Materiales 3D Disponibles
                             </label>
-                            <input
-                              type="text"
-                              value={(editingProduct.sizes || []).join(", ")}
-                              onChange={(e) => {
-                                const arr = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
-                                setEditingProduct({ ...editingProduct, sizes: arr });
-                              }}
+                            <CommaSeparatedInput
+                              value={editingProduct.sizes || []}
+                              onChange={(arr) => setEditingProduct({ ...editingProduct, sizes: arr })}
                               placeholder="p.ej. PLA, PETG, ABS, TPU (Separados por comas)"
                               className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
                             />
@@ -9142,13 +9127,9 @@ const resText = await uploadRes.text();
                         ) : (
                           <div>
                             <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1">Talles / Tamaños Disponibles</label>
-                            <input
-                              type="text"
-                              value={(editingProduct.sizes || []).join(", ")}
-                              onChange={(e) => {
-                                const arr = e.target.value.split(",").map(s => s.trim()).filter(Boolean);
-                                setEditingProduct({ ...editingProduct, sizes: arr });
-                              }}
+                            <CommaSeparatedInput
+                              value={editingProduct.sizes || []}
+                              onChange={(arr) => setEditingProduct({ ...editingProduct, sizes: arr })}
                               placeholder="p.ej. S, M, L, XL (Separados por comas)"
                               className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
                             />
@@ -9184,13 +9165,9 @@ const resText = await uploadRes.text();
 
                       <div>
                         <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1">Colores Disponibles</label>
-                        <input
-                          type="text"
-                          value={(editingProduct.colors || []).join(", ")}
-                          onChange={(e) => {
-                            const arr = e.target.value.split(",").map(c => c.trim()).filter(Boolean);
-                            setEditingProduct({ ...editingProduct, colors: arr });
-                          }}
+                        <CommaSeparatedInput
+                          value={editingProduct.colors || []}
+                          onChange={(arr) => setEditingProduct({ ...editingProduct, colors: arr })}
                           placeholder="p.ej. Negro, Blanco, Gris, Rojo (Separados por comas)"
                           className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none text-slate-900 dark:text-white mb-2"
                         />
@@ -9329,11 +9306,11 @@ const resText = await uploadRes.text();
                         </div>
                         <div>
                           <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Stock Pinamar</label>
-                          <input id="edit-var-stock-pinamar" type="number" defaultValue="5" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-mono font-bold" />
+                          <input id="edit-var-stock-pinamar" type="number" defaultValue="5" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-mono font-bold text-slate-800 dark:text-zinc-100" />
                         </div>
                         <div>
                           <label className="block text-[9px] text-zinc-400 capitalize mb-0.5">Stock Montevideo</label>
-                          <input id="edit-var-stock-montevideo" type="number" defaultValue="0" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-mono font-bold" />
+                          <input id="edit-var-stock-montevideo" type="number" defaultValue="0" className="w-full text-xs bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-1 rounded font-mono font-bold text-slate-800 dark:text-zinc-100" />
                         </div>
                         <div className="flex items-end">
                           <button
@@ -9421,7 +9398,7 @@ const resText = await uploadRes.text();
                                           variants: nextArr
                                         }) as Product);
                                       }}
-                                      className="w-44 px-2 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none uppercase text-slate-800 dark:text-zinc-100 focus:ring-1 focus:ring-indigo-500"
+                                      className="w-44 px-2 py-0.5 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none uppercase text-slate-950 dark:text-zinc-50 focus:ring-1 focus:ring-indigo-500"
                                     />
                                   </td>
                                   <td className="p-2">
@@ -9439,7 +9416,7 @@ const resText = await uploadRes.text();
                                           variants: nextArr
                                         }) as Product);
                                       }}
-                                      className="w-16 px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none"
+                                      className="w-16 px-1.5 py-0.5 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none text-slate-950 dark:text-zinc-50"
                                     />
                                   </td>
                                   <td className="p-2">
@@ -9457,7 +9434,7 @@ const resText = await uploadRes.text();
                                           variants: nextArr
                                         }) as Product);
                                       }}
-                                      className="w-16 px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none"
+                                      className="w-16 px-1.5 py-0.5 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none text-slate-950 dark:text-zinc-50"
                                     />
                                   </td>
                                   <td className="p-2 font-mono font-bold text-zinc-500">
@@ -9483,7 +9460,7 @@ const resText = await uploadRes.text();
                                             variants: nextArr
                                           });
                                         }}
-                                        className="w-20 px-1 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none"
+                                        className="w-20 px-1 py-0.5 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none text-slate-950 dark:text-zinc-50"
                                       />
                                     </div>
                                   </td>
@@ -9536,7 +9513,7 @@ const resText = await uploadRes.text();
                                                     variants: nextArr
                                                   });
                                                 }}
-                                                className="w-full px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded text-[10px] outline-none font-mono"
+                                                className="w-full px-1.5 py-0.5 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded text-[10px] outline-none font-mono text-slate-950 dark:text-zinc-50"
                                               />
                                               <div className="flex items-center gap-1 mt-1">
                                                 <span className="text-[8px] text-zinc-400 font-bold uppercase shrink-0">Subir:</span>
@@ -10857,108 +10834,7 @@ const resText = await uploadRes.text();
 
                               </tr>
 
-                              {/* Fila de Filtros en el thead */}
-                              <tr className="bg-slate-50/50 dark:bg-zinc-900/50 border-b border-slate-200 dark:border-zinc-800">
-                                <td className="py-2 px-4">
-                                  <input
-                                    type="text"
-                                    placeholder="Filtrar SKU..."
-                                    value={stockSkuFilter}
-                                    onChange={(e) => {
-                                      setStockSkuFilter(e.target.value);
-                                      setStockPage(1);
-                                    }}
-                                    className="w-full px-2 py-1 text-[10px] font-semibold bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-md focus:outline-hidden text-slate-800 dark:text-white placeholder-slate-400 font-mono normal-case"
-                                  />
-                                </td>
-                                <td className="py-2 px-4">
-                                  <input
-                                    type="text"
-                                    placeholder="Filtrar nombre..."
-                                    value={stockNameFilter}
-                                    onChange={(e) => {
-                                      setStockNameFilter(e.target.value);
-                                      setStockPage(1);
-                                    }}
-                                    className="w-full px-2 py-1 text-[10px] font-semibold bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-md focus:outline-hidden text-slate-800 dark:text-white placeholder-slate-400 normal-case"
-                                  />
-                                </td>
-                                <td className="py-2 px-4 text-right">
-                                  <select
-                                    value={stockCostFilter}
-                                    onChange={(e) => {
-                                      setStockCostFilter(e.target.value);
-                                      setStockPage(1);
-                                    }}
-                                    className="w-full min-w-[70px] max-w-[90px] ml-auto px-1 py-1 text-[10px] font-semibold bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-md focus:outline-hidden text-slate-700 dark:text-zinc-300 normal-case"
-                                  >
-                                    <option value="all">Todos</option>
-                                    <option value="hasCost">Con Costo</option>
-                                    <option value="noCost">Sin Costo</option>
-                                  </select>
-                                </td>
-                                <td className="py-2 px-4 text-right">
-                                  <select
-                                    value={stockLocalFilter}
-                                    onChange={(e) => {
-                                      setStockLocalFilter(e.target.value);
-                                      setStockPage(1);
-                                    }}
-                                    className="w-full min-w-[70px] max-w-[90px] ml-auto px-1 py-1 text-[10px] font-semibold bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-md focus:outline-hidden text-slate-700 dark:text-zinc-300 normal-case"
-                                  >
-                                    <option value="all">Todos</option>
-                                    <option value="hasPrice">Con Precio</option>
-                                    <option value="noPrice">Sin Precio</option>
-                                  </select>
-                                </td>
-                                <td className="py-2 px-4 text-right">
-                                  <select
-                                    value={stockMlFilter}
-                                    onChange={(e) => {
-                                      setStockMlFilter(e.target.value);
-                                      setStockPage(1);
-                                    }}
-                                    className="w-full min-w-[70px] max-w-[90px] ml-auto px-1 py-1 text-[10px] font-semibold bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-md focus:outline-hidden text-slate-700 dark:text-zinc-300 normal-case"
-                                  >
-                                    <option value="all">Todos</option>
-                                    <option value="hasPriceML">Con Precio</option>
-                                    <option value="noPriceML">Sin Precio</option>
-                                  </select>
-                                </td>
-                                <td className="py-2 px-4 text-right text-[10px] text-zinc-400 font-mono">
-                                  -
-                                </td>
-                                <td className="py-2 px-4 text-center">
-                                  <select
-                                    value={stockMvdFilter}
-                                    onChange={(e) => {
-                                      setStockMvdFilter(e.target.value);
-                                      setStockPage(1);
-                                    }}
-                                    className="w-full min-w-[80px] max-w-[100px] mx-auto px-1 py-1 text-[10px] font-semibold bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-md focus:outline-hidden text-slate-700 dark:text-zinc-300 normal-case"
-                                  >
-                                    <option value="all">Todos</option>
-                                    <option value="out">Sin Stock</option>
-                                    <option value="low">Stock Bajo</option>
-                                    <option value="ok">Saludable</option>
-                                  </select>
-                                </td>
-                                <td className="py-2 px-4 text-center">
-                                  <select
-                                    value={stockPinFilter}
-                                    onChange={(e) => {
-                                      setStockPinFilter(e.target.value);
-                                      setStockPage(1);
-                                    }}
-                                    className="w-full min-w-[80px] max-w-[100px] mx-auto px-1 py-1 text-[10px] font-semibold bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-md focus:outline-hidden text-slate-700 dark:text-zinc-300 normal-case"
-                                  >
-                                    <option value="all">Todos</option>
-                                    <option value="out">Sin Stock</option>
-                                    <option value="low">Stock Bajo</option>
-                                    <option value="ok">Saludable</option>
-                                  </select>
-                                </td>
-                              </tr>
+
                             </thead>
                             <tbody className="divide-y divide-slate-150 dark:divide-zinc-850">
                               {paginatedItems.length === 0 ? (
@@ -14295,6 +14171,21 @@ const resText = await uploadRes.text();
             </div>
             <span className="text-[9px] font-extrabold uppercase tracking-widest text-zinc-400">Carrito</span>
           </button>
+        </div>
+      )}
+
+      {cloudinarySelectorConfig?.isOpen && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-[99999] p-4 animate-fade-in">
+          <div className="w-full max-w-5xl h-[85vh] flex flex-col rounded-2xl overflow-hidden shadow-2xl">
+            <CloudinaryExplorer
+              selectMode={true}
+              onSelectFile={(url) => {
+                cloudinarySelectorConfig.onSelect(url);
+                setCloudinarySelectorConfig(null);
+              }}
+              onClose={() => setCloudinarySelectorConfig(null)}
+            />
+          </div>
         </div>
       )}
 

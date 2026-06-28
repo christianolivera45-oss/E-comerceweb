@@ -110,6 +110,7 @@ import GoogleReviewsCompact from "./components/GoogleReviewsCompact";
 import AddToCartModal from "./components/AddToCartModal";
 import CloudinaryExplorer from "./components/CloudinaryExplorer";
 import CommaSeparatedInput from "./components/CommaSeparatedInput";
+import VariantImagePicker from "./components/VariantImagePicker";
 import { FolderOpen } from "lucide-react";
 
 
@@ -7875,15 +7876,8 @@ export default function App() {
                                       type="text"
                                       placeholder="Código / SKU"
                                       value={v.sku || ""}
-                                      onChange={(e) => {
-                                        const nextArr = JSON.parse(JSON.stringify(newProduct.variants || []));
-                                        nextArr[i].sku = e.target.value.trim().toUpperCase();
-                                        setNewProduct(updateProductCalculations({
-                                          ...newProduct,
-                                          variants: nextArr
-                                        }));
-                                      }}
-                                      className="w-44 px-2 py-0.5 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none uppercase text-slate-950 dark:text-zinc-50 focus:ring-1 focus:ring-indigo-500"
+                                      readOnly
+                                      className="w-44 px-2 py-0.5 bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none uppercase text-slate-500 dark:text-zinc-400 cursor-not-allowed"
                                     />
                                   </td>
                                   <td className="p-2">
@@ -7950,127 +7944,19 @@ export default function App() {
                                     </div>
                                   </td>
                                   <td className="p-2">
-                                                                        {(() => {
-                                      const galleryImages = [newProduct.imageUrl, ...(newProduct.imagenes || [])].filter(Boolean);
-                                      return (
-                                        <div className="flex flex-col gap-1 max-w-[170px]">
-                                          {galleryImages.length > 0 ? (
-                                            <select
-                                              value={galleryImages.includes(v.imageUrl || "") ? v.imageUrl : (v.imageUrl ? "manual" : "")}
-                                              onChange={(e) => {
-                                                const val = e.target.value;
-                                                const nextArr = JSON.parse(JSON.stringify(newProduct.variants || []));
-                                                if (val === "manual") {
-                                                  if (galleryImages.includes(v.imageUrl || "")) {
-                                                    nextArr[i].imageUrl = "";
-                                                  }
-                                                } else {
-                                                  nextArr[i].imageUrl = val;
-                                                }
-                                                setNewProduct({
-                                                  ...newProduct,
-                                                  variants: nextArr
-                                                });
-                                              }}
-                                              className="px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-205 dark:border-zinc-800 rounded text-[11px] outline-none w-full text-slate-800 dark:text-zinc-200"
-                                            >
-                                              <option value="">-- Sin foto --</option>
-                                              {galleryImages.map((img, imgIdx) => (
-                                                <option key={imgIdx} value={img}>
-                                                  {imgIdx === 0 ? "Foto Principal" : `Foto Adicional ${imgIdx}`}
-                                                </option>
-                                              ))}
-                                              <option value="manual">Otro (Insertar URL)...</option>
-                                            </select>
-                                          ) : null}
-
-                                          {(galleryImages.length === 0 || !v.imageUrl || !galleryImages.includes(v.imageUrl)) && (
-                                            <div className="space-y-1">
-                                              <input
-                                                type="text"
-                                                placeholder="URL de foto..."
-                                                value={v.imageUrl || ""}
-                                                onChange={(e) => {
-                                                  const nextArr = JSON.parse(JSON.stringify(newProduct.variants || []));
-                                                  nextArr[i].imageUrl = e.target.value.trim();
-                                                  setNewProduct({
-                                                    ...newProduct,
-                                                    variants: nextArr
-                                                  });
-                                                }}
-                                                className="w-full px-1.5 py-0.5 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded text-[10px] outline-none font-mono text-slate-950 dark:text-zinc-50"
-                                              />
-                                              <div className="flex items-center gap-1 mt-1">
-                                                <span className="text-[8px] text-zinc-400 font-bold uppercase shrink-0">Subir:</span>
-                                                <input
-                                                  type="file"
-                                                  accept="image/*"
-                                                  onChange={async (e) => {
-                                                    if (e.target.files && e.target.files[0]) {
-                                                      const file = e.target.files[0];
-                                                      const formData = new FormData();
-                                                      formData.append("image", file);
-                                                      try {
-                                                        const uploadRes = await fetch("/api/cloudinary/upload", {
-                                                          method: "POST",
-                                                          headers: {
-                                                            "Authorization": `Bearer ${localStorage.getItem("apex_admin_token") || ""}`
-                                                          },
-                                                          body: formData,
-                                                        });
-const resText = await uploadRes.text();
-                                                        let parsedData: any = null;
-                                                        
-                                                        if (resText.trim().startsWith("<!doctype") || resText.trim().startsWith("<html")) {
-                                                          alert("El servidor no pudo subir la imagen. Por favor, verifica que Cloudinary esté configurado en tus Ajustes o reinicia el servidor.");
-                                                          return;
-                                                        }
-                                                        
-                                                        try {
-                                                          parsedData = JSON.parse(resText);
-                                                        } catch (pErr) {
-                                                          console.error("Error al parsear respuesta JSON:", pErr);
-                                                        }
-
-                                                        if (uploadRes.ok && parsedData && parsedData.success && parsedData.url) {
-                                                          const nextArr = JSON.parse(JSON.stringify(newProduct.variants || []));
-                                                          nextArr[i].imageUrl = parsedData.url;
-                                                          setNewProduct({
-                                                            ...newProduct,
-                                                            variants: nextArr
-                                                          });
-                                                          showToast("¡Imagen de variante cargada con éxito! 🛍️", "success");
-                                                        } else {
-                                                          showToast((parsedData && parsedData.message) || "Error al subir a Cloudinary.", "error");
-                                                        }
-                                                      } catch (err) {
-                                                        console.error(err);
-                                                        showToast("Error al conectar con la API de subida.", "error");
-                                                      }
-                                                    }
-                                                  }}
-                                                  className="w-full text-[8px] text-zinc-500 dark:text-zinc-400 file:mr-1 file:py-0.5 file:px-1 file:rounded file:border-0 file:text-[8px] file:font-semibold file:bg-zinc-100 dark:file:bg-zinc-800 file:text-zinc-700 dark:file:text-zinc-300 hover:file:opacity-80 cursor-pointer"
-                                                />
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          {!!v.imageUrl && (
-                                            <div className="flex items-center gap-1 mt-0.5 bg-slate-100/40 dark:bg-zinc-900/40 p-1 rounded border border-slate-200/50 dark:border-zinc-800/30">
-                                              <img 
-                                                src={v.imageUrl || null} 
-                                                alt="preview" 
-                                                className="w-6 h-6 object-cover rounded border border-zinc-700/20 shadow-xs shrink-0" 
-                                                onError={(e) => { e.target.style.display = 'none'; }} 
-                                              />
-                                              <span className="text-[9px] text-zinc-500 truncate max-w-[110px]" title={v.imageUrl}>
-                                                {v.imageUrl.includes('/') ? v.imageUrl.substring(v.imageUrl.lastIndexOf('/') + 1) : v.imageUrl}
-                                              </span>
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                    })()}
+                                    <VariantImagePicker
+                                      galleryImages={[newProduct.imageUrl, ...(newProduct.imagenes || [])].filter(Boolean)}
+                                      selectedUrl={v.imageUrl || ""}
+                                      onChange={(url) => {
+                                        const nextArr = JSON.parse(JSON.stringify(newProduct.variants || []));
+                                        nextArr[i].imageUrl = url;
+                                        setNewProduct({
+                                          ...newProduct,
+                                          variants: nextArr
+                                        });
+                                      }}
+                                      showToast={showToast}
+                                    />
                                   </td>
                                   <td className="p-2 text-right">
                                     <button
@@ -9390,15 +9276,8 @@ const resText = await uploadRes.text();
                                       type="text"
                                       placeholder="Código / SKU"
                                       value={v.sku || ""}
-                                      onChange={(e) => {
-                                        const nextArr = JSON.parse(JSON.stringify(editingProduct.variants || []));
-                                        nextArr[i].sku = e.target.value.trim().toUpperCase();
-                                        setEditingProduct(updateProductCalculations({
-                                          ...editingProduct,
-                                          variants: nextArr
-                                        }) as Product);
-                                      }}
-                                      className="w-44 px-2 py-0.5 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none uppercase text-slate-950 dark:text-zinc-50 focus:ring-1 focus:ring-indigo-500"
+                                      readOnly
+                                      className="w-44 px-2 py-0.5 bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded font-mono font-bold text-xs outline-none uppercase text-slate-500 dark:text-zinc-400 cursor-not-allowed"
                                     />
                                   </td>
                                   <td className="p-2">
@@ -9465,127 +9344,19 @@ const resText = await uploadRes.text();
                                     </div>
                                   </td>
                                   <td className="p-2">
-                                                                        {(() => {
-                                      const galleryImages = [editingProduct.imageUrl, ...(editingProduct.imagenes || [])].filter(Boolean);
-                                      return (
-                                        <div className="flex flex-col gap-1 max-w-[170px]">
-                                          {galleryImages.length > 0 ? (
-                                            <select
-                                              value={galleryImages.includes(v.imageUrl || "") ? v.imageUrl : (v.imageUrl ? "manual" : "")}
-                                              onChange={(e) => {
-                                                const val = e.target.value;
-                                                const nextArr = JSON.parse(JSON.stringify(editingProduct.variants || []));
-                                                if (val === "manual") {
-                                                  if (galleryImages.includes(v.imageUrl || "")) {
-                                                    nextArr[i].imageUrl = "";
-                                                  }
-                                                } else {
-                                                  nextArr[i].imageUrl = val;
-                                                }
-                                                setEditingProduct({
-                                                  ...editingProduct,
-                                                  variants: nextArr
-                                                });
-                                              }}
-                                              className="px-1.5 py-0.5 bg-slate-50 dark:bg-zinc-900 border border-slate-205 dark:border-zinc-800 rounded text-[11px] outline-none w-full text-slate-800 dark:text-zinc-200"
-                                            >
-                                              <option value="">-- Sin foto --</option>
-                                              {galleryImages.map((img, imgIdx) => (
-                                                <option key={imgIdx} value={img}>
-                                                  {imgIdx === 0 ? "Foto Principal" : `Foto Adicional ${imgIdx}`}
-                                                </option>
-                                              ))}
-                                              <option value="manual">Otro (Insertar URL)...</option>
-                                            </select>
-                                          ) : null}
-
-                                          {(galleryImages.length === 0 || !v.imageUrl || !galleryImages.includes(v.imageUrl)) && (
-                                            <div className="space-y-1">
-                                              <input
-                                                type="text"
-                                                placeholder="URL de foto..."
-                                                value={v.imageUrl || ""}
-                                                onChange={(e) => {
-                                                  const nextArr = JSON.parse(JSON.stringify(editingProduct.variants || []));
-                                                  nextArr[i].imageUrl = e.target.value.trim();
-                                                  setEditingProduct({
-                                                    ...editingProduct,
-                                                    variants: nextArr
-                                                  });
-                                                }}
-                                                className="w-full px-1.5 py-0.5 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded text-[10px] outline-none font-mono text-slate-950 dark:text-zinc-50"
-                                              />
-                                              <div className="flex items-center gap-1 mt-1">
-                                                <span className="text-[8px] text-zinc-400 font-bold uppercase shrink-0">Subir:</span>
-                                                <input
-                                                  type="file"
-                                                  accept="image/*"
-                                                  onChange={async (e) => {
-                                                    if (e.target.files && e.target.files[0]) {
-                                                      const file = e.target.files[0];
-                                                      const formData = new FormData();
-                                                      formData.append("image", file);
-                                                      try {
-                                                        const uploadRes = await fetch("/api/cloudinary/upload", {
-                                                          method: "POST",
-                                                          headers: {
-                                                            "Authorization": `Bearer ${localStorage.getItem("apex_admin_token") || ""}`
-                                                          },
-                                                          body: formData,
-                                                        });
-const resText = await uploadRes.text();
-                                                        let parsedData: any = null;
-                                                        
-                                                        if (resText.trim().startsWith("<!doctype") || resText.trim().startsWith("<html")) {
-                                                          alert("El servidor no pudo subir la imagen. Por favor, verifica que Cloudinary esté configurado en tus Ajustes o reinicia el servidor.");
-                                                          return;
-                                                        }
-                                                        
-                                                        try {
-                                                          parsedData = JSON.parse(resText);
-                                                        } catch (pErr) {
-                                                          console.error("Error al parsear respuesta JSON:", pErr);
-                                                        }
-
-                                                        if (uploadRes.ok && parsedData && parsedData.success && parsedData.url) {
-                                                          const nextArr = JSON.parse(JSON.stringify(editingProduct.variants || []));
-                                                          nextArr[i].imageUrl = parsedData.url;
-                                                          setEditingProduct({
-                                                            ...editingProduct,
-                                                            variants: nextArr
-                                                          });
-                                                          showToast("¡Imagen de variante cargada con éxito! 🛍️", "success");
-                                                        } else {
-                                                          showToast((parsedData && parsedData.message) || "Error al subir a Cloudinary.", "error");
-                                                        }
-                                                      } catch (err) {
-                                                        console.error(err);
-                                                        showToast("Error al conectar con la API de subida.", "error");
-                                                      }
-                                                    }
-                                                  }}
-                                                  className="w-full text-[8px] text-zinc-500 dark:text-zinc-400 file:mr-1 file:py-0.5 file:px-1 file:rounded file:border-0 file:text-[8px] file:font-semibold file:bg-zinc-100 dark:file:bg-zinc-800 file:text-zinc-700 dark:file:text-zinc-300 hover:file:opacity-80 cursor-pointer"
-                                                />
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          {!!v.imageUrl && (
-                                            <div className="flex items-center gap-1 mt-0.5 bg-slate-100/40 dark:bg-zinc-900/40 p-1 rounded border border-slate-200/50 dark:border-zinc-800/30">
-                                              <img 
-                                                src={v.imageUrl || null} 
-                                                alt="preview" 
-                                                className="w-6 h-6 object-cover rounded border border-zinc-700/20 shadow-xs shrink-0" 
-                                                onError={(e) => { e.target.style.display = 'none'; }} 
-                                              />
-                                              <span className="text-[9px] text-zinc-500 truncate max-w-[110px]" title={v.imageUrl}>
-                                                {v.imageUrl.includes('/') ? v.imageUrl.substring(v.imageUrl.lastIndexOf('/') + 1) : v.imageUrl}
-                                              </span>
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                    })()}
+                                    <VariantImagePicker
+                                      galleryImages={[editingProduct.imageUrl, ...(editingProduct.imagenes || [])].filter(Boolean)}
+                                      selectedUrl={v.imageUrl || ""}
+                                      onChange={(url) => {
+                                        const nextArr = JSON.parse(JSON.stringify(editingProduct.variants || []));
+                                        nextArr[i].imageUrl = url;
+                                        setEditingProduct({
+                                          ...editingProduct,
+                                          variants: nextArr
+                                        });
+                                      }}
+                                      showToast={showToast}
+                                    />
                                   </td>
                                   <td className="p-2 text-right">
                                     <button

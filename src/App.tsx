@@ -111,6 +111,7 @@ import AddToCartModal from "./components/AddToCartModal";
 import CloudinaryExplorer from "./components/CloudinaryExplorer";
 import CommaSeparatedInput from "./components/CommaSeparatedInput";
 import VariantImagePicker from "./components/VariantImagePicker";
+import ComboComponentsBuilder from "./components/ComboComponentsBuilder";
 import { FolderOpen } from "lucide-react";
 
 
@@ -791,9 +792,175 @@ function deductProductsStockClient(products: any[], items: any[], dep: string): 
   });
 }
 
+function recalculateComboStocks(productsList: Product[]): Product[] {
+  return productsList.map(prod => {
+    if (!prod.isCombo) return prod;
+    
+    const comboComponents = prod.comboComponents || [];
+    if (comboComponents.length === 0) {
+      return {
+        ...prod,
+        stockPinamar: 0,
+        stockMontevideo: 0,
+        stockTotalActual: 0,
+        stock: 0,
+        variants: (prod.variants || []).map(v => ({ ...v, stockPinamar: 0, stockMontevideo: 0, stock: 0, stockTotalActual: 0 }))
+      };
+    }
+    
+    // For each variant defined in the combo:
+    const updatedVariants = (prod.variants || []).map(variant => {
+      const variantColor = variant.color;
+      const variantSize = variant.size;
+      
+      let minPin = Infinity;
+      let minMvd = Infinity;
+      
+      for (const comp of comboComponents) {
+        // If the component is associated with a specific color of the combo, and this variant is NOT of that color, skip it
+        if (comp.comboColor && variantColor && comp.comboColor.toLowerCase().trim() !== variantColor.toLowerCase().trim()) {
+          continue;
+        }
+        // If the component is associated with a specific size of the combo, and this variant is NOT of that size, skip it
+        if (comp.comboSize && variantSize && comp.comboSize.toLowerCase().trim() !== variantSize.toLowerCase().trim()) {
+          continue;
+        }
+        
+        const compProd = productsList.find(p => String(p.id) === String(comp.productId));
+        if (!compProd) {
+          minPin = 0;
+          minMvd = 0;
+          break;
+        }
+        
+        let compPin = 0;
+        let compMvd = 0;
+        
+        if (comp.variantId) {
+          let matchVar = compProd.variants?.find(v => String(v.id) === String(comp.variantId));
+          if (!matchVar && comp.comboColor) {
+            const searchColor = comp.comboColor.toLowerCase().trim();
+            matchVar = compProd.variants?.find((v: any) => {
+              const vColor = (v.color || "").toLowerCase().trim();
+              return vColor === searchColor || 
+                     vColor.includes(searchColor) || 
+                     searchColor.includes(vColor) ||
+                     (searchColor.substring(0, 3) === vColor.substring(0, 3));
+            });
+          }
+          if (matchVar) {
+            compPin = matchVar.stockPinamar !== undefined ? matchVar.stockPinamar : (matchVar.stock || 0);
+            compMvd = matchVar.stockMontevideo !== undefined ? matchVar.stockMontevideo : 0;
+          }
+        } else {
+          if (compProd.variants && compProd.variants.length > 0) {
+            compPin = compProd.variants.reduce((sum, v) => sum + (v.stockPinamar !== undefined ? v.stockPinamar : (v.stock || 0)), 0);
+            compMvd = compProd.variants.reduce((sum, v) => sum + (v.stockMontevideo !== undefined ? v.stockMontevideo : 0), 0);
+          } else {
+            compPin = compProd.stockPinamar !== undefined ? compProd.stockPinamar : (compProd.stock || 0);
+            compMvd = compProd.stockMontevideo !== undefined ? compProd.stockMontevideo : 0;
+          }
+        }
+        
+        const reqQty = Number(comp.quantity) || 1;
+        const pinAvail = Math.floor(compPin / reqQty);
+        const mvdAvail = Math.floor(compMvd / reqQty);
+        
+        if (pinAvail < minPin) minPin = pinAvail;
+        if (mvdAvail < minMvd) minMvd = mvdAvail;
+      }
+      
+      const pinStock = minPin === Infinity ? 0 : Math.max(0, minPin);
+      const mvdStock = minMvd === Infinity ? 0 : Math.max(0, minMvd);
+      const totalStock = pinStock + mvdStock;
+      
+      return {
+        ...variant,
+        stockPinamar: pinStock,
+        stockMontevideo: mvdStock,
+        stock: totalStock,
+        stockTotalActual: totalStock
+      };
+    });
+    
+    // Compute base product stock.
+    // If the combo has variants, the base stock is the sum of all its variants' stocks!
+    // If it doesn't have variants, calculate based on all components.
+    let basePin = 0;
+    let baseMvd = 0;
+    
+    if (updatedVariants.length > 0) {
+      basePin = updatedVariants.reduce((sum, v) => sum + (v.stockPinamar || 0), 0);
+      baseMvd = updatedVariants.reduce((sum, v) => sum + (v.stockMontevideo || 0), 0);
+    } else {
+      let minPin = Infinity;
+      let minMvd = Infinity;
+      
+      for (const comp of comboComponents) {
+        const compProd = productsList.find(p => String(p.id) === String(comp.productId));
+        if (!compProd) {
+          minPin = 0;
+          minMvd = 0;
+          break;
+        }
+        
+        let compPin = 0;
+        let compMvd = 0;
+        
+        if (comp.variantId) {
+          let matchVar = compProd.variants?.find(v => String(v.id) === String(comp.variantId));
+          if (!matchVar && comp.comboColor) {
+            const searchColor = comp.comboColor.toLowerCase().trim();
+            matchVar = compProd.variants?.find((v: any) => {
+              const vColor = (v.color || "").toLowerCase().trim();
+              return vColor === searchColor || 
+                     vColor.includes(searchColor) || 
+                     searchColor.includes(vColor) ||
+                     (searchColor.substring(0, 3) === vColor.substring(0, 3));
+            });
+          }
+          if (matchVar) {
+            compPin = matchVar.stockPinamar !== undefined ? matchVar.stockPinamar : (matchVar.stock || 0);
+            compMvd = matchVar.stockMontevideo !== undefined ? matchVar.stockMontevideo : 0;
+          }
+        } else {
+          if (compProd.variants && compProd.variants.length > 0) {
+            compPin = compProd.variants.reduce((sum, v) => sum + (v.stockPinamar !== undefined ? v.stockPinamar : (v.stock || 0)), 0);
+            compMvd = compProd.variants.reduce((sum, v) => sum + (v.stockMontevideo !== undefined ? v.stockMontevideo : 0), 0);
+          } else {
+            compPin = compProd.stockPinamar !== undefined ? compProd.stockPinamar : (compProd.stock || 0);
+            compMvd = compProd.stockMontevideo !== undefined ? compProd.stockMontevideo : 0;
+          }
+        }
+        
+        const reqQty = Number(comp.quantity) || 1;
+        const pinAvail = Math.floor(compPin / reqQty);
+        const mvdAvail = Math.floor(compMvd / reqQty);
+        
+        if (pinAvail < minPin) minPin = pinAvail;
+        if (mvdAvail < minMvd) minMvd = mvdAvail;
+      }
+      
+      basePin = minPin === Infinity ? 0 : Math.max(0, minPin);
+      baseMvd = minMvd === Infinity ? 0 : Math.max(0, minMvd);
+    }
+    
+    const baseTotal = basePin + baseMvd;
+    
+    return {
+      ...prod,
+      stockPinamar: basePin,
+      stockMontevideo: baseMvd,
+      stockTotalActual: baseTotal,
+      stock: baseTotal,
+      variants: updatedVariants
+    };
+  });
+}
+
 export default function App() {
   // Store state loaded from api
-  const [store, setStore] = useState<ShopState>({
+  const [store, setStoreRaw] = useState<ShopState>({
     products: [],
     categories: ["Ropa", "Artículos electrónicos", "Accesorios", "Hogar"],
     dbCategories: [
@@ -816,6 +983,16 @@ export default function App() {
     ],
     settings: DEFAULT_SETTINGS
   });
+
+  const setStore = (val: ShopState | ((prev: ShopState) => ShopState)) => {
+    setStoreRaw(prev => {
+      const resolved = typeof val === "function" ? val(prev) : val;
+      if (resolved && resolved.products) {
+        resolved.products = recalculateComboStocks(resolved.products);
+      }
+      return resolved;
+    });
+  };
 
   // Client statuses
   const [loading, setLoading] = useState(true);
@@ -846,7 +1023,7 @@ export default function App() {
   const [cloudinarySelectorConfig, setCloudinarySelectorConfig] = useState<{ isOpen: boolean; onSelect: (url: string) => void } | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>("todos");
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>("all");
-  const [showAllProductsFlat, setShowAllProductsFlat] = useState<boolean>(true);
+  const [showAllProductsFlat, setShowAllProductsFlat] = useState<boolean>(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [scrolled, setScrolled] = useState(false);
@@ -1007,6 +1184,7 @@ export default function App() {
     if (segments.length === 0) {
       setSelectedCategory("todos");
       setSelectedSubcategory("all");
+      setShowAllProductsFlat(false);
       return;
     }
 
@@ -1030,6 +1208,7 @@ export default function App() {
     } else {
       setSelectedCategory("todos");
       setSelectedSubcategory("all");
+      setShowAllProductsFlat(false);
     }
   };
 
@@ -1123,6 +1302,7 @@ export default function App() {
   const [adminProductCategoryFilter, setAdminProductCategoryFilter] = useState("all");
   const [adminProductStockFilter, setAdminProductStockFilter] = useState("all"); // 'all', 'instock', 'outofstock'
   const [adminProductStatusFilter, setAdminProductStatusFilter] = useState("all"); // 'all', 'active', 'paused'
+  const [adminProductsPage, setAdminProductsPage] = useState<number>(1);
 
   const [newProductStep, setNewProductStep] = useState(1);
   const [editingProductStep, setEditingProductStep] = useState(1);
@@ -1257,8 +1437,221 @@ export default function App() {
   const [subToDeleteId, setSubToDeleteId] = useState<string | null>(null);
   const [adminToast, setAdminToast] = useState<{ text: string; type: "success" | "error" | "neutral" } | null>(null);
 
+  const displayProducts = useMemo(() => {
+    const raw = store.products || [];
+    return raw.map(p => {
+      if (p.isCombo) {
+        let minPin = Infinity;
+        let minMvd = Infinity;
+        const comps = p.comboComponents || [];
+        for (const comp of comps) {
+          const compProd = raw.find(cp => String(cp.id) === String(comp.productId));
+          if (!compProd) {
+            minPin = 0;
+            minMvd = 0;
+            break;
+          }
+          let compPin = 0;
+          let compMvd = 0;
+          if (comp.variantId) {
+            const matchVar = compProd.variants?.find(v => String(v.id) === String(comp.variantId));
+            if (matchVar) {
+              compPin = matchVar.stockPinamar !== undefined ? matchVar.stockPinamar : (matchVar.stock || 0);
+              compMvd = matchVar.stockMontevideo !== undefined ? matchVar.stockMontevideo : 0;
+            }
+          } else {
+            if (compProd.variants && compProd.variants.length > 0) {
+              compPin = compProd.variants.reduce((sum, v) => sum + (v.stockPinamar !== undefined ? v.stockPinamar : (v.stock || 0)), 0);
+              compMvd = compProd.variants.reduce((sum, v) => sum + (v.stockMontevideo !== undefined ? v.stockMontevideo : 0), 0);
+            } else {
+              compPin = compProd.stockPinamar !== undefined ? compProd.stockPinamar : (compProd.stock || 0);
+              compMvd = compProd.stockMontevideo !== undefined ? compProd.stockMontevideo : 0;
+            }
+          }
+          const reqQty = Number(comp.quantity) || 1;
+          const pinAvail = Math.floor(compPin / reqQty);
+          const mvdAvail = Math.floor(compMvd / reqQty);
+          if (pinAvail < minPin) minPin = pinAvail;
+          if (mvdAvail < minMvd) minMvd = mvdAvail;
+        }
+        const pinStock = minPin === Infinity ? 0 : Math.max(0, minPin);
+        const mvdStock = minMvd === Infinity ? 0 : Math.max(0, minMvd);
+        const totalStock = pinStock + mvdStock;
+        
+        // Also calculate cost dynamically as sum of purchase costs of its components
+        let totalCost = 0;
+        for (const comp of comps) {
+          const compProd = raw.find(cp => String(cp.id) === String(comp.productId));
+          if (compProd) {
+            const purchaseCost = Number(compProd.precioCompra || 0);
+            totalCost += purchaseCost * (Number(comp.quantity) || 1);
+          }
+        }
+        
+        return {
+          ...p,
+          stockPinamar: pinStock,
+          stockMontevideo: mvdStock,
+          stock: totalStock,
+          precioCompra: totalCost,
+          precioCon40: totalCost * 1.40 // Calculate con40 dynamically if needed
+        };
+      }
+      return p;
+    });
+  }, [store.products]);
+
+  const getComboPurchaseCost = (comboComponents: any[]) => {
+    let total = 0;
+    const rawProds = store.products || [];
+    for (const comp of (comboComponents || [])) {
+      const compProd = rawProds.find(cp => String(cp.id) === String(comp.productId));
+      if (compProd) {
+        total += (compProd.precioCompra || 0) * (Number(comp.quantity) || 1);
+      }
+    }
+    return Math.round(total);
+  };
+
+  const getComboDynamicStocks = (comboComponents: any[], productVariants: any[] = []) => {
+    const raw = store.products || [];
+    
+    // Helper to match a component to a variant
+    const matchesVariant = (comp: any, v: any) => {
+      const compColor = comp.comboColor;
+      const compSize = comp.comboSize;
+      
+      // If component is color-specific, it must match the variant color
+      if (compColor && v.color && compColor.toLowerCase().trim() !== v.color.toLowerCase().trim()) {
+        return false;
+      }
+      
+      // If component is size-specific, it must match the variant size
+      const isCompSizeUnique = !compSize || compSize === "Único" || compSize === "Talla Única" || compSize === "Talle Único";
+      const isVarSizeUnique = !v.size || v.size === "Único" || v.size === "Talla Única" || v.size === "Talle Único";
+      
+      if (compSize && !isCompSizeUnique) {
+        if (isVarSizeUnique || !v.size || compSize.toLowerCase().trim() !== v.size.toLowerCase().trim()) {
+          return false;
+        }
+      }
+      
+      return true;
+    };
+
+    if (productVariants && productVariants.length > 0) {
+      let totalPin = 0;
+      let totalMvd = 0;
+      
+      const updatedVariants = productVariants.map((v) => {
+        let minPin = Infinity;
+        let minMvd = Infinity;
+        const matchedComps = (comboComponents || []).filter(comp => matchesVariant(comp, v));
+        
+        if (matchedComps.length === 0) {
+          minPin = 0;
+          minMvd = 0;
+        } else {
+          for (const comp of matchedComps) {
+            const compProd = raw.find(cp => String(cp.id) === String(comp.productId));
+            if (!compProd) {
+              minPin = 0;
+              minMvd = 0;
+              break;
+            }
+            let compPin = 0;
+            let compMvd = 0;
+            if (comp.variantId) {
+              const matchVar = compProd.variants?.find(varObj => String(varObj.id) === String(comp.variantId));
+              if (matchVar) {
+                compPin = matchVar.stockPinamar !== undefined ? matchVar.stockPinamar : (matchVar.stock || 0);
+                compMvd = matchVar.stockMontevideo !== undefined ? matchVar.stockMontevideo : 0;
+              }
+            } else {
+              if (compProd.variants && compProd.variants.length > 0) {
+                compPin = compProd.variants.reduce((sum, v) => sum + (v.stockPinamar !== undefined ? v.stockPinamar : (v.stock || 0)), 0);
+                compMvd = compProd.variants.reduce((sum, v) => sum + (v.stockMontevideo !== undefined ? v.stockMontevideo : 0), 0);
+              } else {
+                compPin = compProd.stockPinamar !== undefined ? compProd.stockPinamar : (compProd.stock || 0);
+                compMvd = compProd.stockMontevideo !== undefined ? compProd.stockMontevideo : 0;
+              }
+            }
+            const reqQty = Number(comp.quantity) || 1;
+            const pinAvail = Math.floor(compPin / reqQty);
+            const mvdAvail = Math.floor(compMvd / reqQty);
+            if (pinAvail < minPin) minPin = pinAvail;
+            if (mvdAvail < minMvd) minMvd = mvdAvail;
+          }
+        }
+        
+        const pinStock = minPin === Infinity ? 0 : Math.max(0, minPin);
+        const mvdStock = minMvd === Infinity ? 0 : Math.max(0, minMvd);
+        
+        totalPin += pinStock;
+        totalMvd += mvdStock;
+        
+        return {
+          ...v,
+          stockPinamar: pinStock,
+          stockMontevideo: mvdStock,
+          stock: pinStock + mvdStock,
+          stockTotalActual: pinStock + mvdStock
+        };
+      });
+      
+      return {
+        stockPinamar: totalPin,
+        stockMontevideo: totalMvd,
+        stockTotal: totalPin + totalMvd,
+        updatedVariants
+      };
+    } else {
+      // If no variants, calculate based on all components
+      let minPin = Infinity;
+      let minMvd = Infinity;
+      for (const comp of (comboComponents || [])) {
+        const compProd = raw.find(cp => String(cp.id) === String(comp.productId));
+        if (!compProd) {
+          minPin = 0;
+          minMvd = 0;
+          break;
+        }
+        let compPin = 0;
+        let compMvd = 0;
+        if (comp.variantId) {
+          const matchVar = compProd.variants?.find(vObj => String(vObj.id) === String(comp.variantId));
+          if (matchVar) {
+            compPin = matchVar.stockPinamar !== undefined ? matchVar.stockPinamar : (matchVar.stock || 0);
+            compMvd = matchVar.stockMontevideo !== undefined ? matchVar.stockMontevideo : 0;
+          }
+        } else {
+          if (compProd.variants && compProd.variants.length > 0) {
+            compPin = compProd.variants.reduce((sum, v) => sum + (v.stockPinamar !== undefined ? v.stockPinamar : (v.stock || 0)), 0);
+            compMvd = compProd.variants.reduce((sum, v) => sum + (v.stockMontevideo !== undefined ? v.stockMontevideo : 0), 0);
+          } else {
+            compPin = compProd.stockPinamar !== undefined ? compProd.stockPinamar : (compProd.stock || 0);
+            compMvd = compProd.stockMontevideo !== undefined ? compProd.stockMontevideo : 0;
+          }
+        }
+        const reqQty = Number(comp.quantity) || 1;
+        const pinAvail = Math.floor(compPin / reqQty);
+        const mvdAvail = Math.floor(compMvd / reqQty);
+        if (pinAvail < minPin) minPin = pinAvail;
+        if (mvdAvail < minMvd) minMvd = mvdAvail;
+      }
+      const pinStock = minPin === Infinity ? 0 : Math.max(0, minPin);
+      const mvdStock = minMvd === Infinity ? 0 : Math.max(0, minMvd);
+      return {
+        stockPinamar: pinStock,
+        stockMontevideo: mvdStock,
+        stockTotal: pinStock + mvdStock,
+        updatedVariants: []
+      };
+    }
+  };
+
   const filteredAdminProducts = useMemo(() => {
-    let filtered = store.products;
+    let filtered = displayProducts;
 
     if (adminProductCategoryFilter !== "all") {
       filtered = filtered.filter(p => p.categoria_id === adminProductCategoryFilter || p.categorias_adicionales?.includes(adminProductCategoryFilter));
@@ -2091,6 +2484,9 @@ export default function App() {
       const res = await fetch("/api/store");
       if (!res.ok) throw new Error("No se pudo obtener la configuración de la tienda");
       const data = (await res.json()) as ShopState;
+      if (data && data.products) {
+        data.products = recalculateComboStocks(data.products);
+      }
       if (data && data.settings) {
         data.settings = { ...DEFAULT_SETTINGS, ...data.settings };
       }
@@ -2511,6 +2907,11 @@ export default function App() {
     // Clear any previous error
     setNewProductErrors({});
 
+    const comboStocks = newProduct.isCombo ? getComboDynamicStocks(newProduct.comboComponents || [], newProduct.variants || []) : { stockPinamar: 0, stockMontevideo: 0, stockTotal: 0, updatedVariants: [] };
+    const finalStockPinamar = newProduct.isCombo ? comboStocks.stockPinamar : Number(newProduct.stockPinamar || 0);
+    const finalStockMontevideo = newProduct.isCombo ? comboStocks.stockMontevideo : Number(newProduct.stockMontevideo || 0);
+    const finalStockTotal = newProduct.isCombo ? comboStocks.stockTotal : Math.floor(Number(newProduct.stock ?? 0));
+
     const created: Product = {
       id: "prod-" + Date.now(),
       codigo: newProduct.codigo || "",
@@ -2524,7 +2925,7 @@ export default function App() {
       categorias_adicionales: newProduct.categorias_adicionales || [],
       subcategorias_adicionales: newProduct.subcategorias_adicionales || [],
       imageUrl: newProduct.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80",
-      stock: Math.floor(Number(newProduct.stock ?? 0)),
+      stock: finalStockTotal,
       featured: !!newProduct.featured,
       is3D: !!newProduct.is3D,
       hoursPerUnit: newProduct.hoursPerUnit,
@@ -2532,8 +2933,10 @@ export default function App() {
       createdAt: new Date().toISOString(),
       sizes: newProduct.sizes || [],
       colors: newProduct.colors || [],
-      variants: newProduct.variants || [],
+      variants: newProduct.isCombo ? comboStocks.updatedVariants : (newProduct.variants || []),
       imagenes: newProduct.imagenes || [],
+      isCombo: !!newProduct.isCombo,
+      comboComponents: newProduct.comboComponents || [],
       
       // Custom internal pricing and branch stock fields
       precioCompra: Number(newProduct.precioCompra || 0),
@@ -2542,9 +2945,9 @@ export default function App() {
       precioVentaML: Number(newProduct.precioVentaML || 0),
       precioWeb: Number(newProduct.precioWeb || 0),
       descuentoPorcentaje: Number(newProduct.descuentoPorcentaje || 0),
-      stockPinamar: Number(newProduct.stockPinamar || 0),
-      stockMontevideo: Number(newProduct.stockMontevideo || 0),
-      stockTotalActual: Number(newProduct.stockTotalActual || 0),
+      stockPinamar: finalStockPinamar,
+      stockMontevideo: finalStockMontevideo,
+      stockTotalActual: finalStockTotal,
 
       sizeChartEnabled: newProduct.sizeChartEnabled !== false,
       sizeChartShowSuperior: newProduct.sizeChartShowSuperior !== false,
@@ -2631,9 +3034,19 @@ export default function App() {
       return;
     }
 
+    let finalProduct = { ...editingProduct };
+    if (editingProduct.isCombo) {
+      const comboStocks = getComboDynamicStocks(editingProduct.comboComponents || [], editingProduct.variants || []);
+      finalProduct.stockPinamar = comboStocks.stockPinamar;
+      finalProduct.stockMontevideo = comboStocks.stockMontevideo;
+      finalProduct.stock = comboStocks.stockTotal;
+      finalProduct.stockTotalActual = comboStocks.stockTotal;
+      finalProduct.variants = comboStocks.updatedVariants;
+    }
+
     const updatedProducts = store.products.map((p) => {
-      if (String(p.id) === String(editingProduct.id)) {
-        return editingProduct;
+      if (String(p.id) === String(finalProduct.id)) {
+        return finalProduct;
       }
       return p;
     });
@@ -2717,13 +3130,13 @@ export default function App() {
           const updatedVariant = { ...v };
 
           if (field === "stockMontevideo") {
-            updatedVariant.stockMontevideo = Math.max(0, parseInt(value) || 0);
+            updatedVariant.stockMontevideo = Math.max(0, Math.round(parseInt(value) || 0));
             updatedVariant.stock = (updatedVariant.stockMontevideo || 0) + (updatedVariant.stockPinamar || 0);
           } else if (field === "stockPinamar") {
-            updatedVariant.stockPinamar = Math.max(0, parseInt(value) || 0);
+            updatedVariant.stockPinamar = Math.max(0, Math.round(parseInt(value) || 0));
             updatedVariant.stock = (updatedVariant.stockMontevideo || 0) + (updatedVariant.stockPinamar || 0);
           } else if (field === "price") {
-            updatedVariant.price = Math.max(0, parseFloat(value) || 0);
+            updatedVariant.price = Math.max(0, Math.round(parseFloat(value) || 0));
           }
           return updatedVariant;
         });
@@ -2734,27 +3147,27 @@ export default function App() {
         updatedProduct.stock = (updatedProduct.variants || []).reduce((sum, v) => sum + (v.stock || 0), 0);
 
         if (field === "precioCompra") {
-          updatedProduct.precioCompra = Math.max(0, parseFloat(value) || 0);
+          updatedProduct.precioCompra = Math.max(0, Math.round(parseFloat(value) || 0));
         } else if (field === "precioVentaML") {
-          updatedProduct.precioVentaML = Math.max(0, parseFloat(value) || 0);
+          updatedProduct.precioVentaML = Math.max(0, Math.round(parseFloat(value) || 0));
         } else if (field === "comisionML") {
-          updatedProduct.comisionML = Math.max(0, parseFloat(value) || 0);
+          updatedProduct.comisionML = Math.max(0, Math.round(parseFloat(value) || 0));
         }
       } else {
         if (field === "stockMontevideo") {
-          updatedProduct.stockMontevideo = Math.max(0, parseInt(value) || 0);
+          updatedProduct.stockMontevideo = Math.max(0, Math.round(parseInt(value) || 0));
           updatedProduct.stock = (updatedProduct.stockMontevideo || 0) + (updatedProduct.stockPinamar || 0);
         } else if (field === "stockPinamar") {
-          updatedProduct.stockPinamar = Math.max(0, parseInt(value) || 0);
+          updatedProduct.stockPinamar = Math.max(0, Math.round(parseInt(value) || 0));
           updatedProduct.stock = (updatedProduct.stockMontevideo || 0) + (updatedProduct.stockPinamar || 0);
         } else if (field === "precioCompra") {
-          updatedProduct.precioCompra = Math.max(0, parseFloat(value) || 0);
+          updatedProduct.precioCompra = Math.max(0, Math.round(parseFloat(value) || 0));
         } else if (field === "price") {
-          updatedProduct.price = Math.max(0, parseFloat(value) || 0);
+          updatedProduct.price = Math.max(0, Math.round(parseFloat(value) || 0));
         } else if (field === "precioVentaML") {
-          updatedProduct.precioVentaML = Math.max(0, parseFloat(value) || 0);
+          updatedProduct.precioVentaML = Math.max(0, Math.round(parseFloat(value) || 0));
         } else if (field === "comisionML") {
-          updatedProduct.comisionML = Math.max(0, parseFloat(value) || 0);
+          updatedProduct.comisionML = Math.max(0, Math.round(parseFloat(value) || 0));
         }
       }
 
@@ -3189,12 +3602,12 @@ export default function App() {
 
   // Business Stock Alerts Logic
   const lowStockThresholdSetting = typeof store.settings?.lowStockThreshold === 'number' ? store.settings.lowStockThreshold : 5;
-  const outOfStockProducts = store.products.filter(p => p.active !== false && p.stock <= 0);
-  const lowStockProducts = store.products.filter(p => p.active !== false && p.stock > 0 && p.stock <= lowStockThresholdSetting);
+  const outOfStockProducts = displayProducts.filter(p => p.active !== false && p.stock <= 0);
+  const lowStockProducts = displayProducts.filter(p => p.active !== false && p.stock > 0 && p.stock <= lowStockThresholdSetting);
   const totalStockAlerts = outOfStockProducts.length + lowStockProducts.length;
 
   // Filtering products for listing
-  const filteredProducts = store.products.filter((p) => {
+  const filteredProducts = displayProducts.filter((p) => {
     if (p.paused || p.active === false) return false;
     
     let matchesSearch = true;
@@ -3285,19 +3698,19 @@ export default function App() {
     return sortedProducts.slice(startIndex, startIndex + itemsPerPage);
   }, [sortedProducts, currentPage]);
 
-  const featuredProducts = store.products.filter((p) => p.featured && !p.paused);
+  const featuredProducts = displayProducts.filter((p) => p.featured && !p.paused);
 
-  const clothingProducts = store.products.filter((p) => {
+  const clothingProducts = displayProducts.filter((p) => {
     const cat = p.category.toLowerCase();
     return cat === "ropa" || cat.includes("vest") || cat.includes("calza") || cat.includes("prend") || cat.includes("buzo") || cat.includes("abrigo") || cat.includes("jean") || cat.includes("remera") || cat.includes("panta");
   });
 
-  const electronicsProducts = store.products.filter((p) => {
+  const electronicsProducts = displayProducts.filter((p) => {
     const cat = p.category.toLowerCase();
     return cat === "artículos electrónicos" || cat === "electrónica" || cat.includes("electron") || cat.includes("tecnol");
   });
 
-  const otherProducts = store.products.filter((p) => {
+  const otherProducts = displayProducts.filter((p) => {
     const cat = p.category.toLowerCase();
     const isCloth = cat === "ropa" || cat.includes("vest") || cat.includes("calza") || cat.includes("prend") || cat.includes("buzo") || cat.includes("abrigo") || cat.includes("jean") || cat.includes("remera") || cat.includes("panta");
     const isElec = cat === "artículos electrónicos" || cat === "electrónica" || cat.includes("electron") || cat.includes("tecnol");
@@ -6540,158 +6953,220 @@ export default function App() {
                 )}
 
                 {/* 2. CHOOSE CAT LIST FOR PRODUCTS EDITOR */}
-                {adminSection === "products" && !isNewProductMode && !editingProduct && (
-                  <div className="space-y-4">
-                    
-                    {/* Catalog management header & metrics */}
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm text-center">
-                        <span className="text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase">Total Productos</span>
-                        <p className="text-xl font-bold font-mono text-slate-900 dark:text-white mt-1">{store.products.length}</p>
-                      </div>
-                      <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm text-center">
-                        <span className="text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase">Sin Stock</span>
-                        <p className="text-xl font-bold font-mono text-red-500 mt-1">
-                          {store.products.filter(p => p.stock <= 0).length}
-                        </p>
-                      </div>
-                      <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm text-center">
-                        <span className="text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase">Destacados</span>
-                        <p className="text-xl font-bold font-mono text-yellow-500 mt-1">
-                          {store.products.filter(p => p.featured).length}
-                        </p>
-                      </div>
-                    </div>
+                {adminSection === "products" && !isNewProductMode && !editingProduct && (() => {
+                  const itemsPerPageAdmin = 10;
+                  const totalPagesAdmin = Math.ceil(filteredAdminProducts.length / itemsPerPageAdmin) || 1;
+                  const safePageAdmin = Math.min(adminProductsPage, totalPagesAdmin);
+                  const startIndexAdmin = (safePageAdmin - 1) * itemsPerPageAdmin;
+                  const paginatedAdminProducts = filteredAdminProducts.slice(startIndexAdmin, startIndexAdmin + itemsPerPageAdmin);
 
-                    {/* Products Grid list detail for editor quick action */}
-                    <div className="bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm overflow-hidden">
-                      <div className="p-4 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between">
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500">Listado de Artículos</h4>
-                        <span className="text-[10px] font-mono text-zinc-400">Total: {store.products.length} productos</span>
+                  return (
+                    <div className="space-y-4">
+                      
+                      {/* Catalog management header & metrics */}
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm text-center">
+                          <span className="text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase">Total Productos</span>
+                          <p className="text-xl font-bold font-mono text-slate-900 dark:text-white mt-1">{store.products.length}</p>
+                        </div>
+                        <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm text-center">
+                          <span className="text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase">Sin Stock</span>
+                          <p className="text-xl font-bold font-mono text-red-500 mt-1">
+                            {store.products.filter(p => p.stock <= 0).length}
+                          </p>
+                        </div>
+                        <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm text-center">
+                          <span className="text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase">Destacados</span>
+                          <p className="text-xl font-bold font-mono text-yellow-500 mt-1">
+                            {store.products.filter(p => p.featured).length}
+                          </p>
+                        </div>
                       </div>
 
-                      {/* Search Bar & Advanced Filters for Admin Catalog */}
-                      <div className="p-4 bg-slate-50 dark:bg-zinc-900/40 border-b border-slate-100 dark:border-zinc-800 space-y-3">
-                        <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
-                          <div className="relative w-full md:max-w-md">
-                            <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                              <Search className="h-4 w-4 text-slate-400" />
-                            </span>
-                            <input
-                              type="text"
-                              value={adminProductSearchQuery}
-                              onChange={(e) => setNewProductErrors({}) || setAdminProductSearchQuery(e.target.value)}
-                              placeholder="Buscar por nombre, código base, descripción o SKU de variante..."
-                              className="block w-full pl-9 pr-8 py-1.5 text-xs bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-slate-900 dark:text-zinc-100 placeholder-slate-450 focus:outline-none focus:ring-1 focus:ring-[#5346ff]"
-                            />
-                            {adminProductSearchQuery && (
-                              <button
-                                type="button"
-                                onClick={() => setAdminProductSearchQuery("")}
-                                className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-400 hover:text-zinc-650 cursor-pointer"
-                              >
-                                <span className="text-[10px]">✕ Llimpiar</span>
-                              </button>
-                            )}
-                          </div>
+                      {/* Products Grid list detail for editor quick action */}
+                      <div className="bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+                        <div className="p-4 border-b border-slate-100 dark:border-zinc-800 flex items-center justify-between">
+                          <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500">Listado de Artículos</h4>
+                          <span className="text-[10px] font-mono text-zinc-400">Total: {store.products.length} productos</span>
+                        </div>
 
-                          <div className="text-[10px] text-zinc-400 font-semibold font-mono self-end">
-                            Mostrando: <span className="text-white bg-zinc-805 dark:bg-zinc-800 px-1.5 py-0.5 rounded">{filteredAdminProducts.length}</span> de {store.products.length} productos
+                        {/* Search Bar & Advanced Filters for Admin Catalog */}
+                        <div className="p-4 bg-slate-50 dark:bg-zinc-900/40 border-b border-slate-100 dark:border-zinc-800 space-y-3">
+                          <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
+                            <div className="relative w-full md:max-w-md">
+                              <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                <Search className="h-4 w-4 text-slate-400" />
+                              </span>
+                              <input
+                                type="text"
+                                value={adminProductSearchQuery}
+                                onChange={(e) => {
+                                  setNewProductErrors({});
+                                  setAdminProductSearchQuery(e.target.value);
+                                  setAdminProductsPage(1);
+                                }}
+                                placeholder="Buscar por nombre, código base, descripción o SKU de variante..."
+                                className="block w-full pl-9 pr-8 py-1.5 text-xs bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-slate-900 dark:text-zinc-100 placeholder-slate-450 focus:outline-none focus:ring-1 focus:ring-[#5346ff]"
+                              />
+                              {adminProductSearchQuery && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAdminProductSearchQuery("");
+                                    setAdminProductsPage(1);
+                                  }}
+                                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-400 hover:text-zinc-650 cursor-pointer"
+                                >
+                                  <span className="text-[10px]">✕ Limpiar</span>
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="text-[10px] text-zinc-400 font-semibold font-mono self-end">
+                              Mostrando: <span className="text-white bg-zinc-805 dark:bg-zinc-800 px-1.5 py-0.5 rounded">{paginatedAdminProducts.length}</span> de {filteredAdminProducts.length} filtrados ({store.products.length} total)
+                            </div>
                           </div>
                         </div>
 
-                        {/* Dropdown Filters Row removed as per user request */}
-                      </div>
-
-                      <div className="divide-y divide-slate-100 dark:divide-zinc-800">
-                        {filteredAdminProducts.length === 0 ? (
-                          <div className="p-8 text-center text-xs text-zinc-500 dark:text-zinc-400">
-                            No se encontraron artículos que coincidan con la búsqueda.
-                          </div>
-                        ) : (
-                          filteredAdminProducts.map((p) => (
-                          <div key={p.id} className="p-4 flex gap-4 items-center justify-between hover:bg-slate-50 dark:hover:bg-zinc-900/40 transition">
-                            <img
-                              src={p.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80"}
-                              alt={p.name}
-                              className="h-10 w-10 rounded-lg object-cover bg-zinc-800"
-                            />
-                            
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                {p.codigo && (
-                                  <span className="bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-200 rounded text-[9px] font-black uppercase px-2 py-0.5 tracking-wider font-mono">
-                                    {p.codigo}
-                                  </span>
-                                )}
-                                <h5 className="font-semibold text-xs truncate text-slate-900 dark:text-zinc-200">{p.name}</h5>
-                                {p.paused && (
-                                  <span className="bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded text-[9px] font-extrabold uppercase px-1.5 py-0.5 tracking-wider font-mono">
-                                    Pausado
-                                  </span>
-                                )}
+                        <div className="divide-y divide-slate-100 dark:divide-zinc-800">
+                          {paginatedAdminProducts.length === 0 ? (
+                            <div className="p-8 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                              No se encontraron artículos que coincidan con la búsqueda.
+                            </div>
+                          ) : (
+                            paginatedAdminProducts.map((p) => (
+                            <div key={p.id} className="p-4 flex gap-4 items-center justify-between hover:bg-slate-50 dark:hover:bg-zinc-900/40 transition">
+                              <img
+                                src={p.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=600&q=80"}
+                                alt={p.name}
+                                className="h-10 w-10 rounded-lg object-cover bg-zinc-800"
+                              />
+                              
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {p.codigo && (
+                                    <span className="bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-zinc-200 rounded text-[9px] font-black uppercase px-2 py-0.5 tracking-wider font-mono">
+                                      {p.codigo}
+                                    </span>
+                                  )}
+                                  <h5 className="font-semibold text-xs truncate text-slate-900 dark:text-zinc-200">{p.name}</h5>
+                                  {p.paused && (
+                                    <span className="bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded text-[9px] font-extrabold uppercase px-1.5 py-0.5 tracking-wider font-mono">
+                                      Pausado
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 mt-0.5 text-[10px] text-zinc-400">
+                                  <span className="bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-400">{p.category}</span>
+                                  {p.categorias_adicionales && p.categorias_adicionales.map(catId => {
+                                    const name = (store.dbCategories || []).find(c => c.id === catId)?.nombre;
+                                    if (!name) return null;
+                                    return (
+                                      <span key={catId} className="bg-[#5346ff]/10 text-[#5346ff] border border-[#5346ff]/20 px-1.5 py-0.5 rounded">
+                                        + {name}
+                                      </span>
+                                    );
+                                  })}
+                                  {p.subcategorias_adicionales && p.subcategorias_adicionales.map(subId => {
+                                    const name = (store.dbSubcategories || []).find(s => s.id === subId)?.nombre;
+                                    if (!name) return null;
+                                    return (
+                                      <span key={subId} className="bg-teal-550/10 text-teal-605 border border-teal-500/25 px-1.5 py-0.5 rounded dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/25">
+                                        + {name}
+                                      </span>
+                                    );
+                                  })}
+                                  <span>PVP: <strong>${p.price.toFixed(2)}</strong></span>
+                                  <span>Stock: <strong className={p.stock === 0 ? "text-red-400" : "text-emerald-400"}>{p.stock} u</strong></span>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2 mt-0.5 text-[10px] text-zinc-400">
-                                <span className="bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-400">{p.category}</span>
-                                {p.categorias_adicionales && p.categorias_adicionales.map(catId => {
-                                  const name = (store.dbCategories || []).find(c => c.id === catId)?.nombre;
-                                  if (!name) return null;
-                                  return (
-                                    <span key={catId} className="bg-[#5346ff]/10 text-[#5346ff] border border-[#5346ff]/20 px-1.5 py-0.5 rounded">
-                                      + {name}
-                                    </span>
-                                  );
-                                })}
-                                {p.subcategorias_adicionales && p.subcategorias_adicionales.map(subId => {
-                                  const name = (store.dbSubcategories || []).find(s => s.id === subId)?.nombre;
-                                  if (!name) return null;
-                                  return (
-                                    <span key={subId} className="bg-teal-550/10 text-teal-605 border border-teal-500/25 px-1.5 py-0.5 rounded dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/25">
-                                      + {name}
-                                    </span>
-                                  );
-                                })}
-                                <span>PVP: <strong>${p.price.toFixed(2)}</strong></span>
-                                <span>Stock: <strong className={p.stock === 0 ? "text-red-400" : "text-emerald-400"}>{p.stock} u</strong></span>
+
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  onClick={() => handleTogglePause(p.id)}
+                                  className={`p-1.5 rounded-lg transition cursor-pointer ${
+                                    p.paused 
+                                      ? "bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-500" 
+                                      : "bg-zinc-800/80 hover:bg-zinc-700 hover:text-white text-zinc-400"
+                                  }`}
+                                  title={p.paused ? "Reanudar (Mostrar en la web)" : "Pausar (Ocultar en la web)"}
+                                >
+                                  {p.paused ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setEditingProduct(prepareProductForEditing(p));
+                                    setEditingProductStep(1);
+                                  }}
+                                  className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 hover:text-white text-zinc-300 transition cursor-pointer"
+                                  title="Editar"
+                                >
+                                  <Edit className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteProduct(p.id)}
+                                  className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400 transition cursor-pointer"
+                                  title="Eliminar"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
                               </div>
                             </div>
+                          )))}
+                        </div>
 
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                onClick={() => handleTogglePause(p.id)}
-                                className={`p-1.5 rounded-lg transition cursor-pointer ${
-                                  p.paused 
-                                    ? "bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-500" 
-                                    : "bg-zinc-800/80 hover:bg-zinc-700 hover:text-white text-zinc-400"
-                                }`}
-                                title={p.paused ? "Reanudar (Mostrar en la web)" : "Pausar (Ocultar en la web)"}
-                              >
-                                {p.paused ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setEditingProduct(prepareProductForEditing(p));
-                                  setEditingProductStep(1);
-                                }}
-                                className="p-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 hover:text-white text-zinc-300 transition cursor-pointer"
-                                title="Editar"
-                              >
-                                <Edit className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteProduct(p.id)}
-                                className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500 hover:text-white text-red-400 transition cursor-pointer"
-                                title="Eliminar"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
+                        {/* Pagination footer */}
+                        <div className="p-4 border-t border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-50/50 dark:bg-zinc-950/50">
+                          <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                            Mostrando <strong className="text-slate-800 dark:text-white">{filteredAdminProducts.length === 0 ? 0 : startIndexAdmin + 1}</strong> a <strong className="text-slate-800 dark:text-white">{Math.min(startIndexAdmin + itemsPerPageAdmin, filteredAdminProducts.length)}</strong> de <strong className="text-slate-800 dark:text-white">{filteredAdminProducts.length}</strong> artículos
                           </div>
-                        )))}
+
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              disabled={safePageAdmin <= 1}
+                              onClick={() => setAdminProductsPage(prev => Math.max(1, prev - 1))}
+                              className="px-3 py-1.5 text-xs font-bold border border-slate-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-950 text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
+                            >
+                              Anterior
+                            </button>
+
+                            {Array.from({ length: totalPagesAdmin }, (_, idx) => idx + 1).map(pageNo => {
+                              const shouldShow = pageNo === 1 || pageNo === totalPagesAdmin || Math.abs(pageNo - safePageAdmin) <= 1;
+                              if (!shouldShow) {
+                                  if (pageNo === 2 || pageNo === totalPagesAdmin - 1) {
+                                    return <span key={pageNo} className="px-1 text-xs text-zinc-450 dark:text-zinc-600 select-none font-bold">...</span>;
+                                  }
+                                  return null;
+                              }
+                              return (
+                                <button
+                                  key={pageNo}
+                                  onClick={() => setAdminProductsPage(pageNo)}
+                                  className={`w-8 h-8 flex items-center justify-center text-xs font-bold rounded-lg transition cursor-pointer ${
+                                    safePageAdmin === pageNo
+                                      ? "bg-[#5346ff] text-white shadow-xs"
+                                      : "border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-900"
+                                  }`}
+                                >
+                                  {pageNo}
+                                </button>
+                              );
+                            })}
+
+                            <button
+                              disabled={safePageAdmin >= totalPagesAdmin}
+                              onClick={() => setAdminProductsPage(prev => Math.min(totalPagesAdmin, prev + 1))}
+                              className="px-3 py-1.5 text-xs font-bold border border-slate-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-950 text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-900 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition"
+                            >
+                              Siguiente
+                            </button>
+                          </div>
+                        </div>
+
                       </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* 3. NEW PRODUCT FORM DISPLAY */}
                 {adminSection === "products" && isNewProductMode && (
@@ -6766,7 +7241,35 @@ export default function App() {
                     {newProductStep === 1 && (
                       <div className="space-y-4 animate-fade-in unique-step-one">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="md:col-span-2">
+                          <div className="md:col-span-2 p-3 bg-blue-500/5 dark:bg-blue-500/10 border border-blue-500/15 rounded-xl mb-1">
+                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-2">
+                              Tipo de Producto
+                            </label>
+                            <div className="flex gap-6">
+                              <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-zinc-300 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="newIsCombo"
+                                  checked={!newProduct.isCombo}
+                                  onChange={() => setNewProduct({ ...newProduct, isCombo: false, comboComponents: [] })}
+                                  className="accent-blue-500 h-3.5 w-3.5"
+                                />
+                                <span>Producto Simple</span>
+                              </label>
+                              <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-zinc-300 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="newIsCombo"
+                                  checked={!!newProduct.isCombo}
+                                  onChange={() => setNewProduct({ ...newProduct, isCombo: true, comboComponents: [] })}
+                                  className="accent-blue-500 h-3.5 w-3.5"
+                                />
+                                <span>Producto Compuesto (Combo)</span>
+                              </label>
+                            </div>
+                          </div>
+
+                          <div className="md:col-span-2">
                         <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5 flex items-center justify-between">
                           <span>Nombre del Producto *</span>
                           {newProductErrors.name && <span className="text-red-500 text-[9px] font-semibold lowercase">obligatorio</span>}
@@ -7061,18 +7564,28 @@ export default function App() {
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
                               <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Precio Compra ($)</label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={newProduct.precioCompra || ""}
-                                onChange={(e) => {
-                                  const val = e.target.value === "" ? 0 : Number(e.target.value);
-                                  setNewProduct(updateProductCalculations({ ...newProduct, precioCompra: val }));
-                                }}
-                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
-                                placeholder="Costo de compra"
-                              />
+                              {newProduct.isCombo ? (
+                                <div className="w-full px-3 py-2 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900 rounded-lg text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                                  ${getComboPurchaseCost(newProduct.comboComponents || [])} <span className="text-[9px] font-normal text-zinc-500 block">Suma de componentes</span>
+                                </div>
+                              ) : (
+                                <input
+                                  type="number"
+                                  step="1"
+                                  min="0"
+                                  value={newProduct.precioCompra !== undefined ? Math.round(newProduct.precioCompra) : ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value === "" ? 0 : Math.round(Number(e.target.value));
+                                    setNewProduct(updateProductCalculations({ ...newProduct, precioCompra: val }));
+                                  }}
+                                  onBlur={(e) => {
+                                    const val = e.target.value === "" ? 0 : Math.round(Number(e.target.value));
+                                    setNewProduct(updateProductCalculations({ ...newProduct, precioCompra: val }));
+                                  }}
+                                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
+                                  placeholder="Costo de compra"
+                                />
+                              )}
                             </div>
 
                             <div>
@@ -7160,36 +7673,48 @@ export default function App() {
                           <h4 className="text-xs font-black text-emerald-500 uppercase tracking-wider flex items-center gap-2">
                             <span>📦</span> Almacenes y Stock por Sucursal
                           </h4>
-                          
+
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
                               <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Stock Pinamar</label>
-                              <input
-                                type="number"
-                                min="0"
-                                value={newProduct.stockPinamar || ""}
-                                onChange={(e) => {
-                                  const val = e.target.value === "" ? 0 : Number(e.target.value);
-                                  setNewProduct(updateProductCalculations({ ...newProduct, stockPinamar: val }));
-                                }}
-                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
-                                placeholder="Unidades en Pinamar"
-                              />
+                              {newProduct.isCombo ? (
+                                <div className="w-full px-3 py-2 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900 rounded-lg text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                                  {getComboDynamicStocks(newProduct.comboComponents || [], newProduct.variants || []).stockPinamar} <span className="text-[9px] font-normal text-zinc-500 block">Suma de componentes</span>
+                                </div>
+                              ) : (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={newProduct.stockPinamar !== undefined ? Math.round(newProduct.stockPinamar) : ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value === "" ? 0 : Math.round(Number(e.target.value));
+                                    setNewProduct(updateProductCalculations({ ...newProduct, stockPinamar: val }));
+                                  }}
+                                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
+                                  placeholder="Unidades en Pinamar"
+                                />
+                              )}
                             </div>
 
                             <div>
                               <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Stock Montevideo</label>
-                              <input
-                                type="number"
-                                min="0"
-                                value={newProduct.stockMontevideo || ""}
-                                onChange={(e) => {
-                                  const val = e.target.value === "" ? 0 : Number(e.target.value);
-                                  setNewProduct(updateProductCalculations({ ...newProduct, stockMontevideo: val }));
-                                }}
-                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
-                                placeholder="Unidades en Montevideo"
-                              />
+                              {newProduct.isCombo ? (
+                                <div className="w-full px-3 py-2 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900 rounded-lg text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                                  {getComboDynamicStocks(newProduct.comboComponents || [], newProduct.variants || []).stockMontevideo} <span className="text-[9px] font-normal text-zinc-500 block">Suma de componentes</span>
+                                </div>
+                              ) : (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={newProduct.stockMontevideo !== undefined ? Math.round(newProduct.stockMontevideo) : ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value === "" ? 0 : Math.round(Number(e.target.value));
+                                    setNewProduct(updateProductCalculations({ ...newProduct, stockMontevideo: val }));
+                                  }}
+                                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
+                                  placeholder="Unidades en Montevideo"
+                                />
+                              )}
                             </div>
 
                             <div>
@@ -7201,7 +7726,7 @@ export default function App() {
                                 type="number"
                                 readOnly
                                 disabled
-                                value={newProduct.stockTotalActual || ""}
+                                value={newProduct.isCombo ? getComboDynamicStocks(newProduct.comboComponents || [], newProduct.variants || []).stockTotal : (newProduct.stockTotalActual || 0)}
                                 className="w-full px-3 py-2 bg-emerald-50/40 dark:bg-emerald-950/10 border border-emerald-100 dark:border-emerald-900/50 rounded-lg text-xs text-emerald-600 dark:text-emerald-400 font-mono font-extrabold cursor-not-allowed select-none"
                                 placeholder="Calculado: Suma stock"
                               />
@@ -7247,8 +7772,33 @@ export default function App() {
 
                     {newProductStep === 3 && (
                       <div className="space-y-4 animate-fade-in unique-step-three">
-                        {/* Talles y Colores Configuration Panel */}
-                        <div className="flex flex-col gap-6 border border-indigo-500/10 p-4 rounded-xl bg-slate-50/50 dark:bg-zinc-900/40">
+                        {newProduct.isCombo ? (
+                          <ComboComponentsBuilder
+                            products={store.products}
+                            components={newProduct.comboComponents || []}
+                            onChange={(comps) => {
+                              const purchaseCost = getComboPurchaseCost(comps);
+                              setNewProduct({
+                                ...newProduct,
+                                comboComponents: comps,
+                                precioCompra: purchaseCost,
+                                precioCon40: purchaseCost * 1.40
+                              });
+                            }}
+                            colors={newProduct.colors || []}
+                            sizes={newProduct.sizes || []}
+                            onColorsChange={(cols) => setNewProduct({ ...newProduct, colors: cols })}
+                            onSizesChange={(szs) => setNewProduct({ ...newProduct, sizes: szs })}
+                            variants={newProduct.variants || []}
+                            onVariantsChange={(vars) => setNewProduct({ ...newProduct, variants: vars })}
+                            baseCodigo={newProduct.codigo || "COMBO"}
+                            galleryImages={[newProduct.imageUrl, ...(newProduct.imagenes || [])].filter(Boolean)}
+                            showToast={showToast}
+                          />
+                        ) : (
+                          <>
+                            {/* Talles y Colores Configuration Panel */}
+                            <div className="flex flex-col gap-6 border border-indigo-500/10 p-4 rounded-xl bg-slate-50/50 dark:bg-zinc-900/40">
                       <div>
                         {newProduct.is3D || is3DProduct(newProduct as Product) ? (
                           <div>
@@ -7288,7 +7838,7 @@ export default function App() {
                               })}
                             </div>
                           </div>
-                        ) : (newProduct.categoria_id === "ropa" || (newProduct.category || "").toLowerCase().includes("ropa") || (newProduct.category || "").toLowerCase().includes("indumentaria")) ? (
+                        ) : true ? (
                           <div className="space-y-3 p-3 bg-white/50 dark:bg-zinc-950/40 rounded-xl border border-slate-200/60 dark:border-zinc-800">
                             <div className="flex items-center justify-between">
                               <label className="block text-[10px] font-extrabold text-[#5346ff] dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -7985,6 +8535,8 @@ export default function App() {
                         </div>
                       )}
                     </div>
+                          </>
+                        )}
                   </div>
                 )}
 
@@ -8211,7 +8763,35 @@ export default function App() {
                     {editingProductStep === 1 && (
                       <div className="space-y-4 animate-fade-in unique-step-one">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="md:col-span-2">
+                          <div className="md:col-span-2 p-3 bg-blue-500/5 dark:bg-blue-500/10 border border-blue-500/15 rounded-xl mb-1">
+                            <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-2">
+                              Tipo de Producto
+                            </label>
+                            <div className="flex gap-6">
+                              <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-zinc-300 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="editIsCombo"
+                                  checked={!editingProduct.isCombo}
+                                  onChange={() => setEditingProduct({ ...editingProduct, isCombo: false, comboComponents: [] })}
+                                  className="accent-blue-500 h-3.5 w-3.5"
+                                />
+                                <span>Producto Simple</span>
+                              </label>
+                              <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-zinc-300 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="editIsCombo"
+                                  checked={!!editingProduct.isCombo}
+                                  onChange={() => setEditingProduct({ ...editingProduct, isCombo: true, comboComponents: [] })}
+                                  className="accent-blue-500 h-3.5 w-3.5"
+                                />
+                                <span>Producto Compuesto (Combo)</span>
+                              </label>
+                            </div>
+                          </div>
+
+                          <div className="md:col-span-2">
                         <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Nombre del Producto *</label>
                         <input
                           required
@@ -8447,18 +9027,28 @@ export default function App() {
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
                               <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Precio Compra ($)</label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={editingProduct.precioCompra || ""}
-                                onChange={(e) => {
-                                  const val = e.target.value === "" ? 0 : Number(e.target.value);
-                                  setEditingProduct(updateProductCalculations({ ...editingProduct, precioCompra: val }) as Product);
-                                }}
-                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
-                                placeholder="Costo de compra"
-                              />
+                              {editingProduct.isCombo ? (
+                                <div className="w-full px-3 py-2 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900 rounded-lg text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                                  ${getComboPurchaseCost(editingProduct.comboComponents || [])} <span className="text-[9px] font-normal text-zinc-500 block">Suma de componentes</span>
+                                </div>
+                              ) : (
+                                <input
+                                  type="number"
+                                  step="1"
+                                  min="0"
+                                  value={editingProduct.precioCompra !== undefined ? Math.round(editingProduct.precioCompra) : ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value === "" ? 0 : Math.round(Number(e.target.value));
+                                    setEditingProduct(updateProductCalculations({ ...editingProduct, precioCompra: val }) as Product);
+                                  }}
+                                  onBlur={(e) => {
+                                    const val = e.target.value === "" ? 0 : Math.round(Number(e.target.value));
+                                    setEditingProduct(updateProductCalculations({ ...editingProduct, precioCompra: val }) as Product);
+                                  }}
+                                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
+                                  placeholder="Costo de compra"
+                                />
+                              )}
                             </div>
 
                             <div>
@@ -8550,32 +9140,44 @@ export default function App() {
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
                               <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Stock Pinamar</label>
-                              <input
-                                type="number"
-                                min="0"
-                                value={editingProduct.stockPinamar || ""}
-                                onChange={(e) => {
-                                  const val = e.target.value === "" ? 0 : Number(e.target.value);
-                                  setEditingProduct(updateProductCalculations({ ...editingProduct, stockPinamar: val }) as Product);
-                                }}
-                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
-                                placeholder="Unidades en Pinamar"
-                              />
+                              {editingProduct.isCombo ? (
+                                <div className="w-full px-3 py-2 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900 rounded-lg text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                                  {getComboDynamicStocks(editingProduct.comboComponents || [], editingProduct.variants || []).stockPinamar} <span className="text-[9px] font-normal text-zinc-500 block">Suma de componentes</span>
+                                </div>
+                              ) : (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={editingProduct.stockPinamar !== undefined ? Math.round(editingProduct.stockPinamar) : ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value === "" ? 0 : Math.round(Number(e.target.value));
+                                    setEditingProduct(updateProductCalculations({ ...editingProduct, stockPinamar: val }) as Product);
+                                  }}
+                                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
+                                  placeholder="Unidades en Pinamar"
+                                />
+                              )}
                             </div>
 
                             <div>
                               <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">Stock Montevideo</label>
-                              <input
-                                type="number"
-                                min="0"
-                                value={editingProduct.stockMontevideo || ""}
-                                onChange={(e) => {
-                                  const val = e.target.value === "" ? 0 : Number(e.target.value);
-                                  setEditingProduct(updateProductCalculations({ ...editingProduct, stockMontevideo: val }) as Product);
-                                }}
-                                className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
-                                placeholder="Unidades en Montevideo"
-                              />
+                              {editingProduct.isCombo ? (
+                                <div className="w-full px-3 py-2 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900 rounded-lg text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                                  {getComboDynamicStocks(editingProduct.comboComponents || [], editingProduct.variants || []).stockMontevideo} <span className="text-[9px] font-normal text-zinc-500 block">Suma de componentes</span>
+                                </div>
+                              ) : (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={editingProduct.stockMontevideo !== undefined ? Math.round(editingProduct.stockMontevideo) : ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value === "" ? 0 : Math.round(Number(e.target.value));
+                                    setEditingProduct(updateProductCalculations({ ...editingProduct, stockMontevideo: val }) as Product);
+                                  }}
+                                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono font-bold"
+                                  placeholder="Unidades en Montevideo"
+                                />
+                              )}
                             </div>
 
                             <div>
@@ -8587,7 +9189,7 @@ export default function App() {
                                 type="number"
                                 readOnly
                                 disabled
-                                value={editingProduct.stockTotalActual || ""}
+                                value={editingProduct.isCombo ? getComboDynamicStocks(editingProduct.comboComponents || [], editingProduct.variants || []).stockTotal : (editingProduct.stockTotalActual || 0)}
                                 className="w-full px-3 py-2 bg-emerald-50/40 dark:bg-emerald-950/10 border border-emerald-100 dark:border-emerald-900/50 rounded-lg text-xs text-emerald-600 dark:text-emerald-400 font-mono font-extrabold cursor-not-allowed select-none"
                                 placeholder="Calculado: Suma stock"
                               />
@@ -8648,8 +9250,36 @@ export default function App() {
                     {/* Talles y Colores Configuration Panel */}
                     {editingProductStep === 3 && (
                       <>
-                        <div className="flex flex-col gap-6 border border-indigo-500/10 p-4 rounded-xl bg-slate-50/50 dark:bg-zinc-900/40">
-                      <div>
+                        {editingProduct.isCombo ? (
+                          <div className="p-4 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-850 w-full mb-4">
+                            <ComboComponentsBuilder
+                              products={store.products}
+                              components={editingProduct.comboComponents || []}
+                              currentProductId={editingProduct.id}
+                              onChange={(comps) => {
+                                const purchaseCost = getComboPurchaseCost(comps);
+                                setEditingProduct({
+                                  ...editingProduct,
+                                  comboComponents: comps,
+                                  precioCompra: purchaseCost,
+                                  precioCon40: purchaseCost * 1.40
+                                });
+                              }}
+                              colors={editingProduct.colors || []}
+                              sizes={editingProduct.sizes || []}
+                              onColorsChange={(cols) => setEditingProduct({ ...editingProduct, colors: cols })}
+                              onSizesChange={(szs) => setEditingProduct({ ...editingProduct, sizes: szs })}
+                              variants={editingProduct.variants || []}
+                              onVariantsChange={(vars) => setEditingProduct({ ...editingProduct, variants: vars })}
+                              baseCodigo={editingProduct.codigo || "COMBO"}
+                              galleryImages={[editingProduct.imageUrl, ...(editingProduct.imagenes || [])].filter(Boolean)}
+                              showToast={showToast}
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex flex-col gap-6 border border-indigo-500/10 p-4 rounded-xl bg-slate-50/50 dark:bg-zinc-900/40">
+                              <div>
                         {editingProduct.is3D || is3DProduct(editingProduct) ? (
                           <div>
                             <label className="block text-[10px] font-extrabold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1">
@@ -8688,7 +9318,7 @@ export default function App() {
                               })}
                             </div>
                           </div>
-                        ) : (editingProduct.categoria_id === "ropa" || (editingProduct.category || "").toLowerCase().includes("ropa") || (editingProduct.category || "").toLowerCase().includes("indumentaria")) ? (
+                        ) : true ? (
                           <div className="space-y-3 p-3 bg-white/50 dark:bg-zinc-950/40 rounded-xl border border-slate-200/60 dark:border-zinc-800">
                             <div className="flex items-center justify-between">
                               <label className="block text-[10px] font-extrabold text-[#5346ff] dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -9385,6 +10015,8 @@ export default function App() {
                         </div>
                       )}
                     </div>
+                  </>
+                )}
                       </>
                     )}
 
@@ -10486,7 +11118,7 @@ export default function App() {
                         </div>
 
                         {/* Spreadsheet Table Container */}
-                        <div className="overflow-x-auto">
+                        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)] custom-scrollbar">
                           <table className="w-full text-left border-collapse">
                             <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-800 shadow-sm">
                               <tr className="bg-slate-50 dark:bg-zinc-900 text-slate-500 dark:text-zinc-400 font-bold uppercase text-[10px] tracking-wider select-none">
@@ -10655,10 +11287,10 @@ export default function App() {
                                           <span className="text-zinc-400 font-bold">$</span>
                                           <input
                                             type="number"
-                                            defaultValue={item.precioCompra}
+                                            defaultValue={Math.round(item.precioCompra || 0)}
                                             onBlur={(e) => {
-                                              const val = parseFloat(e.target.value) || 0;
-                                              if (val !== item.precioCompra) {
+                                              const val = Math.round(parseFloat(e.target.value) || 0);
+                                              if (val !== Math.round(item.precioCompra || 0)) {
                                                 handleUpdateStockItem(item, "precioCompra", val);
                                                 showToast(`Costo de ${item.sku} actualizado a $${val}`, "success");
                                               }
@@ -10679,10 +11311,10 @@ export default function App() {
                                           <span className="text-zinc-400 font-bold">$</span>
                                           <input
                                             type="number"
-                                            defaultValue={item.price}
+                                            defaultValue={Math.round(item.price || 0)}
                                             onBlur={(e) => {
-                                              const val = parseFloat(e.target.value) || 0;
-                                              if (val !== item.price) {
+                                              const val = Math.round(parseFloat(e.target.value) || 0);
+                                              if (val !== Math.round(item.price || 0)) {
                                                 handleUpdateStockItem(item, "price", val);
                                                 showToast(`Venta Local de ${item.sku} actualizada a $${val}`, "success");
                                               }
@@ -10703,10 +11335,10 @@ export default function App() {
                                           <span className="text-zinc-400 font-bold">$</span>
                                           <input
                                             type="number"
-                                            defaultValue={item.precioVentaML}
+                                            defaultValue={Math.round(item.precioVentaML || 0)}
                                             onBlur={(e) => {
-                                              const val = parseFloat(e.target.value) || 0;
-                                              if (val !== item.precioVentaML) {
+                                              const val = Math.round(parseFloat(e.target.value) || 0);
+                                              if (val !== Math.round(item.precioVentaML || 0)) {
                                                 handleUpdateStockItem(item, "precioVentaML", val);
                                                 showToast(`Precio ML de ${item.sku} actualizado a $${val}`, "success");
                                               }
@@ -10728,10 +11360,10 @@ export default function App() {
                                             <span className="text-zinc-400 font-bold">$</span>
                                             <input
                                               type="number"
-                                              defaultValue={item.comisionML}
+                                              defaultValue={Math.round(item.comisionML || 0)}
                                               onBlur={(e) => {
-                                                const val = parseFloat(e.target.value) || 0;
-                                                if (val !== item.comisionML) {
+                                                const val = Math.round(parseFloat(e.target.value) || 0);
+                                                if (val !== Math.round(item.comisionML || 0)) {
                                                   handleUpdateStockItem(item, "comisionML", val);
                                                   showToast(`Comisión ML de ${item.sku} actualizada a $${val}`, "success");
                                                 }
@@ -10766,7 +11398,7 @@ export default function App() {
                                           </button>
                                           <input
                                             type="number"
-                                            value={item.stockMontevideo}
+                                            value={Math.round(item.stockMontevideo || 0)}
                                             onChange={(e) => {
                                               const val = Math.max(0, parseInt(e.target.value) || 0);
                                               handleUpdateStockItem(item, "stockMontevideo", val);
@@ -10807,7 +11439,7 @@ export default function App() {
                                           </button>
                                           <input
                                             type="number"
-                                            value={item.stockPinamar}
+                                            value={Math.round(item.stockPinamar || 0)}
                                             onChange={(e) => {
                                               const val = Math.max(0, parseInt(e.target.value) || 0);
                                               handleUpdateStockItem(item, "stockPinamar", val);

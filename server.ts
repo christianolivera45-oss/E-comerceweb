@@ -231,6 +231,170 @@ const STORE_FILE = path.join(DATA_DIR, "store.json");
 // Module scope cache
 let currentStoreState: ShopState = DEFAULT_SHOP_STATE;
 
+function recalculateComboStocks(productsList: any[]): any[] {
+  if (!productsList || !Array.isArray(productsList)) return [];
+  return productsList.map(prod => {
+    if (!prod.isCombo) return prod;
+    
+    const comboComponents = prod.comboComponents || [];
+    if (comboComponents.length === 0) {
+      return {
+        ...prod,
+        stockPinamar: 0,
+        stockMontevideo: 0,
+        stockTotalActual: 0,
+        stock: 0,
+        variants: (prod.variants || []).map((v: any) => ({ ...v, stockPinamar: 0, stockMontevideo: 0, stock: 0, stockTotalActual: 0 }))
+      };
+    }
+    
+    // For each variant defined in the combo:
+    const updatedVariants = (prod.variants || []).map((variant: any) => {
+      const variantColor = variant.color;
+      const variantSize = variant.size;
+      
+      let minPin = Infinity;
+      let minMvd = Infinity;
+      
+      for (const comp of comboComponents) {
+        // If the component is associated with a specific color of the combo, and this variant is NOT of that color, skip it
+        if (comp.comboColor && variantColor && comp.comboColor.toLowerCase().trim() !== variantColor.toLowerCase().trim()) {
+          continue;
+        }
+        // If the component is associated with a specific size of the combo, and this variant is NOT of that size, skip it
+        if (comp.comboSize && variantSize && comp.comboSize.toLowerCase().trim() !== variantSize.toLowerCase().trim()) {
+          continue;
+        }
+        
+        const compProd = productsList.find(p => String(p.id) === String(comp.productId));
+        if (!compProd) {
+          minPin = 0;
+          minMvd = 0;
+          break;
+        }
+        
+        let compPin = 0;
+        let compMvd = 0;
+        
+        if (comp.variantId) {
+          let matchVar = compProd.variants?.find((v: any) => String(v.id) === String(comp.variantId));
+          if (!matchVar && comp.comboColor) {
+            const searchColor = comp.comboColor.toLowerCase().trim();
+            matchVar = compProd.variants?.find((v: any) => {
+              const vColor = (v.color || "").toLowerCase().trim();
+              return vColor === searchColor || 
+                     vColor.includes(searchColor) || 
+                     searchColor.includes(vColor) ||
+                     (searchColor.substring(0, 3) === vColor.substring(0, 3));
+            });
+          }
+          if (matchVar) {
+            compPin = matchVar.stockPinamar !== undefined ? matchVar.stockPinamar : (matchVar.stock || 0);
+            compMvd = matchVar.stockMontevideo !== undefined ? matchVar.stockMontevideo : 0;
+          }
+        } else {
+          if (compProd.variants && compProd.variants.length > 0) {
+            compPin = compProd.variants.reduce((sum: number, v: any) => sum + (v.stockPinamar !== undefined ? v.stockPinamar : (v.stock || 0)), 0);
+            compMvd = compProd.variants.reduce((sum: number, v: any) => sum + (v.stockMontevideo !== undefined ? v.stockMontevideo : 0), 0);
+          } else {
+            compPin = compProd.stockPinamar !== undefined ? compProd.stockPinamar : (compProd.stock || 0);
+            compMvd = compProd.stockMontevideo !== undefined ? compProd.stockMontevideo : 0;
+          }
+        }
+        
+        const reqQty = Number(comp.quantity) || 1;
+        const pinAvail = Math.floor(compPin / reqQty);
+        const mvdAvail = Math.floor(compMvd / reqQty);
+        
+        if (pinAvail < minPin) minPin = pinAvail;
+        if (mvdAvail < minMvd) minMvd = mvdAvail;
+      }
+      
+      const pinStock = minPin === Infinity ? 0 : Math.max(0, minPin);
+      const mvdStock = minMvd === Infinity ? 0 : Math.max(0, minMvd);
+      const totalStock = pinStock + mvdStock;
+      
+      return {
+        ...variant,
+        stockPinamar: pinStock,
+        stockMontevideo: mvdStock,
+        stock: totalStock,
+        stockTotalActual: totalStock
+      };
+    });
+    
+    let basePin = 0;
+    let baseMvd = 0;
+    
+    if (updatedVariants.length > 0) {
+      basePin = updatedVariants.reduce((sum: number, v: any) => sum + (v.stockPinamar || 0), 0);
+      baseMvd = updatedVariants.reduce((sum: number, v: any) => sum + (v.stockMontevideo || 0), 0);
+    } else {
+      let minPin = Infinity;
+      let minMvd = Infinity;
+      
+      for (const comp of comboComponents) {
+        const compProd = productsList.find(p => String(p.id) === String(comp.productId));
+        if (!compProd) {
+          minPin = 0;
+          minMvd = 0;
+          break;
+        }
+        
+        let compPin = 0;
+        let compMvd = 0;
+        
+        if (comp.variantId) {
+          let matchVar = compProd.variants?.find((v: any) => String(v.id) === String(comp.variantId));
+          if (!matchVar && comp.comboColor) {
+            const searchColor = comp.comboColor.toLowerCase().trim();
+            matchVar = compProd.variants?.find((v: any) => {
+              const vColor = (v.color || "").toLowerCase().trim();
+              return vColor === searchColor || 
+                     vColor.includes(searchColor) || 
+                     searchColor.includes(vColor) ||
+                     (searchColor.substring(0, 3) === vColor.substring(0, 3));
+            });
+          }
+          if (matchVar) {
+            compPin = matchVar.stockPinamar !== undefined ? matchVar.stockPinamar : (matchVar.stock || 0);
+            compMvd = matchVar.stockMontevideo !== undefined ? matchVar.stockMontevideo : 0;
+          }
+        } else {
+          if (compProd.variants && compProd.variants.length > 0) {
+            compPin = compProd.variants.reduce((sum: number, v: any) => sum + (v.stockPinamar !== undefined ? v.stockPinamar : (v.stock || 0)), 0);
+            compMvd = compProd.variants.reduce((sum: number, v: any) => sum + (v.stockMontevideo !== undefined ? v.stockMontevideo : 0), 0);
+          } else {
+            compPin = compProd.stockPinamar !== undefined ? compProd.stockPinamar : (compProd.stock || 0);
+            compMvd = compProd.stockMontevideo !== undefined ? compProd.stockMontevideo : 0;
+          }
+        }
+        
+        const reqQty = Number(comp.quantity) || 1;
+        const pinAvail = Math.floor(compPin / reqQty);
+        const mvdAvail = Math.floor(compMvd / reqQty);
+        
+        if (pinAvail < minPin) minPin = pinAvail;
+        if (mvdAvail < minMvd) minMvd = mvdAvail;
+      }
+      
+      basePin = minPin === Infinity ? 0 : Math.max(0, minPin);
+      baseMvd = minMvd === Infinity ? 0 : Math.max(0, minMvd);
+    }
+    
+    const baseTotal = basePin + baseMvd;
+    
+    return {
+      ...prod,
+      stockPinamar: basePin,
+      stockMontevideo: baseMvd,
+      stockTotalActual: baseTotal,
+      stock: baseTotal,
+      variants: updatedVariants
+    };
+  });
+}
+
 // Helper to ensure data directory and file exist
 function initDataStore(): ShopState {
   try {
@@ -285,6 +449,11 @@ function initDataStore(): ShopState {
         });
       } else {
         parsed.products = DEFAULT_SHOP_STATE.products;
+        changed = true;
+      }
+
+      if (parsed.products) {
+        parsed.products = recalculateComboStocks(parsed.products);
         changed = true;
       }
 
@@ -452,6 +621,123 @@ async function sendApprovalEmails(order: any, settings: any) {
   }
 }
 
+async function deductSingleItemStockDb(client: any, productId: any, variantId: any, qty: number): Promise<void> {
+  if (qty <= 0) return;
+
+  // Check if product is combo
+  const prodCheck = await client.query(
+    "SELECT is_combo, combo_components FROM public.products WHERE id = $1;",
+    [productId]
+  );
+  
+  if (prodCheck.rows.length > 0) {
+    const isCombo = prodCheck.rows[0].is_combo === true;
+    if (isCombo) {
+      const components = prodCheck.rows[0].combo_components;
+      const compList = Array.isArray(components) ? components : (typeof components === 'string' ? JSON.parse(components) : []);
+      for (const comp of compList) {
+        const compId = comp.productId;
+        const compVarId = comp.variantId || null;
+        const compQty = qty * (Number(comp.quantity) || 1);
+        await deductSingleItemStockDb(client, compId, compVarId, compQty);
+      }
+      return; // Do NOT deduct stock from the combo itself!
+    }
+  }
+
+  if (variantId) {
+    const varLock = await client.query(
+      "SELECT stock, stock_pinamar, stock_montevideo FROM public.product_variants WHERE id = $1 FOR UPDATE;",
+      [variantId]
+    );
+    
+    if (varLock.rows.length > 0) {
+      const vPin = Number(varLock.rows[0].stock_pinamar || 0);
+      const vMvd = Number(varLock.rows[0].stock_montevideo || 0);
+      
+      let pinDeduct = 0;
+      let mvdDeduct = 0;
+      
+      if (vPin >= qty) {
+        pinDeduct = qty;
+      } else {
+        pinDeduct = Math.max(0, vPin);
+        mvdDeduct = qty - pinDeduct;
+      }
+
+      await client.query(
+        `UPDATE public.product_variants 
+         SET stock = GREATEST(0, stock - $1), 
+             stock_pinamar = GREATEST(0, stock_pinamar - $2), 
+             stock_montevideo = GREATEST(0, stock_montevideo - $3), 
+             updated_at = NOW() 
+         WHERE id = $4;`,
+        [qty, pinDeduct, mvdDeduct, variantId]
+      );
+    }
+
+    const prodLock = await client.query(
+      "SELECT stock, stock_pinamar, stock_montevideo FROM public.products WHERE id = $1 FOR UPDATE;",
+      [productId]
+    );
+
+    if (prodLock.rows.length > 0) {
+      const pPin = Number(prodLock.rows[0].stock_pinamar || 0);
+      const pMvd = Number(prodLock.rows[0].stock_montevideo || 0);
+      
+      let pinDeduct = 0;
+      let mvdDeduct = 0;
+      
+      if (pPin >= qty) {
+        pinDeduct = qty;
+      } else {
+        pinDeduct = Math.max(0, pPin);
+        mvdDeduct = qty - pinDeduct;
+      }
+
+      await client.query(
+        `UPDATE public.products 
+         SET stock = GREATEST(0, stock - $1), 
+             stock_pinamar = GREATEST(0, stock_pinamar - $2), 
+             stock_montevideo = GREATEST(0, stock_montevideo - $3), 
+             updated_at = NOW() 
+         WHERE id = $4;`,
+        [qty, pinDeduct, mvdDeduct, productId]
+      );
+    }
+  } else if (productId) {
+    const prodLock = await client.query(
+      "SELECT stock, stock_pinamar, stock_montevideo FROM public.products WHERE id = $1 FOR UPDATE;",
+      [productId]
+    );
+
+    if (prodLock.rows.length > 0) {
+      const pPin = Number(prodLock.rows[0].stock_pinamar || 0);
+      const pMvd = Number(prodLock.rows[0].stock_montevideo || 0);
+      
+      let pinDeduct = 0;
+      let mvdDeduct = 0;
+      
+      if (pPin >= qty) {
+        pinDeduct = qty;
+      } else {
+        pinDeduct = Math.max(0, pPin);
+        mvdDeduct = qty - pinDeduct;
+      }
+
+      await client.query(
+        `UPDATE public.products 
+         SET stock = GREATEST(0, stock - $1), 
+             stock_pinamar = GREATEST(0, stock_pinamar - $2), 
+             stock_montevideo = GREATEST(0, stock_montevideo - $3), 
+             updated_at = NOW() 
+         WHERE id = $4;`,
+        [qty, pinDeduct, mvdDeduct, productId]
+      );
+    }
+  }
+}
+
 async function deductStockDb(client: any, orderId: string): Promise<void> {
   const itemsRes = await client.query(
     "SELECT product_id, variant_id, quantity, product_name FROM public.order_items WHERE order_id = $1;",
@@ -461,143 +747,69 @@ async function deductStockDb(client: any, orderId: string): Promise<void> {
   for (const item of itemsRes.rows) {
     const qty = Number(item.quantity);
     if (qty <= 0) continue;
+    await deductSingleItemStockDb(client, item.product_id, item.variant_id || null, qty);
+  }
+}
 
-    if (item.variant_id) {
-      const varLock = await client.query(
-        "SELECT stock, stock_pinamar, stock_montevideo FROM public.product_variants WHERE id = $1 FOR UPDATE;",
-        [item.variant_id]
-      );
+function deductSingleItemStockMemory(productId: any, variantId: any, qty: number): void {
+  if (qty <= 0) return;
+  const dbProd = currentStoreState.products?.find(p => String(p.id) === String(productId));
+  if (!dbProd) return;
+
+  if (dbProd.isCombo) {
+    const compList = dbProd.comboComponents || [];
+    for (const comp of compList) {
+      const compQty = qty * (Number(comp.quantity) || 1);
+      deductSingleItemStockMemory(comp.productId, comp.variantId || null, compQty);
+    }
+    return; // Do NOT deduct stock from the combo itself!
+  }
+
+  const pinStock = dbProd.stockPinamar || 0;
+  const mvdStock = dbProd.stockMontevideo || 0;
+  
+  let pinDeduct = 0;
+  let mvdDeduct = 0;
+  if (pinStock >= qty) {
+    pinDeduct = qty;
+  } else {
+    pinDeduct = Math.max(0, pinStock);
+    mvdDeduct = qty - pinDeduct;
+  }
+
+  dbProd.stockPinamar = Math.max(0, pinStock - pinDeduct);
+  dbProd.stockMontevideo = Math.max(0, mvdStock - mvdDeduct);
+  dbProd.stock = Math.max(0, (dbProd.stock || 0) - qty);
+
+  if (variantId) {
+    const matchVar = dbProd.variants?.find((v: any) => String(v.id) === String(variantId));
+    if (matchVar) {
+      const vPin = matchVar.stockPinamar || 0;
+      const vMvd = matchVar.stockMontevideo || 0;
       
-      if (varLock.rows.length > 0) {
-        const vPin = Number(varLock.rows[0].stock_pinamar || 0);
-        const vMvd = Number(varLock.rows[0].stock_montevideo || 0);
-        
-        let pinDeduct = 0;
-        let mvdDeduct = 0;
-        
-        if (vPin >= qty) {
-          pinDeduct = qty;
-        } else {
-          pinDeduct = Math.max(0, vPin);
-          mvdDeduct = qty - pinDeduct;
-        }
-
-        await client.query(
-          `UPDATE public.product_variants 
-           SET stock = GREATEST(0, stock - $1), 
-               stock_pinamar = GREATEST(0, stock_pinamar - $2), 
-               stock_montevideo = GREATEST(0, stock_montevideo - $3), 
-               updated_at = NOW() 
-           WHERE id = $4;`,
-          [qty, pinDeduct, mvdDeduct, item.variant_id]
-        );
+      let vPinDeduct = 0;
+      let vMvdDeduct = 0;
+      if (vPin >= qty) {
+        vPinDeduct = qty;
+      } else {
+        vPinDeduct = Math.max(0, vPin);
+        vMvdDeduct = qty - vPinDeduct;
       }
 
-      const prodLock = await client.query(
-        "SELECT stock, stock_pinamar, stock_montevideo FROM public.products WHERE id = $1 FOR UPDATE;",
-        [item.product_id]
-      );
-
-      if (prodLock.rows.length > 0) {
-        const pPin = Number(prodLock.rows[0].stock_pinamar || 0);
-        const pMvd = Number(prodLock.rows[0].stock_montevideo || 0);
-        
-        let pinDeduct = 0;
-        let mvdDeduct = 0;
-        
-        if (pPin >= qty) {
-          pinDeduct = qty;
-        } else {
-          pinDeduct = Math.max(0, pPin);
-          mvdDeduct = qty - pinDeduct;
-        }
-
-        await client.query(
-          `UPDATE public.products 
-           SET stock = GREATEST(0, stock - $1), 
-               stock_pinamar = GREATEST(0, stock_pinamar - $2), 
-               stock_montevideo = GREATEST(0, stock_montevideo - $3), 
-               updated_at = NOW() 
-           WHERE id = $4;`,
-          [qty, pinDeduct, mvdDeduct, item.product_id]
-        );
-      }
-    } else if (item.product_id) {
-      const prodLock = await client.query(
-        "SELECT stock, stock_pinamar, stock_montevideo FROM public.products WHERE id = $1 FOR UPDATE;",
-        [item.product_id]
-      );
-
-      if (prodLock.rows.length > 0) {
-        const pPin = Number(prodLock.rows[0].stock_pinamar || 0);
-        const pMvd = Number(prodLock.rows[0].stock_montevideo || 0);
-        
-        let pinDeduct = 0;
-        let mvdDeduct = 0;
-        
-        if (pPin >= qty) {
-          pinDeduct = qty;
-        } else {
-          pinDeduct = Math.max(0, pPin);
-          mvdDeduct = qty - pinDeduct;
-        }
-
-        await client.query(
-          `UPDATE public.products 
-           SET stock = GREATEST(0, stock - $1), 
-               stock_pinamar = GREATEST(0, stock_pinamar - $2), 
-               stock_montevideo = GREATEST(0, stock_montevideo - $3), 
-               updated_at = NOW() 
-           WHERE id = $4;`,
-          [qty, pinDeduct, mvdDeduct, item.product_id]
-        );
-      }
+      matchVar.stockPinamar = Math.max(0, vPin - vPinDeduct);
+      matchVar.stockMontevideo = Math.max(0, vMvd - vMvdDeduct);
+      matchVar.stock = Math.max(0, (matchVar.stock || 0) - qty);
     }
   }
 }
 
 function deductStockMemory(orderItems: any[]): void {
   for (const item of orderItems) {
-    const dbProd = currentStoreState.products?.find(p => String(p.id) === String(item.productId));
-    if (dbProd) {
-      const qty = Number(item.quantity || 1);
-      const pinStock = dbProd.stockPinamar || 0;
-      const mvdStock = dbProd.stockMontevideo || 0;
-      
-      let pinDeduct = 0;
-      let mvdDeduct = 0;
-      if (pinStock >= qty) {
-        pinDeduct = qty;
-      } else {
-        pinDeduct = Math.max(0, pinStock);
-        mvdDeduct = qty - pinDeduct;
-      }
-
-      dbProd.stockPinamar = Math.max(0, pinStock - pinDeduct);
-      dbProd.stockMontevideo = Math.max(0, mvdStock - mvdDeduct);
-      dbProd.stock = Math.max(0, (dbProd.stock || 0) - qty);
-
-      if (item.variantId) {
-        const matchVar = dbProd.variants?.find((v: any) => String(v.id) === String(item.variantId));
-        if (matchVar) {
-          const vPin = matchVar.stockPinamar || 0;
-          const vMvd = matchVar.stockMontevideo || 0;
-          
-          let vPinDeduct = 0;
-          let vMvdDeduct = 0;
-          if (vPin >= qty) {
-            vPinDeduct = qty;
-          } else {
-            vPinDeduct = Math.max(0, vPin);
-            vMvdDeduct = qty - vPinDeduct;
-          }
-
-          matchVar.stockPinamar = Math.max(0, vPin - vPinDeduct);
-          matchVar.stockMontevideo = Math.max(0, vMvd - vMvdDeduct);
-          matchVar.stock = Math.max(0, (matchVar.stock || 0) - qty);
-        }
-      }
-    }
+    const qty = Number(item.quantity || 1);
+    deductSingleItemStockMemory(item.productId, item.variantId || null, qty);
+  }
+  if (currentStoreState && currentStoreState.products) {
+    currentStoreState.products = recalculateComboStocks(currentStoreState.products);
   }
 }
 
@@ -791,7 +1003,7 @@ async function getDbState(): Promise<ShopState> {
       SELECT id, name, price, stock, category, featured, image_url, created_at, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors, is_3d, hours_per_unit,
              size_chart_enabled, size_chart_show_superior, size_chart_show_inferior, size_chart_show_calzado, size_chart_show_recommender, size_chart_data, consult_only,
              categorias_adicionales, subcategorias_adicionales, codigo,
-             precio_compra, precio_con_40, comision_ml, precio_venta_ml, precio_web, descuento_porcentaje, stock_pinamar, stock_montevideo
+             precio_compra, precio_con_40, comision_ml, precio_venta_ml, precio_web, descuento_porcentaje, stock_pinamar, stock_montevideo, is_combo, combo_components
       FROM public.products 
       WHERE active = true 
       ORDER BY id DESC;
@@ -881,7 +1093,9 @@ async function getDbState(): Promise<ShopState> {
         precioWeb: row.precio_web !== null && row.precio_web !== undefined ? Number(row.precio_web) : undefined,
         descuentoPorcentaje: row.descuento_porcentaje !== null && row.descuento_porcentaje !== undefined ? Number(row.descuento_porcentaje) : undefined,
         stockPinamar: row.stock_pinamar !== null && row.stock_pinamar !== undefined ? Number(row.stock_pinamar) : undefined,
-        stockMontevideo: row.stock_montevideo !== null && row.stock_montevideo !== undefined ? Number(row.stock_montevideo) : undefined
+        stockMontevideo: row.stock_montevideo !== null && row.stock_montevideo !== undefined ? Number(row.stock_montevideo) : undefined,
+        isCombo: row.is_combo === true,
+        comboComponents: Array.isArray(row.combo_components) ? row.combo_components : (typeof row.combo_components === 'string' ? JSON.parse(row.combo_components) : [])
       };
     });
 
@@ -1014,12 +1228,14 @@ async function getDbState(): Promise<ShopState> {
       shippingOrigins = currentStoreState.shippingOrigins || [];
     }
 
+    const recalculatedProducts = recalculateComboStocks(products);
+
     return {
       categories: dbCategories.map(c => c.nombre),
       dbCategories,
       dbSubcategories,
       settings,
-      products,
+      products: recalculatedProducts,
       coupons,
       adminCredentials,
       orders,
@@ -1157,6 +1373,8 @@ async function saveDbState(state: ShopState): Promise<boolean> {
       const descuentoPorcentajeVal = prod.descuentoPorcentaje ? Math.floor(Number(prod.descuentoPorcentaje)) : 0;
       const stockPinamarVal = prod.stockPinamar ? Math.floor(Number(prod.stockPinamar)) : 0;
       const stockMontevideoVal = prod.stockMontevideo ? Math.floor(Number(prod.stockMontevideo)) : 0;
+      const isComboVal = !!prod.isCombo;
+      const comboComponentsVal = prod.comboComponents ? JSON.stringify(prod.comboComponents) : '[]';
 
       let prodId: number;
       const catAdicionales = Array.isArray(prod.categorias_adicionales) ? prod.categorias_adicionales : [];
@@ -1168,8 +1386,8 @@ async function saveDbState(state: ShopState): Promise<boolean> {
             name, price, stock, category, featured, image_url, description, categoria_id, original_price, subcategoria_id, active, paused, sizes, colors, is_3d, hours_per_unit,
             size_chart_enabled, size_chart_show_superior, size_chart_show_inferior, size_chart_show_calzado, size_chart_show_recommender, size_chart_data, consult_only,
             categorias_adicionales, subcategorias_adicionales, codigo,
-            precio_compra, precio_con_40, comision_ml, precio_venta_ml, precio_web, descuento_porcentaje, stock_pinamar, stock_montevideo
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
+            precio_compra, precio_con_40, comision_ml, precio_venta_ml, precio_web, descuento_porcentaje, stock_pinamar, stock_montevideo, is_combo, combo_components
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
           RETURNING id;
         `, [
           prod.name, priceVal, stockVal, prod.category, featuredVal, prod.imageUrl,
@@ -1180,7 +1398,8 @@ async function saveDbState(state: ShopState): Promise<boolean> {
           catAdicionales,
           subcatAdicionales,
           prod.codigo || "",
-          precioCompraVal, precioCon40Val, comisionMLVal, precioVentaMLVal, precioWebVal, descuentoPorcentajeVal, stockPinamarVal, stockMontevideoVal
+          precioCompraVal, precioCon40Val, comisionMLVal, precioVentaMLVal, precioWebVal, descuentoPorcentajeVal, stockPinamarVal, stockMontevideoVal,
+          isComboVal, comboComponentsVal
         ]);
         prodId = insertRes.rows[0].id;
         prod.id = String(prodId);
@@ -1203,8 +1422,10 @@ async function saveDbState(state: ShopState): Promise<boolean> {
             precio_web = $30,
             descuento_porcentaje = $31,
             stock_pinamar = $32,
-            stock_montevideo = $33
-          WHERE id = $34;
+            stock_montevideo = $33,
+            is_combo = $34,
+            combo_components = $35
+          WHERE id = $36;
         `, [
           prod.name, priceVal, stockVal, prod.category, featuredVal, prod.imageUrl,
           prod.description || "", prod.categoria_id, originalPriceVal, prod.subcategoria_id,
@@ -1215,6 +1436,7 @@ async function saveDbState(state: ShopState): Promise<boolean> {
           subcatAdicionales,
           prod.codigo || "",
           precioCompraVal, precioCon40Val, comisionMLVal, precioVentaMLVal, precioWebVal, descuentoPorcentajeVal, stockPinamarVal, stockMontevideoVal,
+          isComboVal, comboComponentsVal,
           prodId
         ]);
       }
@@ -1377,6 +1599,8 @@ async function initPostgresStore(): Promise<ShopState | null> {
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS descuento_porcentaje INTEGER DEFAULT 0;
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS stock_pinamar INTEGER DEFAULT 0;
       ALTER TABLE public.products ADD COLUMN IF NOT EXISTS stock_montevideo INTEGER DEFAULT 0;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS is_combo BOOLEAN DEFAULT false;
+      ALTER TABLE public.products ADD COLUMN IF NOT EXISTS combo_components JSONB DEFAULT '[]';
     `);
 
     // Create product_images table if not exists
@@ -2578,7 +2802,7 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
     try {
       currentStoreState = { 
         ...currentStoreState, // Preserve adminCredentials and any other configuration
-        products, 
+        products: recalculateComboStocks(products), 
         categories, 
         settings,
         dbCategories: Array.isArray(dbCategories) ? dbCategories : currentStoreState.dbCategories,

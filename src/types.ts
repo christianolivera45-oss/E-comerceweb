@@ -13,6 +13,14 @@ export interface ProductVariant {
   stockTotalActual?: number;
 }
 
+export interface ComboComponent {
+  productId: string;
+  variantId?: string;
+  quantity: number;
+  comboColor?: string; // Color of the parent combo that this component belongs to
+  comboSize?: string;  // Size of the parent combo that this component belongs to
+}
+
 export interface Product {
   id: string;
   codigo?: string; // Product code / SKU matching spreadsheet code (e.g., J001)
@@ -38,6 +46,8 @@ export interface Product {
   is3D?: boolean; // Is a 3D printed product with custom logic
   hoursPerUnit?: number; // Hours needed to 3D print one unit
   consultOnly?: boolean; // Show 'Consultar por WhatsApp' instead of 'Comprar'
+  isCombo?: boolean;
+  comboComponents?: ComboComponent[];
   
   // Custom internal pricing and branch stock fields
   precioCompra?: number;

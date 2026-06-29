@@ -242,6 +242,32 @@ export default function ProductDetails({
       currentStockPinamar = 0;
       currentStockMontevideo = 0;
     }
+  } else if (hasVariants && selectedColor) {
+    const exactMatch = selectedSize 
+      ? variants.find(v => v.size === selectedSize && v.color === selectedColor)
+      : null;
+    const colorMatch = variants.find(v => v.color === selectedColor);
+    matchedVariant = exactMatch || colorMatch;
+    
+    if (matchedVariant) {
+      if (selectedSize && exactMatch) {
+        currentStock = matchedVariant.stock;
+        currentStockPinamar = matchedVariant.stockPinamar !== undefined ? matchedVariant.stockPinamar : matchedVariant.stock;
+        currentStockMontevideo = matchedVariant.stockMontevideo !== undefined ? matchedVariant.stockMontevideo : 0;
+      } else {
+        const matchingVars = variants.filter(v => v.color === selectedColor);
+        currentStock = matchingVars.reduce((sum, v) => sum + v.stock, 0);
+        currentStockPinamar = matchingVars.reduce((sum, v) => sum + (v.stockPinamar !== undefined ? v.stockPinamar : v.stock), 0);
+        currentStockMontevideo = matchingVars.reduce((sum, v) => sum + (v.stockMontevideo !== undefined ? v.stockMontevideo : 0), 0);
+      }
+      dynamicPrice = typeof matchedVariant.price === "number" && matchedVariant.price > 0
+        ? matchedVariant.price
+        : product.price + (matchedVariant.priceDelta || 0);
+    } else {
+      currentStock = 0;
+      currentStockPinamar = 0;
+      currentStockMontevideo = 0;
+    }
   }
 
   const activeSku = useMemo(() => {
@@ -312,8 +338,16 @@ export default function ProductDetails({
 
   // Dynamic Image carousels
   const allImages = useMemo(() => {
-    return [product.imageUrl, ...(product.imagenes || [])].filter(Boolean);
-  }, [product.imageUrl, product.imagenes]);
+    const base = [product.imageUrl, ...(product.imagenes || [])].filter(Boolean);
+    const variantImgs = (variants || []).map(v => v.imageUrl).filter(Boolean) as string[];
+    // Add variant images that are not in the base list
+    variantImgs.forEach(img => {
+      if (!base.includes(img)) {
+        base.push(img);
+      }
+    });
+    return base;
+  }, [product.imageUrl, product.imagenes, variants]);
 
   const [activeImgIndex, setActiveImgIndex] = useState(0);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
@@ -938,7 +972,7 @@ Me gustaría coordinar stock, fabricación y envío.`;
                       </span>
                     )}
                   </h4>
-                  {isClothing && product.sizeChartEnabled !== false && (
+                  {(product.sizeChartEnabled === undefined ? isClothing : product.sizeChartEnabled) && (
                     <button
                       type="button"
                       onClick={() => setShowSizeChart(true)}

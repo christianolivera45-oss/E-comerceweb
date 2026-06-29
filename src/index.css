@@ -65,3 +65,29 @@
   scrollbar-color: rgba(120, 120, 120, 0.35) rgba(120, 120, 120, 0.08);
 }
 
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(120, 120, 120, 0.05);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(83, 70, 255, 0.45);
+  border-radius: 9999px;
+  transition: all 0.2s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(83, 70, 255, 0.7);
+}
+
+/* Firefox compatibility */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(83, 70, 255, 0.45) rgba(120, 120, 120, 0.05);
+}
+

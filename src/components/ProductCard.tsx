@@ -78,25 +78,30 @@ Precio: $${Math.round(product.price)}
   // List of all unique image URLs for rotation
   const allImages = useMemo(() => {
     const list: string[] = [];
-    if (product.imageUrl) {
-      list.push(product.imageUrl);
-    }
-    if (product.imagenes && Array.isArray(product.imagenes)) {
-      product.imagenes.forEach(img => {
-        if (img && typeof img === "string" && !list.includes(img)) {
-          list.push(img);
-        }
-      });
-    }
-    if (product.variants && Array.isArray(product.variants)) {
-      product.variants.forEach(v => {
+    
+    // Check if there are multiple variants
+    const hasMultipleVariants = product.variants && product.variants.length > 1;
+    
+    if (hasMultipleVariants) {
+      // Rotate ONLY between the photos selected for each variant
+      product.variants!.forEach(v => {
         if (v.imageUrl && typeof v.imageUrl === "string" && !list.includes(v.imageUrl)) {
           list.push(v.imageUrl);
         }
       });
+      
+      // If none of the variants has a custom image, fall back to the main product image
+      if (list.length === 0 && product.imageUrl) {
+        list.push(product.imageUrl);
+      }
+    } else {
+      // If only one variant (or 0), do not rotate (just show the main product image)
+      if (product.imageUrl) {
+        list.push(product.imageUrl);
+      }
     }
     return list;
-  }, [product.imageUrl, product.imagenes, product.variants]);
+  }, [product.imageUrl, product.variants]);
 
   const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
   const [imageIndex, setImageIndex] = useState<number>(0);

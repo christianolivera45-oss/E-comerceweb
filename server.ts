@@ -288,9 +288,31 @@ function recalculateComboStocks(productsList: any[]): any[] {
                      (searchColor.substring(0, 3) === vColor.substring(0, 3));
             });
           }
+          if (!matchVar) {
+            const targetColor = (variantColor || "").toLowerCase().trim();
+            const targetSize = (variantSize || "").toLowerCase().trim();
+            if (targetColor || targetSize) {
+              matchVar = compProd.variants?.find((v: any) => {
+                const vColor = (v.color || "").toLowerCase().trim();
+                const vSize = (v.size || "").toLowerCase().trim();
+                const colorMatches = !targetColor || vColor === targetColor || vColor.includes(targetColor) || targetColor.includes(vColor);
+                const sizeMatches = !targetSize || vSize === targetSize || vSize.includes(targetSize) || targetSize.includes(vSize);
+                return colorMatches && sizeMatches;
+              });
+            }
+          }
           if (matchVar) {
             compPin = matchVar.stockPinamar !== undefined ? matchVar.stockPinamar : (matchVar.stock || 0);
             compMvd = matchVar.stockMontevideo !== undefined ? matchVar.stockMontevideo : 0;
+          } else {
+            // Fallback: sum all variants or get the product stock so it doesn't default to 0
+            if (compProd.variants && compProd.variants.length > 0) {
+              compPin = compProd.variants.reduce((sum: number, v: any) => sum + (v.stockPinamar !== undefined ? v.stockPinamar : (v.stock || 0)), 0);
+              compMvd = compProd.variants.reduce((sum: number, v: any) => sum + (v.stockMontevideo !== undefined ? v.stockMontevideo : 0), 0);
+            } else {
+              compPin = compProd.stockPinamar !== undefined ? compProd.stockPinamar : (compProd.stock || 0);
+              compMvd = compProd.stockMontevideo !== undefined ? compProd.stockMontevideo : 0;
+            }
           }
         } else {
           if (compProd.variants && compProd.variants.length > 0) {
@@ -359,6 +381,15 @@ function recalculateComboStocks(productsList: any[]): any[] {
           if (matchVar) {
             compPin = matchVar.stockPinamar !== undefined ? matchVar.stockPinamar : (matchVar.stock || 0);
             compMvd = matchVar.stockMontevideo !== undefined ? matchVar.stockMontevideo : 0;
+          } else {
+            // Fallback: sum all variants or get the product stock so it doesn't default to 0
+            if (compProd.variants && compProd.variants.length > 0) {
+              compPin = compProd.variants.reduce((sum: number, v: any) => sum + (v.stockPinamar !== undefined ? v.stockPinamar : (v.stock || 0)), 0);
+              compMvd = compProd.variants.reduce((sum: number, v: any) => sum + (v.stockMontevideo !== undefined ? v.stockMontevideo : 0), 0);
+            } else {
+              compPin = compProd.stockPinamar !== undefined ? compProd.stockPinamar : (compProd.stock || 0);
+              compMvd = compProd.stockMontevideo !== undefined ? compProd.stockMontevideo : 0;
+            }
           }
         } else {
           if (compProd.variants && compProd.variants.length > 0) {
@@ -1587,6 +1618,7 @@ async function saveDbState(state: ShopState): Promise<boolean> {
       try {
         await pool.query("DELETE FROM public.product_variants WHERE product_id = $1;", [prodId]);
         if (Array.isArray(prod.variants) && prod.variants.length > 0) {
+          const insertedIds = new Set<string>();
           for (const variant of prod.variants) {
             let sku = variant.sku;
             if (!sku || sku.startsWith("SKU-")) {
@@ -1601,22 +1633,59 @@ async function saveDbState(state: ShopState): Promise<boolean> {
               }
             }
             const variantPrice = typeof variant.price === "number" && variant.price > 0 ? variant.price : null;
-            await pool.query(`
-              INSERT INTO public.product_variants (product_id, sku, size_value, color_name, color_code, additional_price, stock, image_url, price, active, stock_pinamar, stock_montevideo)
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, $10, $11);
-            `, [
-              prodId,
-              sku,
-              variant.size,
-              variant.color,
-              variant.colorCode || "",
-              Number(variant.priceDelta || 0),
-              Math.floor(Number(variant.stock || 0)),
-              variant.imageUrl || null,
-              variantPrice,
-              Math.floor(Number(variant.stockPinamar || 0)),
-              Math.floor(Number(variant.stockMontevideo || 0))
-            ]);
+            let isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(variant.id || ""));
+            if (isUuid) {
+              const strId = String(variant.id).toLowerCase();
+              if (insertedIds.has(strId)) {
+                isUuid = false;
+              } else {
+                const dbCheck = await pool.query("SELECT product_id FROM public.product_variants WHERE id = $1;", [variant.id]);
+                if (dbCheck.rows.length > 0) {
+                  if (dbCheck.rows[0].product_id !== prodId) {
+                    isUuid = false;
+                  }
+                }
+              }
+            }
+
+            if (isUuid) {
+              const strId = String(variant.id).toLowerCase();
+              insertedIds.add(strId);
+              await pool.query(`
+                INSERT INTO public.product_variants (id, product_id, sku, size_value, color_name, color_code, additional_price, stock, image_url, price, active, stock_pinamar, stock_montevideo)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, $11, $12);
+              `, [
+                variant.id,
+                prodId,
+                sku,
+                variant.size,
+                variant.color,
+                variant.colorCode || "",
+                Number(variant.priceDelta || 0),
+                Math.floor(Number(variant.stock || 0)),
+                variant.imageUrl || null,
+                variantPrice,
+                Math.floor(Number(variant.stockPinamar || 0)),
+                Math.floor(Number(variant.stockMontevideo || 0))
+              ]);
+            } else {
+              await pool.query(`
+                INSERT INTO public.product_variants (product_id, sku, size_value, color_name, color_code, additional_price, stock, image_url, price, active, stock_pinamar, stock_montevideo)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, $10, $11);
+              `, [
+                prodId,
+                sku,
+                variant.size,
+                variant.color,
+                variant.colorCode || "",
+                Number(variant.priceDelta || 0),
+                Math.floor(Number(variant.stock || 0)),
+                variant.imageUrl || null,
+                variantPrice,
+                Math.floor(Number(variant.stockPinamar || 0)),
+                Math.floor(Number(variant.stockMontevideo || 0))
+              ]);
+            }
           }
         }
       } catch (varErr) {

@@ -449,7 +449,9 @@ export const DashboardShippings: React.FC<DashboardShippingsProps> = ({
             <div class="ticket-wrapper">
               <div class="cut-instruction">✂️ CORTE POR LA LÍNEA PUNTEADA PARA PEGAR EN EL PAQUETE</div>
               <div class="label-container">
-                <div class="title">JUEM</div>
+                <div style="text-align: center; margin-bottom: 2mm;">
+                  <img src="https://res.cloudinary.com/dwqzjqjwz/image/upload/v1781632379/ventas_juem_cloudinary/vsjhahrwh1thtwiwzbia.png" alt="JUEM Logo" style="max-height: 14mm; max-width: 60mm; object-fit: contain; display: block; margin: 0 auto;" />
+                </div>
                 <div class="subtitle">Tienda de Indumentaria & Accesorios</div>
                 <div class="badge">ETIQUETA DE ENVÍO</div>
                 
@@ -491,7 +493,9 @@ export const DashboardShippings: React.FC<DashboardShippingsProps> = ({
           ` : `
             <div class="label-container">
               ${printFormat === "compacto" ? `
-                <div class="title">JUEM</div>
+                <div style="text-align: center; margin-bottom: 2mm;">
+                  <img src="https://res.cloudinary.com/dwqzjqjwz/image/upload/v1781632379/ventas_juem_cloudinary/vsjhahrwh1thtwiwzbia.png" alt="JUEM Logo" style="max-height: 10mm; max-width: 50mm; object-fit: contain; display: block; margin: 0 auto;" />
+                </div>
                 <div class="subtitle">Tienda de Indumentaria & Accesorios</div>
                 <div class="badge">ETIQUETA DE ENVÍO</div>
                 
@@ -528,9 +532,11 @@ export const DashboardShippings: React.FC<DashboardShippingsProps> = ({
                 <div class="barcode-dummy">||| | | |||| | | ||| | |||</div>
               ` : `
                 <div class="header">
-                  <div>
-                    <div class="title">JUEM</div>
-                    <div style="font-size:12px; color:#555;">TIENDA DE INDUMENTARIA & ACCESORIOS</div>
+                  <div style="display: flex; align-items: center; gap: 12px;">
+                    <img src="https://res.cloudinary.com/dwqzjqjwz/image/upload/v1781632379/ventas_juem_cloudinary/vsjhahrwh1thtwiwzbia.png" alt="JUEM Logo" style="max-height: 16mm; max-width: 55mm; object-fit: contain;" />
+                    <div>
+                      <div style="font-size:11px; color:#555; font-weight: bold; margin-top: 4px;">TIENDA DE INDUMENTARIA & ACCESORIOS</div>
+                    </div>
                   </div>
                   <div class="badge">ETIQUETA DE ENVÍO</div>
                 </div>
@@ -965,22 +971,29 @@ export const DashboardShippings: React.FC<DashboardShippingsProps> = ({
                 <div className="text-center pb-4 border-b border-dashed border-zinc-800/60 flex flex-col items-center justify-center">
                   {labelTheme === "azul-oro" ? (
                     <>
-                      <div className="flex items-center justify-center text-amber-400 mb-1">
-                        <Moon className="h-5 w-5 fill-amber-400 text-amber-400 animate-pulse" />
+                      <div className="flex items-center justify-center mb-1 bg-zinc-950/40 p-2 rounded-xl border border-zinc-800/50">
+                        <img 
+                          src="https://res.cloudinary.com/dwqzjqjwz/image/upload/v1781632379/ventas_juem_cloudinary/vsjhahrwh1thtwiwzbia.png" 
+                          alt="JUEM Logo" 
+                          className="h-10 max-w-[180px] object-contain brightness-110 contrast-125"
+                          referrerPolicy="no-referrer"
+                        />
                       </div>
-                      <span className="text-xl font-black tracking-widest text-amber-400 font-sans block">
-                        Juem
-                      </span>
-                      <span className="text-[8px] uppercase tracking-wider text-zinc-400 block font-sans">
+                      <span className="text-[8px] uppercase tracking-wider text-zinc-400 block font-sans mt-1">
                         TIENDA DE INDUMENTARIA & ACCESORIOS
                       </span>
                     </>
                   ) : (
                     <>
-                      <span className="text-2xl font-black tracking-widest uppercase block">
-                        JUEM
-                      </span>
-                      <span className="text-[9px] font-bold tracking-wider block">
+                      <div className="flex items-center justify-center mb-1">
+                        <img 
+                          src="https://res.cloudinary.com/dwqzjqjwz/image/upload/v1781632379/ventas_juem_cloudinary/vsjhahrwh1thtwiwzbia.png" 
+                          alt="JUEM Logo" 
+                          className="h-12 max-w-[180px] object-contain filter grayscale"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      <span className="text-[9px] font-bold tracking-wider block mt-1">
                         TICKET TÉRMICO DE DESPACHO
                       </span>
                     </>

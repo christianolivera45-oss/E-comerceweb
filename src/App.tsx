@@ -848,9 +848,31 @@ function recalculateComboStocks(productsList: Product[]): Product[] {
                      (searchColor.substring(0, 3) === vColor.substring(0, 3));
             });
           }
+          if (!matchVar) {
+            const targetColor = (variantColor || "").toLowerCase().trim();
+            const targetSize = (variantSize || "").toLowerCase().trim();
+            if (targetColor || targetSize) {
+              matchVar = compProd.variants?.find((v: any) => {
+                const vColor = (v.color || "").toLowerCase().trim();
+                const vSize = (v.size || "").toLowerCase().trim();
+                const colorMatches = !targetColor || vColor === targetColor || vColor.includes(targetColor) || targetColor.includes(vColor);
+                const sizeMatches = !targetSize || vSize === targetSize || vSize.includes(targetSize) || targetSize.includes(vSize);
+                return colorMatches && sizeMatches;
+              });
+            }
+          }
           if (matchVar) {
             compPin = matchVar.stockPinamar !== undefined ? matchVar.stockPinamar : (matchVar.stock || 0);
             compMvd = matchVar.stockMontevideo !== undefined ? matchVar.stockMontevideo : 0;
+          } else {
+            // Fallback: sum all variants or get the product stock so it doesn't default to 0
+            if (compProd.variants && compProd.variants.length > 0) {
+              compPin = compProd.variants.reduce((sum, v) => sum + (v.stockPinamar !== undefined ? v.stockPinamar : (v.stock || 0)), 0);
+              compMvd = compProd.variants.reduce((sum, v) => sum + (v.stockMontevideo !== undefined ? v.stockMontevideo : 0), 0);
+            } else {
+              compPin = compProd.stockPinamar !== undefined ? compProd.stockPinamar : (compProd.stock || 0);
+              compMvd = compProd.stockMontevideo !== undefined ? compProd.stockMontevideo : 0;
+            }
           }
         } else {
           if (compProd.variants && compProd.variants.length > 0) {
@@ -922,6 +944,15 @@ function recalculateComboStocks(productsList: Product[]): Product[] {
           if (matchVar) {
             compPin = matchVar.stockPinamar !== undefined ? matchVar.stockPinamar : (matchVar.stock || 0);
             compMvd = matchVar.stockMontevideo !== undefined ? matchVar.stockMontevideo : 0;
+          } else {
+            // Fallback: sum all variants or get the product stock so it doesn't default to 0
+            if (compProd.variants && compProd.variants.length > 0) {
+              compPin = compProd.variants.reduce((sum, v) => sum + (v.stockPinamar !== undefined ? v.stockPinamar : (v.stock || 0)), 0);
+              compMvd = compProd.variants.reduce((sum, v) => sum + (v.stockMontevideo !== undefined ? v.stockMontevideo : 0), 0);
+            } else {
+              compPin = compProd.stockPinamar !== undefined ? compProd.stockPinamar : (compProd.stock || 0);
+              compMvd = compProd.stockMontevideo !== undefined ? compProd.stockMontevideo : 0;
+            }
           }
         } else {
           if (compProd.variants && compProd.variants.length > 0) {
@@ -1437,70 +1468,6 @@ export default function App() {
   const [subToDeleteId, setSubToDeleteId] = useState<string | null>(null);
   const [adminToast, setAdminToast] = useState<{ text: string; type: "success" | "error" | "neutral" } | null>(null);
 
-  const displayProducts = useMemo(() => {
-    const raw = store.products || [];
-    return raw.map(p => {
-      if (p.isCombo) {
-        let minPin = Infinity;
-        let minMvd = Infinity;
-        const comps = p.comboComponents || [];
-        for (const comp of comps) {
-          const compProd = raw.find(cp => String(cp.id) === String(comp.productId));
-          if (!compProd) {
-            minPin = 0;
-            minMvd = 0;
-            break;
-          }
-          let compPin = 0;
-          let compMvd = 0;
-          if (comp.variantId) {
-            const matchVar = compProd.variants?.find(v => String(v.id) === String(comp.variantId));
-            if (matchVar) {
-              compPin = matchVar.stockPinamar !== undefined ? matchVar.stockPinamar : (matchVar.stock || 0);
-              compMvd = matchVar.stockMontevideo !== undefined ? matchVar.stockMontevideo : 0;
-            }
-          } else {
-            if (compProd.variants && compProd.variants.length > 0) {
-              compPin = compProd.variants.reduce((sum, v) => sum + (v.stockPinamar !== undefined ? v.stockPinamar : (v.stock || 0)), 0);
-              compMvd = compProd.variants.reduce((sum, v) => sum + (v.stockMontevideo !== undefined ? v.stockMontevideo : 0), 0);
-            } else {
-              compPin = compProd.stockPinamar !== undefined ? compProd.stockPinamar : (compProd.stock || 0);
-              compMvd = compProd.stockMontevideo !== undefined ? compProd.stockMontevideo : 0;
-            }
-          }
-          const reqQty = Number(comp.quantity) || 1;
-          const pinAvail = Math.floor(compPin / reqQty);
-          const mvdAvail = Math.floor(compMvd / reqQty);
-          if (pinAvail < minPin) minPin = pinAvail;
-          if (mvdAvail < minMvd) minMvd = mvdAvail;
-        }
-        const pinStock = minPin === Infinity ? 0 : Math.max(0, minPin);
-        const mvdStock = minMvd === Infinity ? 0 : Math.max(0, minMvd);
-        const totalStock = pinStock + mvdStock;
-        
-        // Also calculate cost dynamically as sum of purchase costs of its components
-        let totalCost = 0;
-        for (const comp of comps) {
-          const compProd = raw.find(cp => String(cp.id) === String(comp.productId));
-          if (compProd) {
-            const purchaseCost = Number(compProd.precioCompra || 0);
-            totalCost += purchaseCost * (Number(comp.quantity) || 1);
-          }
-        }
-        
-        return {
-          ...p,
-          stockPinamar: pinStock,
-          stockMontevideo: mvdStock,
-          stock: totalStock,
-          precioCompra: totalCost,
-          precioCon40: totalCost * 1.40 // Calculate con40 dynamically if needed
-        };
-      }
-      return p;
-    });
-  }, [store.products]);
-
   const getComboPurchaseCost = (comboComponents: any[]) => {
     let total = 0;
     const rawProds = store.products || [];
@@ -1565,17 +1532,39 @@ export default function App() {
               let matchVar = compProd.variants?.find(varObj => String(varObj.id) === String(comp.variantId));
               if (!matchVar && comp.comboColor) {
                 const searchColor = comp.comboColor.toLowerCase().trim();
-                matchVar = compProd.variants?.find((v: any) => {
-                  const vColor = (v.color || "").toLowerCase().trim();
+                matchVar = compProd.variants?.find((varObj: any) => {
+                  const vColor = (varObj.color || "").toLowerCase().trim();
                   return vColor === searchColor || 
                          vColor.includes(searchColor) || 
                          searchColor.includes(vColor) ||
                          (searchColor.substring(0, 3) === vColor.substring(0, 3));
                 });
               }
+              if (!matchVar) {
+                const targetColor = (v.color || "").toLowerCase().trim();
+                const targetSize = (v.size || "").toLowerCase().trim();
+                if (targetColor || targetSize) {
+                  matchVar = compProd.variants?.find((varObj: any) => {
+                    const vColor = (varObj.color || "").toLowerCase().trim();
+                    const vSize = (varObj.size || "").toLowerCase().trim();
+                    const colorMatches = !targetColor || vColor === targetColor || vColor.includes(targetColor) || targetColor.includes(vColor);
+                    const sizeMatches = !targetSize || vSize === targetSize || vSize.includes(targetSize) || targetSize.includes(vSize);
+                    return colorMatches && sizeMatches;
+                  });
+                }
+              }
               if (matchVar) {
                 compPin = matchVar.stockPinamar !== undefined ? matchVar.stockPinamar : (matchVar.stock || 0);
                 compMvd = matchVar.stockMontevideo !== undefined ? matchVar.stockMontevideo : 0;
+              } else {
+                // Fallback: sum all variants or get the product stock so it doesn't default to 0
+                if (compProd.variants && compProd.variants.length > 0) {
+                  compPin = compProd.variants.reduce((sum, varObj) => sum + (varObj.stockPinamar !== undefined ? varObj.stockPinamar : (varObj.stock || 0)), 0);
+                  compMvd = compProd.variants.reduce((sum, varObj) => sum + (varObj.stockMontevideo !== undefined ? varObj.stockMontevideo : 0), 0);
+                } else {
+                  compPin = compProd.stockPinamar !== undefined ? compProd.stockPinamar : (compProd.stock || 0);
+                  compMvd = compProd.stockMontevideo !== undefined ? compProd.stockMontevideo : 0;
+                }
               }
             } else {
               if (compProd.variants && compProd.variants.length > 0) {
@@ -1629,10 +1618,29 @@ export default function App() {
         let compPin = 0;
         let compMvd = 0;
         if (comp.variantId) {
-          const matchVar = compProd.variants?.find(vObj => String(vObj.id) === String(comp.variantId));
+          let matchVar = compProd.variants?.find(vObj => String(vObj.id) === String(comp.variantId));
+          if (!matchVar && comp.comboColor) {
+            const searchColor = comp.comboColor.toLowerCase().trim();
+            matchVar = compProd.variants?.find((vObj: any) => {
+              const vColor = (vObj.color || "").toLowerCase().trim();
+              return vColor === searchColor || 
+                     vColor.includes(searchColor) || 
+                     searchColor.includes(vColor) ||
+                     (searchColor.substring(0, 3) === vColor.substring(0, 3));
+            });
+          }
           if (matchVar) {
             compPin = matchVar.stockPinamar !== undefined ? matchVar.stockPinamar : (matchVar.stock || 0);
             compMvd = matchVar.stockMontevideo !== undefined ? matchVar.stockMontevideo : 0;
+          } else {
+            // Fallback: sum all variants or get the product stock so it doesn't default to 0
+            if (compProd.variants && compProd.variants.length > 0) {
+              compPin = compProd.variants.reduce((sum, v) => sum + (v.stockPinamar !== undefined ? v.stockPinamar : (v.stock || 0)), 0);
+              compMvd = compProd.variants.reduce((sum, v) => sum + (v.stockMontevideo !== undefined ? v.stockMontevideo : 0), 0);
+            } else {
+              compPin = compProd.stockPinamar !== undefined ? compProd.stockPinamar : (compProd.stock || 0);
+              compMvd = compProd.stockMontevideo !== undefined ? compProd.stockMontevideo : 0;
+            }
           }
         } else {
           if (compProd.variants && compProd.variants.length > 0) {
@@ -1659,6 +1667,39 @@ export default function App() {
       };
     }
   };
+
+  const displayProducts = useMemo(() => {
+    const raw = store.products || [];
+    return raw.map(p => {
+      if (p.isCombo) {
+        const comboStocks = getComboDynamicStocks(p.comboComponents || [], p.variants || []);
+        const pinStock = comboStocks.stockPinamar;
+        const mvdStock = comboStocks.stockMontevideo;
+        const totalStock = comboStocks.stockTotal;
+        const updatedVariants = comboStocks.updatedVariants;
+        
+        let totalCost = 0;
+        for (const comp of (p.comboComponents || [])) {
+          const compProd = raw.find(cp => String(cp.id) === String(comp.productId));
+          if (compProd) {
+            const purchaseCost = Number(compProd.precioCompra || 0);
+            totalCost += purchaseCost * (Number(comp.quantity) || 1);
+          }
+        }
+        
+        return {
+          ...p,
+          stockPinamar: pinStock,
+          stockMontevideo: mvdStock,
+          stock: totalStock,
+          precioCompra: totalCost,
+          precioCon40: totalCost * 1.40,
+          variants: updatedVariants && updatedVariants.length > 0 ? updatedVariants : p.variants
+        };
+      }
+      return p;
+    });
+  }, [store.products]);
 
   const getProductActualStock = (p: any) => {
     if (!p) return 0;

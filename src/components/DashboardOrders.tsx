@@ -24,7 +24,8 @@ import {
   ArrowRight,
   User,
   MapPin,
-  AlertCircle
+  AlertCircle,
+  Edit
 } from "lucide-react";
 
 interface DashboardOrdersProps {
@@ -32,13 +33,15 @@ interface DashboardOrdersProps {
   onUpdateStatus: (id: string, status: string) => Promise<void>;
   onDeleteOrder: (id: string) => Promise<void>;
   onOrderCreated?: (newOrder: Order) => void;
+  onOrderUpdated?: (updatedOrder: Order) => void;
 }
 
 export const DashboardOrders: React.FC<DashboardOrdersProps> = ({ 
   store, 
   onUpdateStatus, 
   onDeleteOrder,
-  onOrderCreated 
+  onOrderCreated,
+  onOrderUpdated
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -51,6 +54,7 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
 
   // New sale modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [newSaleCustomerName, setNewSaleCustomerName] = useState("Cliente WhatsApp / Consumidor final");
   const [newSaleCustomerEmail, setNewSaleCustomerEmail] = useState("cliente@gmail.com");
   const [newSaleCustomerPhone, setNewSaleCustomerPhone] = useState("");
@@ -60,6 +64,13 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
   const [newSaleDeposito, setNewSaleDeposito] = useState<"Pinamar" | "Montevideo">("Pinamar");
   const [newSaleCanal, setNewSaleCanal] = useState("WhatsApp");
   const [newSaleStatus, setNewSaleStatus] = useState<"pago_aprobado" | "pago_pendiente" | "pago_rechazado">("pago_aprobado");
+  const [newSaleBypassStockDeduction, setNewSaleBypassStockDeduction] = useState(false);
+  const [newSaleDate, setNewSaleDate] = useState(() => {
+    const d = new Date();
+    const offset = d.getTimezoneOffset();
+    const localDate = new Date(d.getTime() - (offset * 60 * 1000));
+    return localDate.toISOString().split("T")[0];
+  });
   const [newSaleItems, setNewSaleItems] = useState<any[]>([]);
   const [productSearchQuery, setProductSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -77,16 +88,23 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
   // Formula helper to compute cost, net profit, and shipping cost for an order
   const getOrderCostAndProfit = (order: Order, products: Product[]) => {
     let totalCost = 0;
+    let totalComisionML = 0;
     if (order.items && order.items.length > 0) {
       for (const item of order.items) {
         const prod = products.find(p => String(p.id) === String(item.productId));
         const itemCostPerUnit = prod?.precioCompra || 0;
         totalCost += (item.quantity * itemCostPerUnit);
+
+        const isML = order.canal && order.canal.toLowerCase() === "mercado libre";
+        if (isML) {
+          const commPerUnit = item.comisionML !== undefined ? item.comisionML : (prod?.comisionML || 0);
+          totalComisionML += (item.quantity * commPerUnit);
+        }
       }
     }
     const totalPriceProducts = order.subtotal - order.discountAmount;
-    const gananciaNeta = totalPriceProducts - totalCost;
-    return { totalCost, gananciaNeta, totalPriceProducts };
+    const gananciaNeta = totalPriceProducts - totalCost - totalComisionML;
+    return { totalCost, gananciaNeta, totalPriceProducts, totalComisionML };
   };
 
   // Metrics (computed over ALL APPROVED sales)
@@ -112,7 +130,7 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
   let totalJuem = 0;
 
   for (const o of approvedOrders) {
-    const { totalCost, gananciaNeta, totalPriceProducts } = getOrderCostAndProfit(o, productsList);
+    const { totalCost, gananciaNeta, totalPriceProducts, totalComisionML } = getOrderCostAndProfit(o, productsList);
     const isMontevideo = o.depositoOrigen === "Montevideo";
     
     if (isMontevideo) {
@@ -122,8 +140,9 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
       totalJuem += totalCost + (0.6 * gananciaNeta);
     } else {
       // Pinamar (JUEM): 100% of net profit + product cost + shipping cost = totalPriceProducts + shippingCost
+      // (Deduct Mercado Libre commission from JUEM's total if sold via Mercado Libre)
       totalFranquicia += 0;
-      totalJuem += totalPriceProducts + (o.shippingCost || 0);
+      totalJuem += totalPriceProducts - totalComisionML + (o.shippingCost || 0);
     }
   }
 
@@ -223,6 +242,9 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
 
   // Add suggestion to transaction cart
   const handleAddProductToSale = (item: any) => {
+    const isML = newSaleCanal && newSaleCanal.toLowerCase() === "mercado libre";
+    const initialPrice = (isML && item.product.precioVentaML) ? item.product.precioVentaML : item.price;
+
     const isAlreadyAdded = newSaleItems.some(
       i => i.productId === item.product.id && 
            (!item.variant || i.variantId === item.variant.id)
@@ -232,7 +254,9 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
       // Just increment quantity of existing item
       setNewSaleItems(prev => prev.map(i => {
         if (i.productId === item.product.id && (!item.variant || i.variantId === item.variant.id)) {
-          return { ...i, quantity: i.quantity + 1, totalPrice: (i.quantity + 1) * i.unitPrice };
+          const newQty = i.quantity + 1;
+          const numPrice = Number(i.unitPrice) || 0;
+          return { ...i, quantity: newQty, totalPrice: newQty * numPrice };
         }
         return i;
       }));
@@ -246,10 +270,11 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
           sku: item.sku || undefined,
           sizeSelected: item.variant?.size || undefined,
           colorSelected: item.variant?.color || undefined,
-          unitPrice: item.price,
+          unitPrice: initialPrice,
           costPrice: item.cost, // kept for preview calculation
+          comisionML: item.product.comisionML || 0,
           quantity: 1,
-          totalPrice: item.price
+          totalPrice: initialPrice
         }
       ]);
     }
@@ -264,16 +289,59 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
   };
 
   // Update item price or quantity in transaction cart
-  const handleUpdateSaleItem = (index: number, field: "quantity" | "unitPrice", value: number) => {
+  const handleUpdateSaleItem = (index: number, field: "quantity" | "unitPrice", value: string | number) => {
     setNewSaleItems(prev => prev.map((item, idx) => {
       if (idx === index) {
-        const updatedVal = Math.max(0, value);
+        let updatedVal = value;
+        if (field === "quantity") {
+          updatedVal = Math.max(0, parseInt(value as string) || 0);
+        }
         const updatedItem = { ...item, [field]: updatedVal };
-        updatedItem.totalPrice = updatedItem.quantity * updatedItem.unitPrice;
+        const numPrice = Number(updatedItem.unitPrice) || 0;
+        updatedItem.totalPrice = updatedItem.quantity * numPrice;
         return updatedItem;
       }
       return item;
     }));
+  };
+
+  // Set up modal state to edit an existing order
+  const handleEditOrder = (order: Order) => {
+    setEditingOrderId(order.id);
+    setNewSaleCustomerName(order.customerName || "");
+    setNewSaleCustomerEmail(order.customerEmail || "");
+    setNewSaleCustomerPhone(order.customerPhone || "");
+    setNewSaleShippingCost(order.shippingCost || 0);
+    setNewSaleCouponCode(order.couponCode || "");
+    setNewSaleNotes(order.notes || "");
+    setNewSaleDeposito(order.depositoOrigen || "Pinamar");
+    setNewSaleCanal(order.canal || "WhatsApp");
+    setNewSaleStatus(order.status as any || "pago_aprobado");
+    setNewSaleBypassStockDeduction(!!order.bypassStockDeduction);
+    
+    if (order.createdAt) {
+      setNewSaleDate(order.createdAt.split("T")[0]);
+    }
+
+    const prefilledItems = (order.items || []).map(i => {
+      const prod = productsList.find(p => String(p.id) === String(i.productId));
+      return {
+        productId: i.productId,
+        variantId: i.variantId,
+        productName: i.productName,
+        sku: i.sku,
+        sizeSelected: i.sizeSelected,
+        colorSelected: i.colorSelected,
+        unitPrice: i.unitPrice,
+        totalPrice: i.totalPrice,
+        quantity: i.quantity,
+        costPrice: i.costPrice || (prod ? prod.precioCompra : 0) || 0,
+        comisionML: i.comisionML !== undefined ? i.comisionML : (prod ? (prod.comisionML || 0) : 0)
+      };
+    });
+    setNewSaleItems(prefilledItems);
+    setNewSaleErrorMessage(null);
+    setIsModalOpen(true);
   };
 
   // Dispatch sale/invoice creation
@@ -283,8 +351,8 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
       return;
     }
 
-    if (!newSaleCustomerName.trim() || !newSaleCustomerEmail.trim()) {
-      setNewSaleErrorMessage("El nombre y el correo electrónico del cliente son obligatorios.");
+    if (!newSaleCustomerName.trim()) {
+      setNewSaleErrorMessage("El nombre del cliente es obligatorio.");
       return;
     }
 
@@ -295,10 +363,12 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
     // Discount amount calculation helper
     const discountAmount = 0; // standard manual cart discount is 0 unless coupon applied
 
+    const finalCreatedAt = newSaleDate ? new Date(newSaleDate + "T12:00:00").toISOString() : new Date().toISOString();
+
     const payload = {
-      customerName: newSaleCustomerName,
-      customerEmail: newSaleCustomerEmail,
-      customerPhone: newSaleCustomerPhone,
+      customerName: newSaleCustomerName.trim(),
+      customerEmail: newSaleCustomerEmail.trim() || "cliente@gmail.com",
+      customerPhone: newSaleCustomerPhone.trim() || undefined,
       shippingCost: newSaleShippingCost,
       couponCode: newSaleCouponCode || undefined,
       notes: newSaleNotes,
@@ -306,6 +376,8 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
       depositoOrigen: newSaleDeposito,
       canal: newSaleCanal,
       status: newSaleStatus, // converted server-side or immediate deduction
+      bypassStockDeduction: newSaleBypassStockDeduction,
+      createdAt: finalCreatedAt,
       items: newSaleItems.map(i => ({
         productId: i.productId,
         variantId: i.variantId,
@@ -319,9 +391,13 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
       }))
     };
 
+    const isEdit = !!editingOrderId;
+    const url = isEdit ? `/api/orders/${editingOrderId}` : "/api/orders";
+    const method = isEdit ? "PUT" : "POST";
+
     try {
-      const response = await fetch("/api/orders", {
-        method: "POST",
+      const response = await fetch(url, {
+        method,
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${localStorage.getItem("apex_admin_token")}`
@@ -331,39 +407,88 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
 
       const data = await response.json();
       if (response.ok && data.success) {
-        // Construct Order object for local React state inclusion
-        const createdOrder: Order = {
-          id: data.orderId || "manual-" + Math.random().toString(36).substring(2, 9),
-          customerName: payload.customerName,
-          customerEmail: payload.customerEmail,
-          customerPhone: payload.customerPhone || undefined,
-          subtotal: subtotal,
-          discountAmount: discountAmount,
-          shippingCost: Number(payload.shippingCost),
-          total: subtotal + Number(payload.shippingCost),
-          couponCode: payload.couponCode,
-          status: payload.status,
-          notes: payload.notes || undefined,
-          paymentMethod: payload.paymentMethod,
-          depositoOrigen: payload.depositoOrigen,
-          canal: payload.canal,
-          createdAt: new Date().toISOString(),
-          items: payload.items.map((it, idx) => ({
-            id: `manual-item-${idx}`,
-            productId: it.productId,
-            variantId: it.variantId,
-            productName: it.productName,
-            sku: it.sku,
-            sizeSelected: it.sizeSelected,
-            colorSelected: it.colorSelected,
-            unitPrice: it.unitPrice,
-            quantity: it.quantity,
-            totalPrice: it.totalPrice
-          }))
-        };
+        if (isEdit) {
+          const updatedOrder: Order = {
+            id: editingOrderId!,
+            customerName: payload.customerName,
+            customerEmail: payload.customerEmail,
+            customerPhone: payload.customerPhone || undefined,
+            subtotal: subtotal,
+            discountAmount: discountAmount,
+            shippingCost: Number(payload.shippingCost),
+            total: subtotal + Number(payload.shippingCost),
+            couponCode: payload.couponCode,
+            status: payload.status,
+            notes: payload.notes || undefined,
+            bypassStockDeduction: payload.bypassStockDeduction,
+            paymentMethod: payload.paymentMethod,
+            depositoOrigen: payload.depositoOrigen,
+            canal: payload.canal,
+            createdAt: finalCreatedAt,
+            items: payload.items.map((it, idx) => {
+              const orig = newSaleItems[idx] || {};
+              return {
+                id: `edited-item-${idx}`,
+                productId: String(it.productId),
+                variantId: it.variantId ? String(it.variantId) : undefined,
+                productName: it.productName,
+                sku: it.sku || undefined,
+                sizeSelected: it.sizeSelected || undefined,
+                colorSelected: it.colorSelected || undefined,
+                unitPrice: it.unitPrice,
+                quantity: it.quantity,
+                totalPrice: it.totalPrice,
+                comisionML: orig.comisionML,
+                costPrice: orig.costPrice
+              };
+            })
+          };
 
-        if (onOrderCreated) {
-          onOrderCreated(createdOrder);
+          if (onOrderUpdated) {
+            onOrderUpdated(updatedOrder);
+          }
+          setEditingOrderId(null);
+        } else {
+          // Construct Order object for local React state inclusion
+          const createdOrder: Order = {
+            id: data.orderId || "manual-" + Math.random().toString(36).substring(2, 9),
+            customerName: payload.customerName,
+            customerEmail: payload.customerEmail,
+            customerPhone: payload.customerPhone || undefined,
+            subtotal: subtotal,
+            discountAmount: discountAmount,
+            shippingCost: Number(payload.shippingCost),
+            total: subtotal + Number(payload.shippingCost),
+            couponCode: payload.couponCode,
+            status: payload.status,
+            notes: payload.notes || undefined,
+            bypassStockDeduction: payload.bypassStockDeduction,
+            paymentMethod: payload.paymentMethod,
+            depositoOrigen: payload.depositoOrigen,
+            canal: payload.canal,
+            createdAt: finalCreatedAt,
+            items: payload.items.map((it, idx) => {
+              const orig = newSaleItems[idx] || {};
+              return {
+                id: `manual-item-${idx}`,
+                productId: String(it.productId),
+                variantId: it.variantId ? String(it.variantId) : undefined,
+                productName: it.productName,
+                sku: it.sku || undefined,
+                sizeSelected: it.sizeSelected || undefined,
+                colorSelected: it.colorSelected || undefined,
+                unitPrice: it.unitPrice,
+                quantity: it.quantity,
+                totalPrice: it.totalPrice,
+                comisionML: orig.comisionML,
+                costPrice: orig.costPrice
+              };
+            })
+          };
+
+          if (onOrderCreated) {
+            onOrderCreated(createdOrder);
+          }
         }
 
         // Reset state
@@ -372,6 +497,14 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
         setNewSaleNotes("");
         setNewSaleShippingCost(0);
         setNewSaleCouponCode("");
+        setNewSaleBypassStockDeduction(false);
+        const todayStr = (() => {
+          const d = new Date();
+          const offset = d.getTimezoneOffset();
+          const localDate = new Date(d.getTime() - (offset * 60 * 1000));
+          return localDate.toISOString().split("T")[0];
+        })();
+        setNewSaleDate(todayStr);
         setIsModalOpen(false);
       } else {
         setNewSaleErrorMessage(data.message || "Error al registrar la venta en el servidor.");
@@ -458,102 +591,113 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
   };
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full space-y-6 animate-fade-in relative">
       
       {/* 5 METRIC KPI HEADER OVERVIEW CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         
         {/* Metric 1 - Registros */}
-        <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-3">
+        <div className="bg-zinc-900/50 backdrop-blur-md p-5 rounded-2xl border border-zinc-850/85 hover:border-indigo-500/40 shadow-[0_8px_30px_rgba(0,0,0,0.15)] hover:shadow-[0_8px_30px_rgba(99,102,241,0.06)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between space-y-3 group relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-indigo-500/20 group-hover:bg-indigo-500/50 transition-colors duration-300" />
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider">Registros</span>
-            <div className="p-2 bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400 rounded-lg">
-              <ShoppingBag className="h-4.5 w-4.5" />
+            <span className="text-[10px] sm:text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Registros</span>
+            <div className="p-2 bg-indigo-950/40 text-indigo-400 rounded-lg border border-indigo-900/30 group-hover:scale-110 transition-transform duration-300">
+              <ShoppingBag className="h-4 w-4" />
             </div>
           </div>
           <div>
-            <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-zinc-50 font-mono">
+            <h3 className="text-xl sm:text-2xl font-black text-white font-sans">
               {totalApprovedCount}
             </h3>
-            <p className="text-[10px] text-slate-500 dark:text-zinc-400 font-medium mt-1">Ventas aprobadas registradas</p>
+            <p className="text-[10px] text-zinc-500 font-bold mt-1">Ventas aprobadas registradas</p>
           </div>
         </div>
 
         {/* Metric 2 - Facturado */}
-        <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-3">
+        <div className="bg-zinc-900/50 backdrop-blur-md p-5 rounded-2xl border border-zinc-850/85 hover:border-emerald-500/40 shadow-[0_8px_30px_rgba(0,0,0,0.15)] hover:shadow-[0_8px_30px_rgba(16,185,129,0.06)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between space-y-3 group relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-emerald-500/20 group-hover:bg-emerald-500/50 transition-colors duration-300" />
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider">Total Facturado</span>
-            <div className="p-2 bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 rounded-lg">
-              <DollarSign className="h-4.5 w-4.5" />
+            <span className="text-[10px] sm:text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Total Facturado</span>
+            <div className="p-2 bg-emerald-950/40 text-emerald-400 rounded-lg border border-emerald-900/30 group-hover:scale-110 transition-transform duration-300">
+              <DollarSign className="h-4 w-4" />
             </div>
           </div>
           <div>
-            <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-zinc-50 font-mono">
+            <h3 className="text-xl sm:text-2xl font-black text-white font-sans">
               $ {totalFacturado.toLocaleString("es-AR")}
             </h3>
-            <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-1">P. VENTA de artículos</p>
+            <p className="text-[10px] text-emerald-400 font-bold mt-1">P. VENTA de artículos</p>
           </div>
         </div>
 
         {/* Metric 3 - Ganancia Neta */}
-        <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-3">
+        <div className="bg-zinc-900/50 backdrop-blur-md p-5 rounded-2xl border border-zinc-850/85 hover:border-sky-500/40 shadow-[0_8px_30px_rgba(0,0,0,0.15)] hover:shadow-[0_8px_30px_rgba(14,165,233,0.06)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between space-y-3 group relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-sky-500/20 group-hover:bg-sky-500/50 transition-colors duration-300" />
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider">Ganancia Neta</span>
-            <div className="p-2 bg-sky-50 text-sky-600 dark:bg-sky-950/40 dark:text-sky-400 rounded-lg">
-              <Percent className="h-4.5 w-4.5" />
+            <span className="text-[10px] sm:text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Ganancia Neta</span>
+            <div className="p-2 bg-sky-950/40 text-sky-400 rounded-lg border border-sky-900/30 group-hover:scale-110 transition-transform duration-300">
+              <Percent className="h-4 w-4" />
             </div>
           </div>
           <div>
-            <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-zinc-50 font-mono">
+            <h3 className="text-xl sm:text-2xl font-black text-white font-sans">
               $ {totalGananciaNeta.toLocaleString("es-AR")}
             </h3>
-            <p className="text-[10px] text-sky-600 dark:text-sky-400 font-bold mt-1">Excluyendo costo de productos</p>
+            <p className="text-[10px] text-sky-400 font-bold mt-1">Excluyendo costo de productos</p>
           </div>
         </div>
 
         {/* Metric 4 - Total Franquicia */}
-        <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-3">
+        <div className="bg-zinc-900/50 backdrop-blur-md p-5 rounded-2xl border border-zinc-850/85 hover:border-amber-500/40 shadow-[0_8px_30px_rgba(0,0,0,0.15)] hover:shadow-[0_8px_30px_rgba(245,158,11,0.06)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between space-y-3 group relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-amber-500/20 group-hover:bg-amber-500/50 transition-colors duration-300" />
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider">Total Franquicia</span>
-            <div className="p-2 bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400 rounded-lg">
-              <Store className="h-4.5 w-4.5" />
+            <span className="text-[10px] sm:text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Total Franquicia</span>
+            <div className="p-2 bg-amber-950/40 text-amber-400 rounded-lg border border-amber-900/30 group-hover:scale-110 transition-transform duration-300">
+              <Store className="h-4 w-4" />
             </div>
           </div>
           <div>
-            <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-zinc-50 font-mono">
+            <h3 className="text-xl sm:text-2xl font-black text-white font-sans">
               $ {totalFranquicia.toLocaleString("es-AR")}
             </h3>
-            <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold mt-1">40% Ganancia MVD + Envíos</p>
+            <p className="text-[10px] text-amber-400 font-bold mt-1">40% Ganancia MVD + Envíos</p>
           </div>
         </div>
 
         {/* Metric 5 - Total Juem */}
-        <div className="bg-white dark:bg-zinc-950 p-5 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-3">
+        <div className="bg-zinc-900/50 backdrop-blur-md p-5 rounded-2xl border border-zinc-850/85 hover:border-rose-500/40 shadow-[0_8px_30px_rgba(0,0,0,0.15)] hover:shadow-[0_8px_30px_rgba(244,63,94,0.06)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between space-y-3 group relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-rose-500/20 group-hover:bg-rose-500/50 transition-colors duration-300" />
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider">Total JUEM</span>
-            <div className="p-2 bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 rounded-lg">
-              <Store className="h-4.5 w-4.5" />
+            <span className="text-[10px] sm:text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Total JUEM</span>
+            <div className="p-2 bg-rose-950/40 text-rose-400 rounded-lg border border-rose-900/30 group-hover:scale-110 transition-transform duration-300">
+              <Store className="h-4 w-4" />
             </div>
           </div>
           <div>
-            <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-zinc-50 font-mono">
+            <h3 className="text-xl sm:text-2xl font-black text-white font-sans">
               $ {totalJuem.toLocaleString("es-AR")}
             </h3>
-            <p className="text-[10px] text-rose-600 dark:text-rose-400 font-bold mt-1">Pinamar 100% + 60% MVD</p>
+            <p className="text-[10px] text-rose-400 font-bold mt-1">Pinamar 100% + 60% MVD</p>
           </div>
         </div>
 
       </div>
 
       {/* REGISTRAR NUEVA VENTA CONTROL PANEL */}
-      <div className="p-5 bg-indigo-50/40 dark:bg-indigo-950/10 border border-indigo-200/50 dark:border-indigo-900/30 rounded-xl flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-indigo-600 text-white rounded-xl">
+      <div className="p-6 bg-indigo-950/15 backdrop-blur-md border border-indigo-900/35 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-[0_8px_30px_rgba(0,0,0,0.2)] hover:border-indigo-500/30 transition-all duration-300 relative overflow-hidden group">
+        <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/20 to-transparent" />
+        <div className="flex items-center gap-4 relative z-10">
+          <div className="p-3.5 bg-indigo-600 text-white rounded-2xl shadow-[0_0_15px_rgba(79,70,229,0.3)] group-hover:scale-105 transition-transform duration-300">
             <Plus className="h-6 w-6" />
           </div>
           <div>
-            <h4 className="text-sm font-extrabold text-indigo-950 dark:text-indigo-400 uppercase tracking-wider">Registrar Nueva Venta Manual</h4>
-            <p className="text-xs text-slate-600 dark:text-zinc-400 mt-0.5">Permite iniciar un registro, calcular su comisión, elegir depósito, canal de venta y actualizar existencias automáticamente.</p>
+            <h4 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+              <span>Registrar Nueva Venta Manual</span>
+              <span className="px-2 py-0.5 text-[8px] bg-indigo-500/10 text-indigo-300 rounded border border-indigo-500/25">ASISTENTE</span>
+            </h4>
+            <p className="text-xs text-zinc-400 mt-1 leading-relaxed max-w-3xl font-semibold">
+              Inicia un nuevo registro, calcula comisiones según depósito, selecciona el canal de venta y descuenta stock en tiempo real.
+            </p>
           </div>
         </div>
         <button
@@ -561,57 +705,57 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
             setIsModalOpen(true);
             setNewSaleItems([]);
           }}
-          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-transform hover:scale-102 active:scale-98 shadow-md shadow-indigo-600/10 cursor-pointer flex items-center gap-1.5 shrink-0"
+          className="px-5 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black uppercase rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-[0_0_20px_rgba(79,70,229,0.25)] hover:shadow-[0_0_25px_rgba(79,70,229,0.4)] cursor-pointer flex items-center gap-2 shrink-0 relative z-10"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-4.5 w-4.5 stroke-[3px]" />
           <span>Iniciar Registro de Venta</span>
         </button>
       </div>
 
       {/* FILTER & CONTAINER HEADER */}
-      <div className="bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+      <div className="bg-zinc-900/40 backdrop-blur-md rounded-2xl border border-zinc-850/85 shadow-[0_8px_30px_rgba(0,0,0,0.2)] overflow-hidden">
         
         {/* Controls bar */}
-        <div className="p-5 border-b border-slate-100 dark:border-zinc-800/80 flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-4 bg-slate-50/50 dark:bg-zinc-900/10">
+        <div className="p-5 border-b border-zinc-800/80 flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-4 bg-zinc-950/20">
           
           {/* Status Tabs Navigation */}
           <div className="flex flex-wrap gap-1.5 items-center">
             <button
               onClick={() => { setStatusFilter("all"); setCurrentPage(1); }}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                 statusFilter === "all"
-                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950 font-extrabold"
-                  : "bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 shadow-sm"
+                  ? "bg-indigo-600 text-white font-extrabold shadow-[0_0_12px_rgba(79,70,229,0.25)]"
+                  : "bg-zinc-950/40 border border-zinc-800 text-zinc-400 hover:text-white shadow-sm hover:border-zinc-700/60"
               }`}
             >
               Todos ({orders.length})
             </button>
             <button
               onClick={() => { setStatusFilter("aprobado"); setCurrentPage(1); }}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                 statusFilter === "aprobado"
-                  ? "bg-emerald-500 text-white font-extrabold"
-                  : "bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 shadow-sm"
+                  ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 font-extrabold shadow-[0_0_12px_rgba(16,185,129,0.15)]"
+                  : "bg-zinc-950/40 border border-zinc-800 text-zinc-400 hover:text-white shadow-sm hover:border-zinc-700/60"
               }`}
             >
               ✓ Aprobados ({orders.filter(o => o.status === "pago_aprobado").length})
             </button>
             <button
               onClick={() => { setStatusFilter("pendiente"); setCurrentPage(1); }}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                 statusFilter === "pendiente"
-                  ? "bg-amber-500 text-zinc-950 font-extrabold"
-                  : "bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 shadow-sm"
+                  ? "bg-amber-500/20 border border-amber-500/40 text-amber-400 font-extrabold shadow-[0_0_12px_rgba(245,158,11,0.15)]"
+                  : "bg-zinc-950/40 border border-zinc-800 text-zinc-400 hover:text-white shadow-sm hover:border-zinc-700/60"
               }`}
             >
               ⌚ Pendientes ({orders.filter(o => o.status === "pago_pendiente" || o.status === "pedido_iniciado").length})
             </button>
             <button
               onClick={() => { setStatusFilter("rechazado"); setCurrentPage(1); }}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                 statusFilter === "rechazado"
-                  ? "bg-rose-500 text-white font-extrabold"
-                  : "bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 shadow-sm"
+                  ? "bg-rose-500/20 border border-rose-500/40 text-rose-400 font-extrabold shadow-[0_0_12px_rgba(244,63,94,0.15)]"
+                  : "bg-zinc-950/40 border border-zinc-800 text-zinc-400 hover:text-white shadow-sm hover:border-zinc-700/60"
               }`}
             >
               ✗ Cancelados ({orders.filter(o => o.status === "pago_rechazado").length})
@@ -623,43 +767,45 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
             
             {/* Search Box */}
             <div className="relative w-full md:w-64 min-w-[200px]">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
               <input
                 type="text"
                 placeholder="Buscar cliente, ID..."
                 value={searchTerm}
                 onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                className="w-full pl-9 pr-4 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white shadow-sm"
+                className="w-full pl-9 pr-4 py-2 bg-zinc-950/60 border border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-white shadow-inner font-bold"
               />
             </div>
 
             {/* Branch filter */}
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] font-extrabold text-slate-400 dark:text-zinc-500 uppercase shrink-0">Sucursal</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-black text-zinc-500 uppercase shrink-0">Sucursal</span>
               <select
                 value={branchFilter}
                 onChange={(e) => { setBranchFilter(e.target.value); setCurrentPage(1); }}
-                className="px-2.5 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 dark:text-white shadow-sm font-semibold"
+                className="px-3 py-2 bg-zinc-950/60 border border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-zinc-200 shadow-sm font-bold cursor-pointer"
+                style={{ color: "inherit", backgroundColor: "inherit" }}
               >
-                <option value="all">Todas</option>
-                <option value="pinamar">Pinamar</option>
-                <option value="montevideo">Montevideo</option>
+                <option value="all" style={{ color: "#ffffff", backgroundColor: "#18181b" }}>Todas</option>
+                <option value="pinamar" style={{ color: "#ffffff", backgroundColor: "#18181b" }}>Pinamar</option>
+                <option value="montevideo" style={{ color: "#ffffff", backgroundColor: "#18181b" }}>Montevideo</option>
               </select>
             </div>
 
             {/* Channel filter */}
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] font-extrabold text-slate-400 dark:text-zinc-500 uppercase shrink-0">Canal</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-black text-zinc-500 uppercase shrink-0">Canal</span>
               <select
                 value={channelFilter}
                 onChange={(e) => { setChannelFilter(e.target.value); setCurrentPage(1); }}
-                className="px-2.5 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-800 dark:text-white shadow-sm font-semibold"
+                className="px-3 py-2 bg-zinc-950/60 border border-zinc-800 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-zinc-200 shadow-sm font-bold cursor-pointer"
+                style={{ color: "inherit", backgroundColor: "inherit" }}
               >
-                <option value="all">Todos</option>
-                <option value="whatsapp">WhatsApp</option>
-                <option value="mercado libre">Mercado Libre</option>
-                <option value="venta directa">Venta Directa</option>
-                <option value="web">Web</option>
+                <option value="all" style={{ color: "#ffffff", backgroundColor: "#18181b" }}>Todos</option>
+                <option value="whatsapp" style={{ color: "#ffffff", backgroundColor: "#18181b" }}>WhatsApp</option>
+                <option value="mercado libre" style={{ color: "#ffffff", backgroundColor: "#18181b" }}>Mercado Libre</option>
+                <option value="venta directa" style={{ color: "#ffffff", backgroundColor: "#18181b" }}>Venta Directa</option>
+                <option value="web" style={{ color: "#ffffff", backgroundColor: "#18181b" }}>Web</option>
               </select>
             </div>
 
@@ -670,30 +816,30 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
         {/* LIST TABLE CONTAINER */}
         {paginatedOrders.length === 0 ? (
           <div className="p-12 text-center">
-            <ShoppingBag className="h-10 w-10 text-zinc-300 dark:text-zinc-700 mx-auto mb-3" />
-            <p className="text-zinc-500 dark:text-zinc-400 text-sm font-semibold">No se encontraron ventas registradas con los filtros seleccionados.</p>
-            <p className="text-zinc-400 dark:text-zinc-500 text-[11px] mt-1">Ajuste los criterios de búsqueda, sucursal o canal para ubicar las órdenes.</p>
+            <ShoppingBag className="h-10 w-10 text-zinc-600 mx-auto mb-3 animate-pulse" />
+            <p className="text-zinc-400 text-sm font-bold">No se encontraron ventas registradas con los filtros seleccionados.</p>
+            <p className="text-zinc-500 text-[11px] mt-1.5 font-semibold">Ajuste los criterios de búsqueda, sucursal o canal para ubicar las órdenes.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50/80 dark:bg-zinc-900/40 border-b border-slate-150 dark:border-zinc-800">
-                  <th className="p-4 text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">ID / FECHA</th>
-                  <th className="p-4 text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">CANAL / ORIGEN</th>
-                  <th className="p-4 text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">CLIENTE</th>
-                  <th className="p-4 text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">ITEMS</th>
-                  <th className="p-4 text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider text-right">COSTO ENVÍO</th>
-                  <th className="p-4 text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider text-right">P. VENTA</th>
-                  <th className="p-4 text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider text-right">COSTO PROD.</th>
-                  <th className="p-4 text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider text-right">GANANCIA NETA</th>
-                  <th className="p-4 text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider text-right bg-emerald-500/[0.02]">TOTAL FRAN</th>
-                  <th className="p-4 text-[10px] font-extrabold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider text-right bg-indigo-500/[0.02]">TOTAL JUEM</th>
-                  <th className="p-4 text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider text-center">ESTADO</th>
-                  <th className="p-4 text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider text-center">ACCIONES</th>
+                <tr className="bg-zinc-950/40 border-b border-zinc-800/80">
+                  <th className="p-4 text-[10px] font-black text-zinc-400 uppercase tracking-wider">ID / FECHA</th>
+                  <th className="p-4 text-[10px] font-black text-zinc-400 uppercase tracking-wider">CANAL / ORIGEN</th>
+                  <th className="p-4 text-[10px] font-black text-zinc-400 uppercase tracking-wider">CLIENTE</th>
+                  <th className="p-4 text-[10px] font-black text-zinc-400 uppercase tracking-wider">ITEMS</th>
+                  <th className="p-4 text-[10px] font-black text-zinc-400 uppercase tracking-wider text-right">COSTO ENVÍO</th>
+                  <th className="p-4 text-[10px] font-black text-zinc-400 uppercase tracking-wider text-right">P. VENTA</th>
+                  <th className="p-4 text-[10px] font-black text-zinc-400 uppercase tracking-wider text-right">COSTO PROD.</th>
+                  <th className="p-4 text-[10px] font-black text-zinc-400 uppercase tracking-wider text-right">GANANCIA NETA</th>
+                  <th className="p-4 text-[10px] font-black text-emerald-400 uppercase tracking-wider text-right bg-emerald-500/[0.02]">TOTAL FRAN</th>
+                  <th className="p-4 text-[10px] font-black text-indigo-400 uppercase tracking-wider text-right bg-indigo-500/[0.02]">TOTAL JUEM</th>
+                  <th className="p-4 text-[10px] font-black text-zinc-400 uppercase tracking-wider text-center">ESTADO</th>
+                  <th className="p-4 text-[10px] font-black text-zinc-400 uppercase tracking-wider text-center">ACCIONES</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-zinc-850">
+              <tbody className="divide-y divide-zinc-850/60">
                 {paginatedOrders.map((order) => {
                   const isExpanded = expandedOrderId === order.id;
                   const statusInfo = getStatusLabelAndStyle(order.status);
@@ -710,15 +856,15 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
                   return (
                     <React.Fragment key={order.id}>
                       <tr 
-                        className={`hover:bg-slate-50/40 dark:hover:bg-zinc-900/10 cursor-pointer transition-colors ${isExpanded ? 'bg-indigo-500/[0.02]' : ''}`} 
+                        className={`hover:bg-zinc-800/30 cursor-pointer transition-all duration-300 border-b border-zinc-850/45 ${isExpanded ? 'bg-indigo-500/[0.04]' : ''}`} 
                         onClick={() => toggleRow(order.id)}
                       >
                         {/* ID / FECHA */}
                         <td className="p-4 font-mono">
-                          <p className="text-xs font-bold text-slate-800 dark:text-zinc-200">
+                          <p className="text-xs font-bold text-zinc-100">
                             #{order.id.substring(0, 6).toUpperCase()}
                           </p>
-                          <p className="text-[9px] text-zinc-400 dark:text-zinc-500 mt-0.5">
+                          <p className="text-[10px] text-zinc-500 mt-1 font-bold">
                             {order.createdAt ? new Date(order.createdAt).toLocaleDateString("es-AR", {
                               day: "2-digit",
                               month: "2-digit",
@@ -729,61 +875,61 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
 
                         {/* CANAL / ORIGEN */}
                         <td className="p-4 whitespace-nowrap">
-                          <span className="px-2 py-0.5 text-[9px] font-extrabold uppercase rounded bg-slate-100 dark:bg-zinc-900 text-zinc-650 dark:text-zinc-400">
+                          <span className="px-2 py-0.5 text-[9px] font-black uppercase rounded bg-zinc-950/60 border border-zinc-800 text-zinc-400">
                             {order.canal || "Web"}
                           </span>
-                          <span className="block text-[9.5px] font-bold text-slate-500 dark:text-zinc-400 mt-1 flex items-center gap-1">
-                            <MapPin className="h-3 w-3 inline text-red-500" />
+                          <span className="block text-[10px] font-bold text-zinc-400 mt-1.5 flex items-center gap-1">
+                            <MapPin className="h-3 w-3 inline text-rose-500" />
                             {order.depositoOrigen || "Pinamar"}
                           </span>
                         </td>
 
                         {/* CLIENTE */}
                         <td className="p-4">
-                          <p className="text-xs font-bold text-slate-900 dark:text-white max-w-[150px] truncate">{order.customerName}</p>
-                          <p className="text-[9.5px] text-zinc-450 dark:text-zinc-500 truncate max-w-[150px]">{order.customerEmail}</p>
+                          <p className="text-xs font-bold text-zinc-100 max-w-[150px] truncate">{order.customerName}</p>
+                          <p className="text-[10px] text-zinc-500 truncate max-w-[150px] mt-0.5 font-semibold">{order.customerEmail}</p>
                         </td>
 
                         {/* ITEMS */}
                         <td className="p-4">
-                          <span className="text-xs font-mono font-bold text-slate-700 dark:text-zinc-300">
+                          <span className="text-xs font-mono font-black text-zinc-300">
                             {itemsCount} {itemsCount === 1 ? "art." : "arts."}
                           </span>
                         </td>
 
                         {/* COSTO ENVÍO */}
-                        <td className="p-4 text-right font-mono text-xs text-slate-600 dark:text-zinc-400">
+                        <td className="p-4 text-right font-mono text-xs text-zinc-400 font-semibold">
                           $ {(order.shippingCost || 0).toLocaleString("es-AR")}
                         </td>
 
                         {/* P. VENTA */}
-                        <td className="p-4 text-right font-mono text-xs font-bold text-slate-900 dark:text-white">
+                        <td className="p-4 text-right font-mono text-xs font-black text-zinc-100">
                           $ {totalPriceProducts.toLocaleString("es-AR")}
                         </td>
 
                         {/* COSTO PROD. */}
-                        <td className="p-4 text-right font-mono text-xs text-slate-600 dark:text-zinc-400">
+                        <td className="p-4 text-right font-mono text-xs text-zinc-400 font-semibold">
                           $ {totalCost.toLocaleString("es-AR")}
                         </td>
 
                         {/* GANANCIA NETA */}
-                        <td className={`p-4 text-right font-mono text-xs font-bold ${gananciaNeta >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                        <td className={`p-4 text-right font-mono text-xs font-black ${gananciaNeta >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
                           $ {gananciaNeta.toLocaleString("es-AR")}
                         </td>
 
                         {/* TOTAL FRAN */}
-                        <td className="p-4 text-right font-mono text-xs font-bold bg-emerald-500/[0.01] text-emerald-600">
+                        <td className="p-4 text-right font-mono text-xs font-black bg-emerald-500/[0.01] text-emerald-400">
                           $ {rowFran.toLocaleString("es-AR")}
                         </td>
 
                         {/* TOTAL JUEM */}
-                        <td className="p-4 text-right font-mono text-xs font-bold bg-indigo-500/[0.01] text-indigo-600">
+                        <td className="p-4 text-right font-mono text-xs font-black bg-indigo-500/[0.01] text-indigo-400">
                           $ {rowJuem.toLocaleString("es-AR")}
                         </td>
 
                         {/* ESTADO */}
                         <td className="p-4 text-center">
-                          <span className={`px-2 py-0.5 rounded text-[9.5px] font-extrabold border ${statusInfo.colors}`}>
+                          <span className={`px-2.5 py-1 rounded-xl text-[9.5px] font-black border ${statusInfo.colors}`}>
                             {statusInfo.label}
                           </span>
                         </td>
@@ -796,16 +942,25 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
                             <button
                               onClick={() => handleWhatsAppChat(order)}
                               title="Contactar por WhatsApp"
-                              className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-transform hover:scale-105 cursor-pointer"
+                              className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg transition-transform hover:scale-105 cursor-pointer border border-emerald-500/20"
                             >
                               <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
                                 <path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.998h.003c4.368 0 7.927-3.558 7.93-7.926a7.86 7.86 0 0 0-2.33-5.596ZM7.994 14.52a6.57 6.57 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592m3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.73.73 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232"/>
                               </svg>
                             </button>
 
+                            {/* Editar venta */}
+                            <button
+                              onClick={() => handleEditOrder(order)}
+                              title="Editar venta / factura"
+                              className="p-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-lg transition-transform hover:scale-105 cursor-pointer border border-indigo-500/20"
+                            >
+                              <Edit className="h-3.5 w-3.5" />
+                            </button>
+
                             {/* Delete Confirmation workflow */}
                             {deletingId === order.id ? (
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-1.5">
                                 <button
                                   onClick={async () => {
                                     setIsDeletingLoading(order.id);
@@ -816,13 +971,13 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
                                       setDeletingId(null);
                                     }
                                   }}
-                                  className="px-2 py-1 bg-rose-600 text-white text-[9.5px] uppercase font-black rounded cursor-pointer"
+                                  className="px-2 py-1 bg-rose-600 hover:bg-rose-500 text-white text-[9.5px] uppercase font-black rounded-lg cursor-pointer"
                                 >
                                   {isDeletingLoading === order.id ? "..." : "Sí"}
                                 </button>
                                 <button
                                   onClick={() => setDeletingId(null)}
-                                  className="px-1.5 py-1 bg-zinc-200 dark:bg-zinc-800 text-zinc-650 dark:text-zinc-350 text-[9.5px] rounded cursor-pointer"
+                                  className="px-2 py-1 bg-zinc-850 hover:bg-zinc-800 text-zinc-300 text-[9.5px] font-bold rounded-lg cursor-pointer border border-zinc-800"
                                 >
                                   No
                                 </button>
@@ -831,7 +986,7 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
                               <button
                                 onClick={() => setDeletingId(order.id)}
                                 title="Eliminar venta"
-                                className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition-all cursor-pointer"
+                                className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition-all cursor-pointer border border-rose-500/20"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </button>
@@ -840,7 +995,7 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
                             {/* Expand toggle */}
                             <button
                               onClick={() => toggleRow(order.id)}
-                              className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-650 dark:text-zinc-300 rounded-lg cursor-pointer"
+                              className="p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg cursor-pointer transition-all border border-zinc-750"
                             >
                               {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                             </button>
@@ -851,14 +1006,14 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
 
                       {/* EXPANDED SECTION */}
                       {isExpanded && (
-                        <tr className="bg-indigo-500/[0.01]">
-                          <td colSpan={12} className="p-5 border-l-2 border-indigo-500">
+                        <tr className="bg-zinc-950/45 border-l-2 border-indigo-500">
+                          <td colSpan={12} className="p-6">
                             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                               
                               {/* Items Breakdown list */}
                               <div className="lg:col-span-8 space-y-3">
-                                <h4 className="text-xs font-extrabold text-indigo-950 dark:text-indigo-400 uppercase tracking-wider border-b border-slate-150 dark:border-zinc-800 pb-2 flex items-center gap-1.5">
-                                  <ShoppingBag className="h-4 w-4 text-indigo-600" />
+                                <h4 className="text-xs font-black text-indigo-400 uppercase tracking-wider border-b border-zinc-800 pb-2 flex items-center gap-1.5">
+                                  <ShoppingBag className="h-4 w-4 text-indigo-500" />
                                   <span>Desglose de Artículos de la Venta</span>
                                 </h4>
                                 <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
@@ -867,25 +1022,25 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
                                     const c = p?.precioCompra || 0;
                                     const n = item.unitPrice - c;
                                     return (
-                                      <div key={idx} className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white dark:bg-zinc-950 p-3 rounded-lg border border-slate-150 dark:border-zinc-850 gap-3 shadow-sm">
+                                      <div key={idx} className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-zinc-950/60 p-3.5 rounded-xl border border-zinc-850 gap-3 shadow-md hover:border-zinc-800 transition-all">
                                         <div>
-                                          <p className="text-xs font-bold text-slate-900 dark:text-white">
+                                          <p className="text-xs font-bold text-zinc-100">
                                             {item.productName}
                                           </p>
-                                          <div className="flex flex-wrap gap-2 text-[10px] text-zinc-500 dark:text-zinc-450 font-bold mt-1">
-                                            {item.sku && <span className="bg-slate-100 dark:bg-zinc-900 px-1 py-0.5 rounded">SKU: {item.sku}</span>}
-                                            {item.sizeSelected && <span className="bg-slate-100 dark:bg-zinc-900 px-1 py-0.5 rounded">Talle: {item.sizeSelected}</span>}
-                                            {item.colorSelected && <span className="bg-slate-100 dark:bg-zinc-900 px-1 py-0.5 rounded">Color: {item.colorSelected}</span>}
-                                            <span className="bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400 px-1 py-0.5 rounded font-mono">
+                                          <div className="flex flex-wrap gap-2 text-[10px] text-zinc-400 font-bold mt-1.5">
+                                            {item.sku && <span className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">SKU: {item.sku}</span>}
+                                            {item.sizeSelected && <span className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">Talle: {item.sizeSelected}</span>}
+                                            {item.colorSelected && <span className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">Color: {item.colorSelected}</span>}
+                                            <span className="bg-indigo-500/10 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-500/20 font-mono">
                                               {item.quantity} x $ {item.unitPrice.toLocaleString("es-AR")}
                                             </span>
                                           </div>
                                         </div>
-                                        <div className="text-right shrink-0 w-full sm:w-auto flex sm:flex-col justify-between items-center sm:items-end border-t sm:border-0 pt-2 sm:pt-0 border-slate-100">
-                                          <p className="text-xs font-mono font-bold text-slate-900 dark:text-white">
+                                        <div className="text-right shrink-0 w-full sm:w-auto flex sm:flex-col justify-between items-center sm:items-end border-t sm:border-0 pt-2 sm:pt-0 border-zinc-850">
+                                          <p className="text-xs font-mono font-black text-zinc-100">
                                             $ {item.totalPrice.toLocaleString("es-AR")} P. Venta
                                           </p>
-                                          <p className="text-[10px] font-mono text-slate-500 dark:text-zinc-400">
+                                          <p className="text-[10px] font-mono text-zinc-500 font-bold mt-0.5">
                                             Costo: $ {(c * item.quantity).toLocaleString("es-AR")}
                                           </p>
                                         </div>
@@ -894,18 +1049,18 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
                                   })}
                                 </div>
 
-                                <div className="p-3 bg-slate-100 dark:bg-zinc-900 rounded-lg flex flex-wrap gap-4 text-[11px] text-zinc-500 dark:text-zinc-400 justify-between items-center font-bold">
-                                  <p>Subtotal: <span className="font-mono text-xs text-slate-900 dark:text-white">$ {order.subtotal?.toLocaleString("es-AR")}</span></p>
+                                <div className="p-3.5 bg-zinc-950/80 border border-zinc-850 rounded-xl flex flex-wrap gap-4 text-[11px] text-zinc-400 justify-between items-center font-bold">
+                                  <p>Subtotal: <span className="font-mono text-xs text-zinc-100 font-black">$ {order.subtotal?.toLocaleString("es-AR")}</span></p>
                                   {order.discountAmount > 0 && (
-                                    <p className="text-rose-500">
-                                      Descuento: <span className="font-mono">-$ {order.discountAmount?.toLocaleString("es-AR")}</span>
+                                    <p className="text-rose-400">
+                                      Descuento: <span className="font-mono font-black">-$ {order.discountAmount?.toLocaleString("es-AR")}</span>
                                     </p>
                                   )}
-                                  <p className="text-slate-950 dark:text-white font-extrabold text-xs">
-                                    Total Facturado: <span className="font-mono text-sm">$ {order.total?.toLocaleString("es-AR")}</span>
+                                  <p className="text-white font-extrabold text-xs">
+                                    Total Facturado: <span className="font-mono text-sm text-indigo-400 font-black">$ {order.total?.toLocaleString("es-AR")}</span>
                                   </p>
                                   {order.couponCode && (
-                                    <p className="bg-sky-500/10 text-sky-600 px-1.5 py-0.5 rounded font-mono font-extrabold">
+                                    <p className="bg-sky-500/10 text-sky-400 border border-sky-500/20 px-1.5 py-0.5 rounded font-mono font-extrabold">
                                       Cupón: {order.couponCode}
                                     </p>
                                   )}
@@ -915,20 +1070,20 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
                               {/* Manual Status updates and other data */}
                               <div className="lg:col-span-4 space-y-4">
                                 <div>
-                                  <h4 className="text-xs font-extrabold text-indigo-950 dark:text-indigo-400 uppercase tracking-wider border-b border-slate-150 dark:border-zinc-800 pb-2 flex items-center gap-1.5">
-                                    <User className="h-4 w-4 text-indigo-600" />
+                                  <h4 className="text-xs font-black text-indigo-400 uppercase tracking-wider border-b border-zinc-800 pb-2 flex items-center gap-1.5">
+                                    <User className="h-4 w-4 text-indigo-500" />
                                     <span>Datos de la Operación</span>
                                   </h4>
-                                  <div className="mt-2 text-xs text-slate-700 dark:text-zinc-300 space-y-1.5 font-semibold">
-                                    <p><strong className="text-slate-450 dark:text-zinc-500">Cliente:</strong> {order.customerName}</p>
-                                    <p><strong className="text-slate-450 dark:text-zinc-500">Email:</strong> {order.customerEmail}</p>
-                                    {order.customerPhone && <p><strong className="text-slate-450 dark:text-zinc-500">Teléfono:</strong> {order.customerPhone}</p>}
-                                    {order.notes && <p className="bg-slate-100 dark:bg-zinc-900 p-2 rounded text-[10.5px] italic mt-1 font-normal">"{order.notes}"</p>}
+                                  <div className="mt-2.5 text-xs text-zinc-300 space-y-2 font-bold">
+                                    <p><strong className="text-zinc-500 mr-1">Cliente:</strong> {order.customerName}</p>
+                                    <p><strong className="text-zinc-500 mr-1">Email:</strong> {order.customerEmail}</p>
+                                    {order.customerPhone && <p><strong className="text-zinc-500 mr-1">Teléfono:</strong> {order.customerPhone}</p>}
+                                    {order.notes && <p className="bg-zinc-950/60 p-2.5 rounded-lg border border-zinc-850 text-[10.5px] italic mt-1 font-semibold text-zinc-400">"{order.notes}"</p>}
                                   </div>
                                 </div>
 
                                 <div className="space-y-2">
-                                  <h5 className="text-[10px] text-zinc-500 font-extrabold uppercase tracking-wider">
+                                  <h5 className="text-[10px] text-zinc-455 font-extrabold uppercase tracking-wider">
                                     Modificar Estado Manualmente
                                   </h5>
 
@@ -936,10 +1091,10 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
                                     <button
                                       disabled={updatingId !== null}
                                       onClick={() => handleUpdateStatus(order.id, "pago_aprobado")}
-                                      className={`px-3 py-2 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                                      className={`px-3 py-2 text-[10px] font-black rounded-lg transition-all cursor-pointer ${
                                         order.status === "pago_aprobado"
-                                          ? "bg-emerald-600 text-white font-extrabold scale-[1.01]"
-                                          : "bg-white hover:bg-emerald-50 dark:bg-zinc-900 dark:hover:bg-emerald-950 text-emerald-600 border border-slate-200 dark:border-zinc-800"
+                                          ? "bg-emerald-600/25 border border-emerald-500/40 text-emerald-400 font-extrabold scale-[1.01] shadow-[0_0_10px_rgba(16,185,129,0.15)]"
+                                          : "bg-zinc-950/40 hover:bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white"
                                       }`}
                                     >
                                       ✓ Aprobado
@@ -948,10 +1103,10 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
                                     <button
                                       disabled={updatingId !== null}
                                       onClick={() => handleUpdateStatus(order.id, "pago_pendiente")}
-                                      className={`px-3 py-2 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                                      className={`px-3 py-2 text-[10px] font-black rounded-lg transition-all cursor-pointer ${
                                         order.status === "pago_pendiente"
-                                          ? "bg-amber-500 text-zinc-950 font-extrabold scale-[1.01]"
-                                          : "bg-white hover:bg-amber-50 dark:bg-zinc-900 dark:hover:bg-amber-950/40 text-amber-600 border border-slate-200 dark:border-zinc-800"
+                                          ? "bg-amber-500/20 border border-amber-500/30 text-amber-400 font-extrabold scale-[1.01] shadow-[0_0_10px_rgba(245,158,11,0.15)]"
+                                          : "bg-zinc-950/40 hover:bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white"
                                       }`}
                                     >
                                       ⌚ Pendiente
@@ -960,10 +1115,10 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
                                     <button
                                       disabled={updatingId !== null}
                                       onClick={() => handleUpdateStatus(order.id, "pago_rechazado")}
-                                      className={`px-3 py-2 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                                      className={`px-3 py-2 text-[10px] font-black rounded-lg transition-all cursor-pointer ${
                                         order.status === "pago_rechazado"
-                                          ? "bg-rose-600 text-white font-extrabold scale-[1.01]"
-                                          : "bg-white hover:bg-rose-50 dark:bg-zinc-900 dark:hover:bg-rose-950/40 text-rose-600 border border-slate-200 dark:border-zinc-800"
+                                          ? "bg-rose-500/20 border border-rose-500/30 text-rose-400 font-extrabold scale-[1.01] shadow-[0_0_10px_rgba(244,63,94,0.15)]"
+                                          : "bg-zinc-950/40 hover:bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white"
                                       }`}
                                     >
                                       ✗ Rechazado
@@ -972,10 +1127,10 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
                                     <button
                                       disabled={updatingId !== null}
                                       onClick={() => handleUpdateStatus(order.id, "pedido_iniciado")}
-                                      className={`px-3 py-2 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                                      className={`px-3 py-2 text-[10px] font-black rounded-lg transition-all cursor-pointer ${
                                         order.status === "pedido_iniciado"
-                                          ? "bg-sky-650 text-white font-extrabold scale-[1.01]"
-                                          : "bg-white hover:bg-sky-50 dark:bg-zinc-900 dark:hover:bg-sky-950/40 text-sky-600 border border-slate-200 dark:border-zinc-800"
+                                          ? "bg-sky-500/20 border border-sky-500/30 text-sky-400 font-extrabold scale-[1.01] shadow-[0_0_10px_rgba(14,165,233,0.15)]"
+                                          : "bg-zinc-950/40 hover:bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white"
                                       }`}
                                     >
                                       📝 Lead
@@ -998,19 +1153,19 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
 
         {/* PAGINATION FOOTER */}
         {totalPages > 1 && (
-          <div className="p-4 border-t border-slate-100 dark:border-zinc-800/80 bg-slate-50/50 dark:bg-zinc-900/10 flex items-center justify-between gap-4">
-            <span className="text-xs text-zinc-500 dark:text-zinc-400 font-semibold">
-              Mostrando registros <strong>{startIndex + 1} - {Math.min(startIndex + itemsPerPage, totalItems)}</strong> de un total de <strong>{totalItems}</strong>
+          <div className="p-4 border-t border-zinc-800/80 bg-zinc-950/20 flex items-center justify-between gap-4">
+            <span className="text-xs text-zinc-400 font-bold">
+              Mostrando registros <strong className="text-zinc-100">{startIndex + 1} - {Math.min(startIndex + itemsPerPage, totalItems)}</strong> de un total de <strong className="text-zinc-100">{totalItems}</strong>
             </span>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               {/* Prev */}
               <button
                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                 disabled={safeCurrentPage === 1}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer border ${
                   safeCurrentPage === 1
-                    ? "bg-slate-100 border-slate-200 text-slate-400 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-600 cursor-not-allowed"
-                    : "bg-white border-slate-200 text-zinc-650 dark:bg-zinc-900 dark:border-zinc-850 hover:bg-slate-50 cursor-pointer"
+                    ? "bg-zinc-950/20 border-zinc-900 text-zinc-600 cursor-not-allowed"
+                    : "bg-zinc-950/40 border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-700/60"
                 }`}
               >
                 Anterior
@@ -1019,17 +1174,17 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
               {/* Page Numbers */}
               {getPageNumbers().map((p, idx) => {
                 if (p === "...") {
-                  return <span key={`dots-${idx}`} className="px-2 text-zinc-450">...</span>;
+                  return <span key={`dots-${idx}`} className="px-2 text-zinc-600 font-bold">...</span>;
                 }
                 const pageNum = p as number;
                 return (
                   <button
                     key={`page-${pageNum}`}
                     onClick={() => setCurrentPage(pageNum)}
-                    className={`h-8 w-8 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    className={`h-8 w-8 rounded-xl text-xs font-black transition-all cursor-pointer ${
                       safeCurrentPage === pageNum
-                        ? "bg-indigo-600 text-white font-extrabold"
-                        : "bg-white border border-slate-200 text-zinc-650 dark:bg-zinc-900 dark:border-zinc-850 hover:bg-slate-50"
+                        ? "bg-indigo-600 text-white font-extrabold shadow-[0_0_12px_rgba(79,70,229,0.25)]"
+                        : "bg-zinc-950/40 border border-zinc-850 hover:border-zinc-700 text-zinc-300 hover:text-white"
                     }`}
                   >
                     {pageNum}
@@ -1041,10 +1196,10 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
               <button
                 onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                 disabled={safeCurrentPage === totalPages}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer border ${
                   safeCurrentPage === totalPages
-                    ? "bg-slate-100 border-slate-200 text-slate-400 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-600 cursor-not-allowed"
-                    : "bg-white border-slate-200 text-zinc-650 dark:bg-zinc-900 dark:border-zinc-850 hover:bg-slate-50 cursor-pointer"
+                    ? "bg-zinc-950/20 border-zinc-900 text-zinc-600 cursor-not-allowed"
+                    : "bg-zinc-950/40 border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-700/60"
                 }`}
               >
                 Siguiente
@@ -1057,18 +1212,20 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
 
       {/* REGISTRAR NUEVA VENTA MODAL */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-zinc-950 w-full max-w-4xl rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-150">
+        <div className="fixed inset-0 z-[100] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-zinc-900/95 backdrop-blur-xl w-full max-w-4xl rounded-2xl border border-zinc-800 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-150">
             
             {/* Modal Header */}
-            <div className="p-5 border-b border-slate-150 dark:border-zinc-800/80 flex justify-between items-center bg-indigo-600 text-white">
-              <div className="flex items-center gap-2">
-                <ShoppingBag className="h-5 w-5" />
-                <h3 className="text-sm font-black uppercase tracking-wider">Registrar Nueva Venta (Asistente de Facturación)</h3>
+            <div className="p-5 border-b border-zinc-800/85 flex justify-between items-center bg-zinc-950/40">
+              <div className="flex items-center gap-2.5">
+                <ShoppingBag className="h-5 w-5 text-indigo-500 animate-pulse" />
+                <h3 className="text-xs font-black uppercase tracking-wider text-zinc-100">
+                  {editingOrderId ? "Editar Venta / Factura" : "Registrar Nueva Venta (Asistente de Facturación)"}
+                </h3>
               </div>
               <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+                onClick={() => { setIsModalOpen(false); setEditingOrderId(null); }}
+                className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-all cursor-pointer border border-transparent hover:border-zinc-700/50"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -1078,7 +1235,7 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
             <div className="p-6 overflow-y-auto space-y-6 flex-1">
               
               {newSaleErrorMessage && (
-                <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs flex items-center gap-2.5 font-bold animate-pulse">
+                <div className="p-3.5 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-400 text-xs flex items-center gap-2.5 font-bold animate-pulse">
                   <AlertCircle className="h-4 w-4 shrink-0" />
                   <span>{newSaleErrorMessage}</span>
                 </div>
@@ -1086,8 +1243,8 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
 
               {/* 1. PRODUCT AUTOCOMPLETE SEARCH */}
               <div className="space-y-2">
-                <label className="text-[10.5px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 flex items-center gap-1.5">
-                  <Search className="h-3.5 w-3.5 text-indigo-600" />
+                <label className="text-[10.5px] font-black uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                  <Search className="h-3.5 w-3.5 text-indigo-400" />
                   <span>1. Buscar Artículo a Agregar</span>
                 </label>
                 <div className="relative">
@@ -1096,27 +1253,27 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
                     value={productSearchQuery}
                     onChange={(e) => handleProductSearch(e.target.value)}
                     placeholder="Escriba nombre de producto, código o SKU para agregar..."
-                    className="w-full px-4 py-3 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white placeholder-slate-400"
+                    className="w-full px-4 py-3 bg-zinc-950/60 border border-zinc-800 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/30 rounded-xl text-xs outline-none text-white placeholder-zinc-500 font-bold shadow-inner transition-all"
                   />
                   
                   {/* Suggestions List */}
                   {searchResults.length > 0 && (
-                    <div className="absolute left-0 right-0 mt-1.5 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl shadow-xl z-[110] max-h-60 overflow-y-auto divide-y divide-slate-100 dark:divide-zinc-900 overflow-hidden">
+                    <div className="absolute left-0 right-0 mt-1.5 bg-zinc-950 border border-zinc-800 rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.6)] z-[110] max-h-60 overflow-y-auto divide-y divide-zinc-900 overflow-hidden">
                       {searchResults.map((res, idx) => (
                         <div
                           key={idx}
                           onClick={() => handleAddProductToSale(res)}
-                          className="p-3 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 cursor-pointer text-xs flex justify-between items-center transition-colors"
+                          className="p-3 hover:bg-indigo-500/10 cursor-pointer text-xs flex justify-between items-center transition-colors border-b border-zinc-900/50"
                         >
                           <div>
-                            <p className="font-bold text-slate-900 dark:text-white">{res.displayName}</p>
-                            <p className="text-[9.5px] text-zinc-450 dark:text-zinc-500 font-mono mt-0.5">SKU: {res.sku || "N/A"}</p>
+                            <p className="font-bold text-zinc-100">{res.displayName}</p>
+                            <p className="text-[9.5px] text-zinc-500 font-mono mt-0.5">SKU: {res.sku || "N/A"}</p>
                           </div>
                           <div className="text-right">
-                            <span className="font-bold text-indigo-600 dark:text-indigo-400 font-mono">
+                            <span className="font-bold text-indigo-400 font-mono">
                               $ {res.price.toLocaleString("es-AR")}
                             </span>
-                            <span className="block text-[8px] uppercase tracking-wider text-slate-400 mt-0.5">
+                            <span className="block text-[8px] uppercase tracking-wider text-zinc-500 mt-0.5 font-bold">
                               Stock: {res.variant ? (res.variant.stock ?? res.product.stock) : res.product.stock}
                             </span>
                           </div>
@@ -1129,32 +1286,32 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
 
               {/* 2. ADDED ITEMS IN THIS TRANSACTION */}
               <div className="space-y-2">
-                <label className="text-[10.5px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 flex items-center gap-1.5">
-                  <ShoppingBag className="h-3.5 w-3.5 text-indigo-600" />
+                <label className="text-[10.5px] font-black uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                  <ShoppingBag className="h-3.5 w-3.5 text-indigo-400" />
                   <span>2. Artículos en esta Transacción ({newSaleItems.length})</span>
                 </label>
 
                 {newSaleItems.length === 0 ? (
-                  <div className="p-8 border-2 border-dashed border-slate-200 dark:border-zinc-800 rounded-xl text-center bg-slate-50/50 dark:bg-zinc-900/10">
-                    <ShoppingBag className="h-8 w-8 text-slate-300 dark:text-zinc-700 mx-auto mb-2" />
-                    <p className="text-xs text-slate-500 dark:text-zinc-400 font-bold">La transacción está vacía.</p>
-                    <p className="text-[10px] text-slate-400 dark:text-zinc-500 mt-1">Busque y agregue artículos utilizando el buscador de arriba.</p>
+                  <div className="p-8 border-2 border-dashed border-zinc-800 rounded-xl text-center bg-zinc-950/30">
+                    <ShoppingBag className="h-8 w-8 text-zinc-600 mx-auto mb-2.5 animate-pulse" />
+                    <p className="text-xs text-zinc-400 font-bold">La transacción está vacía.</p>
+                    <p className="text-[10px] text-zinc-500 mt-1 font-semibold">Busque y agregue artículos utilizando el buscador de arriba.</p>
                   </div>
                 ) : (
-                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                  <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
                     {newSaleItems.map((item, idx) => {
                       const itemSubtotal = item.quantity * item.unitPrice;
                       const itemCostoTotal = item.quantity * item.costPrice;
                       const itemProfit = itemSubtotal - itemCostoTotal;
                       return (
-                        <div key={idx} className="p-3.5 bg-slate-50 dark:bg-zinc-900/30 rounded-xl border border-slate-200/80 dark:border-zinc-800/80 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                        <div key={idx} className="p-3.5 bg-zinc-950/40 rounded-xl border border-zinc-800/70 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 hover:border-zinc-750 transition-all">
                           <div className="space-y-1">
-                            <p className="text-xs font-bold text-slate-900 dark:text-white">{item.productName}</p>
-                            <div className="flex flex-wrap gap-1.5 text-[9.5px] text-zinc-500 dark:text-zinc-450 font-bold">
-                              {item.sku && <span className="bg-white dark:bg-zinc-950 px-1 py-0.5 rounded border border-slate-100">SKU: {item.sku}</span>}
-                              {item.sizeSelected && <span className="bg-white dark:bg-zinc-950 px-1 py-0.5 rounded border border-slate-100">Talle: {item.sizeSelected}</span>}
-                              {item.colorSelected && <span className="bg-white dark:bg-zinc-950 px-1 py-0.5 rounded border border-slate-100">Color: {item.colorSelected}</span>}
-                              <span className="bg-sky-50 text-sky-600 px-1 py-0.5 rounded">Costo Unit: $ {item.costPrice}</span>
+                            <p className="text-xs font-bold text-zinc-100">{item.productName}</p>
+                            <div className="flex flex-wrap gap-1.5 text-[9.5px] text-zinc-450 font-bold">
+                              {item.sku && <span className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">SKU: {item.sku}</span>}
+                              {item.sizeSelected && <span className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">Talle: {item.sizeSelected}</span>}
+                              {item.colorSelected && <span className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">Color: {item.colorSelected}</span>}
+                              <span className="bg-sky-500/10 text-sky-400 border border-sky-500/20 px-1.5 py-0.5 rounded font-mono">Costo Unit: $ {item.costPrice}</span>
                             </div>
                           </div>
 
@@ -1162,13 +1319,13 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
                           <div className="flex flex-wrap items-center gap-3 w-full md:w-auto md:shrink-0 justify-between md:justify-end">
                             
                             {/* Quantity */}
-                            <div className="flex items-center gap-1">
-                              <span className="text-[9.5px] font-extrabold uppercase text-slate-400">Cant</span>
-                              <div className="flex items-center border border-slate-200 dark:border-zinc-800 rounded bg-white dark:bg-zinc-950">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9.5px] font-extrabold uppercase text-zinc-500">Cant</span>
+                              <div className="flex items-center border border-zinc-800 rounded-xl bg-zinc-950 overflow-hidden">
                                 <button
                                   type="button"
                                   onClick={() => handleUpdateSaleItem(idx, "quantity", item.quantity - 1)}
-                                  className="px-2 py-1 text-xs hover:bg-slate-100 rounded-l cursor-pointer"
+                                  className="px-2.5 py-1 text-xs hover:bg-zinc-800 text-zinc-300 rounded-l cursor-pointer transition-colors"
                                 >
                                   -
                                 </button>
@@ -1176,12 +1333,12 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
                                   type="number"
                                   value={item.quantity}
                                   onChange={(e) => handleUpdateSaleItem(idx, "quantity", parseInt(e.target.value) || 0)}
-                                  className="w-10 text-center text-xs font-bold outline-none border-x border-slate-250 font-mono"
+                                  className="w-10 text-center text-xs font-bold outline-none border-x border-zinc-800 bg-zinc-950/60 text-white font-mono"
                                 />
                                 <button
                                   type="button"
                                   onClick={() => handleUpdateSaleItem(idx, "quantity", item.quantity + 1)}
-                                  className="px-2 py-1 text-xs hover:bg-slate-100 rounded-r cursor-pointer"
+                                  className="px-2.5 py-1 text-xs hover:bg-zinc-800 text-zinc-300 rounded-r cursor-pointer transition-colors"
                                 >
                                   +
                                 </button>
@@ -1189,22 +1346,28 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
                             </div>
 
                             {/* Custom selling price override */}
-                            <div className="flex items-center gap-1">
-                              <span className="text-[9.5px] font-extrabold uppercase text-slate-400">P. Venta UYU</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[9.5px] font-extrabold uppercase text-zinc-500">P. Venta UYU</span>
                               <input
-                                type="number"
+                                type="text"
                                 value={item.unitPrice}
-                                onChange={(e) => handleUpdateSaleItem(idx, "unitPrice", parseFloat(e.target.value) || 0)}
-                                className="w-20 px-1.5 py-1 text-xs font-bold outline-none border border-slate-200 rounded font-mono text-right bg-white"
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val === "" || /^[0-9]+([.,][0-9]*)?$/.test(val)) {
+                                    const normalized = val.replace(",", ".");
+                                    handleUpdateSaleItem(idx, "unitPrice", normalized);
+                                  }
+                                }}
+                                className="w-24 px-2 py-1 text-xs font-bold outline-none border border-zinc-800 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/30 rounded-xl font-mono text-right bg-zinc-950/60 text-white shadow-inner"
                               />
                             </div>
 
                             {/* Subtotal of row */}
-                            <div className="text-right min-w-[90px] font-mono">
-                              <span className="block text-xs font-extrabold text-slate-900 dark:text-white">
+                            <div className="text-right min-w-[95px] font-mono">
+                              <span className="block text-xs font-black text-zinc-100">
                                 $ {itemSubtotal.toLocaleString("es-AR")}
                               </span>
-                              <span className="block text-[8.5px] text-emerald-600 font-bold">
+                              <span className="block text-[9.5px] text-emerald-400 font-bold">
                                 Profit: +$ {itemProfit.toLocaleString("es-AR")}
                               </span>
                             </div>
@@ -1213,7 +1376,7 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
                             <button
                               type="button"
                               onClick={() => handleRemoveItemFromSale(idx)}
-                              className="p-1.5 text-rose-500 hover:bg-rose-50 hover:text-rose-600 rounded-lg transition-all cursor-pointer"
+                              className="p-2 text-rose-400 hover:bg-rose-500/15 rounded-lg transition-all border border-rose-500/10 hover:border-rose-500/30 cursor-pointer"
                             >
                               <X className="h-4 w-4" />
                             </button>
@@ -1228,8 +1391,8 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
 
               {/* 3. TRANSACTION OPERATION METADATA */}
               <div className="space-y-4">
-                <label className="text-[10.5px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 flex items-center gap-1.5 border-b pb-1.5 border-slate-100">
-                  <Calendar className="h-3.5 w-3.5 text-indigo-600" />
+                <label className="text-[10.5px] font-black uppercase tracking-wider text-zinc-400 flex items-center gap-1.5 border-b pb-1.5 border-zinc-800">
+                  <Calendar className="h-3.5 w-3.5 text-indigo-400" />
                   <span>3. Datos de la Operación de Venta</span>
                 </label>
 
@@ -1237,209 +1400,250 @@ export const DashboardOrders: React.FC<DashboardOrdersProps> = ({
                   
                   {/* Customer name */}
                   <div className="space-y-1">
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase">Cliente Comprador</span>
+                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-wider">Cliente Comprador</span>
                     <input
                       type="text"
                       value={newSaleCustomerName}
                       onChange={(e) => setNewSaleCustomerName(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs font-semibold"
+                      className="w-full px-3.5 py-2.5 bg-zinc-950/60 border border-zinc-800 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/30 rounded-xl text-xs font-bold text-white placeholder-zinc-500 outline-none shadow-inner"
                     />
                   </div>
 
                   {/* Customer email */}
                   <div className="space-y-1">
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase">Correo Electrónico</span>
+                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-wider">Correo Electrónico</span>
                     <input
                       type="email"
                       value={newSaleCustomerEmail}
                       onChange={(e) => setNewSaleCustomerEmail(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs font-semibold"
+                      className="w-full px-3.5 py-2.5 bg-zinc-950/60 border border-zinc-800 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/30 rounded-xl text-xs font-bold text-white placeholder-zinc-500 outline-none shadow-inner"
                     />
                   </div>
 
                   {/* Customer phone */}
                   <div className="space-y-1">
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase">Teléfono de Contacto</span>
+                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-wider">Teléfono de Contacto</span>
                     <input
                       type="text"
                       value={newSaleCustomerPhone}
                       placeholder="e.g. +598 99123456"
                       onChange={(e) => setNewSaleCustomerPhone(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs font-semibold"
+                      className="w-full px-3.5 py-2.5 bg-zinc-950/60 border border-zinc-800 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/30 rounded-xl text-xs font-bold text-white placeholder-zinc-500 outline-none shadow-inner"
                     />
                   </div>
 
                   {/* Deposito origen (Sucursal/Origen) */}
                   <div className="space-y-1">
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase">Depósito de Origen</span>
+                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-wider">Depósito de Origen</span>
                     <select
                       value={newSaleDeposito}
                       onChange={(e) => setNewSaleDeposito(e.target.value as any)}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs font-bold text-slate-800"
+                      className="w-full px-3.5 py-2.5 bg-zinc-950/60 border border-zinc-800 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/30 rounded-xl text-xs font-bold text-zinc-200 outline-none cursor-pointer shadow-sm"
+                      style={{ color: "inherit", backgroundColor: "inherit" }}
                     >
-                      <option value="Pinamar">Pinamar (Uruguay Principal)</option>
-                      <option value="Montevideo">Montevideo (Franquicia)</option>
+                      <option value="Pinamar" style={{ color: "#ffffff", backgroundColor: "#18181b" }}>Pinamar (Uruguay Principal)</option>
+                      <option value="Montevideo" style={{ color: "#ffffff", backgroundColor: "#18181b" }}>Montevideo (Franquicia)</option>
                     </select>
                   </div>
 
                   {/* Canal de venta */}
                   <div className="space-y-1">
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase">Canal de Venta</span>
+                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-wider">Canal de Venta</span>
                     <select
                       value={newSaleCanal}
                       onChange={(e) => setNewSaleCanal(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs font-bold text-slate-800"
+                      className="w-full px-3.5 py-2.5 bg-zinc-950/60 border border-zinc-800 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/30 rounded-xl text-xs font-bold text-zinc-200 outline-none cursor-pointer shadow-sm"
+                      style={{ color: "inherit", backgroundColor: "inherit" }}
                     >
-                      <option value="WhatsApp">WhatsApp</option>
-                      <option value="Mercado Libre">Mercado Libre</option>
-                      <option value="Venta Directa">Venta Directa</option>
-                      <option value="Web">Página Web</option>
+                      <option value="WhatsApp" style={{ color: "#ffffff", backgroundColor: "#18181b" }}>WhatsApp</option>
+                      <option value="Mercado Libre" style={{ color: "#ffffff", backgroundColor: "#18181b" }}>Mercado Libre</option>
+                      <option value="Venta Directa" style={{ color: "#ffffff", backgroundColor: "#18181b" }}>Venta Directa</option>
+                      <option value="Web" style={{ color: "#ffffff", backgroundColor: "#18181b" }}>Página Web</option>
                     </select>
                   </div>
 
                   {/* Shipping Cost */}
                   <div className="space-y-1">
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase">Costo Envío de Orden ($ UYU)</span>
+                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-wider">Costo Envío de Orden ($ UYU)</span>
                     <input
                       type="number"
                       value={newSaleShippingCost}
                       onChange={(e) => setNewSaleShippingCost(parseFloat(e.target.value) || 0)}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs font-bold font-mono text-right"
+                      className="w-full px-3.5 py-2.5 bg-zinc-950/60 border border-zinc-800 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/30 rounded-xl text-xs font-bold font-mono text-right text-white outline-none shadow-inner"
                     />
                   </div>
 
                   {/* Coupon optional */}
                   <div className="space-y-1">
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase">Cupón Aplicado (Opcional)</span>
+                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-wider">Cupón Aplicado (Opcional)</span>
                     <input
                       type="text"
                       placeholder="e.g. APEX50"
                       value={newSaleCouponCode}
                       onChange={(e) => setNewSaleCouponCode(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs font-bold text-indigo-600"
+                      className="w-full px-3.5 py-2.5 bg-zinc-950/60 border border-zinc-800 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/30 rounded-xl text-xs font-bold text-indigo-400 placeholder-zinc-500 outline-none shadow-inner"
                     />
                   </div>
 
                   {/* Operational status */}
                   <div className="space-y-1">
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase">Estado de Aprobación</span>
+                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-wider">Estado de Aprobación</span>
                     <select
                       value={newSaleStatus}
                       onChange={(e) => setNewSaleStatus(e.target.value as any)}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs font-bold text-slate-800"
+                      className="w-full px-3.5 py-2.5 bg-zinc-950/60 border border-zinc-800 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/30 rounded-xl text-xs font-bold text-zinc-200 outline-none cursor-pointer shadow-sm"
+                      style={{ color: "inherit", backgroundColor: "inherit" }}
                     >
-                      <option value="pago_aprobado">Aprobado (Descuenta Stock)</option>
-                      <option value="pago_pendiente">Pendiente (No descuenta stock)</option>
-                      <option value="pago_rechazado">Rechazado</option>
+                      <option value="pago_aprobado" style={{ color: "#ffffff", backgroundColor: "#18181b" }}>Aprobado (Descuenta Stock)</option>
+                      <option value="pago_pendiente" style={{ color: "#ffffff", backgroundColor: "#18181b" }}>Pendiente (No descuenta stock)</option>
+                      <option value="pago_rechazado" style={{ color: "#ffffff", backgroundColor: "#18181b" }}>Rechazado</option>
                     </select>
+                  </div>
+
+                  {/* Fecha de la Venta */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-wider">Fecha de la Venta</span>
+                    <input
+                      type="date"
+                      value={newSaleDate}
+                      onChange={(e) => setNewSaleDate(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-zinc-950/60 border border-zinc-800 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/30 rounded-xl text-xs font-bold font-mono text-white outline-none shadow-inner"
+                    />
+                  </div>
+
+                  {/* Bypass Stock toggle (Historical/Old Sales) */}
+                  <div className="flex items-center space-x-3 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3.5 select-none md:col-span-3 shadow-inner">
+                    <input
+                      id="bypass-stock-deduction"
+                      type="checkbox"
+                      checked={newSaleBypassStockDeduction}
+                      onChange={(e) => setNewSaleBypassStockDeduction(e.target.checked)}
+                      className="h-4 w-4 rounded border-amber-500/30 text-amber-500 focus:ring-amber-500/40 bg-zinc-950 cursor-pointer"
+                    />
+                    <label htmlFor="bypass-stock-deduction" className="text-xs font-bold text-amber-400 cursor-pointer">
+                      <strong>Venta Histórica (Sin Descontar Stock):</strong> Marque esta opción para registrar ventas antiguas sin alterar los niveles de stock actuales.
+                    </label>
                   </div>
 
                 </div>
 
                 {/* Notes */}
                 <div className="space-y-1">
-                  <span className="text-[10px] font-extrabold text-slate-400 uppercase">Notas Adicionales de la Venta</span>
+                  <span className="text-[10px] font-black text-zinc-500 uppercase tracking-wider">Notas Adicionales de la Venta</span>
                   <textarea
                     rows={2}
                     value={newSaleNotes}
                     onChange={(e) => setNewSaleNotes(e.target.value)}
                     placeholder="Escriba especificaciones del despacho, aclaraciones, etc..."
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none"
+                    className="w-full px-3.5 py-2.5 bg-zinc-950/60 border border-zinc-800 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/30 rounded-xl text-xs text-zinc-200 outline-none placeholder-zinc-500 font-semibold shadow-inner"
                   />
                 </div>
               </div>
 
               {/* LIVE SIMULATED REVENUE DISTRIBUTION PREVIEW */}
-              {newSaleItems.length > 0 && (
-                <div className="p-4 bg-indigo-50/50 border border-indigo-200/50 rounded-xl space-y-2 text-xs font-semibold text-slate-800">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-indigo-600">Simulación de Distribución de Comisión para esta Operación</p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-1 font-mono">
-                    <div>
-                      <span className="block text-[9px] text-slate-450 uppercase font-sans font-bold">Monto Venta</span>
-                      <span className="text-sm font-extrabold text-slate-900">
-                        $ {newSaleItems.reduce((acc, it) => acc + it.totalPrice, 0).toLocaleString("es-AR")} UYU
-                      </span>
+              {newSaleItems.length > 0 && (() => {
+                const totalMontoVenta = newSaleItems.reduce((acc, it) => acc + it.totalPrice, 0);
+                const totalCostoProd = newSaleItems.reduce((acc, it) => acc + (it.quantity * it.costPrice), 0);
+                const isMLCanal = newSaleCanal.toLowerCase() === "mercado libre";
+                const totalComisionML = isMLCanal ? newSaleItems.reduce((acc, it) => acc + (it.quantity * (it.comisionML || 0)), 0) : 0;
+                
+                const netMontoVenta = totalMontoVenta - totalComisionML;
+                const netProfit = netMontoVenta - totalCostoProd;
+                
+                return (
+                  <div className="p-5 bg-indigo-500/5 backdrop-blur-md border border-indigo-500/15 rounded-xl space-y-3">
+                    <p className="text-[10.5px] font-black uppercase tracking-wider text-indigo-400">
+                      Simulación de Distribución de Comisión para esta Operación {isMLCanal && "(Teniendo en cuenta Comisión ML)"}
+                    </p>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-1 font-mono">
+                      <div>
+                        <span className="block text-[9.5px] text-zinc-500 uppercase font-sans font-bold">Monto Venta</span>
+                        <span className="text-sm font-black text-zinc-100">
+                          $ {totalMontoVenta.toLocaleString("es-AR")} UYU
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-[9.5px] text-zinc-500 uppercase font-sans font-bold">Costo de Prod</span>
+                        <span className="text-sm font-black text-zinc-100">
+                          $ {totalCostoProd.toLocaleString("es-AR")} UYU
+                        </span>
+                      </div>
+                      {isMLCanal && (
+                        <div>
+                          <span className="block text-[9.5px] text-amber-500 uppercase font-sans font-bold">Comisión ML</span>
+                          <span className="text-sm font-black text-amber-500">
+                            $ {totalComisionML.toLocaleString("es-AR")} UYU
+                          </span>
+                        </div>
+                      )}
+                      {newSaleDeposito === "Montevideo" ? (
+                        <>
+                          <div>
+                            <span className="block text-[9.5px] text-emerald-400 uppercase font-sans font-bold">40% Fran. + Envíos</span>
+                            <span className="text-sm font-black text-emerald-400">
+                              $ {Math.round(
+                                0.4 * netProfit + Number(newSaleShippingCost)
+                              ).toLocaleString("es-AR")} UYU
+                            </span>
+                          </div>
+                          <div>
+                            <span className="block text-[9.5px] text-indigo-400 uppercase font-sans font-bold font-sans">Cost + 60% JUEM</span>
+                            <span className="text-sm font-black text-indigo-400">
+                              $ {Math.round(
+                                totalCostoProd + 0.6 * netProfit
+                              ).toLocaleString("es-AR")} UYU
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div>
+                            <span className="block text-[9.5px] text-emerald-500/40 uppercase font-sans font-bold">Total Fran</span>
+                            <span className="text-sm font-black text-zinc-500">$ 0 UYU</span>
+                          </div>
+                          <div>
+                            <span className="block text-[9.5px] text-indigo-400 uppercase font-sans font-bold">100% JUEM + Envío</span>
+                            <span className="text-sm font-black text-indigo-400">
+                              $ {Math.round(
+                                netMontoVenta + Number(newSaleShippingCost)
+                              ).toLocaleString("es-AR")} UYU
+                            </span>
+                          </div>
+                        </>
+                      )}
                     </div>
-                    <div>
-                      <span className="block text-[9px] text-slate-450 uppercase font-sans font-bold">Costo de Prod</span>
-                      <span className="text-sm font-extrabold text-slate-900">
-                        $ {newSaleItems.reduce((acc, it) => acc + (it.quantity * it.costPrice), 0).toLocaleString("es-AR")} UYU
-                      </span>
-                    </div>
-                    {newSaleDeposito === "Montevideo" ? (
-                      <>
-                        <div>
-                          <span className="block text-[9px] text-emerald-600 uppercase font-sans font-bold">40% Fran. + Envíos</span>
-                          <span className="text-sm font-extrabold text-emerald-600">
-                            $ {Math.round(
-                              0.4 * (
-                                newSaleItems.reduce((acc, it) => acc + it.totalPrice, 0) - 
-                                newSaleItems.reduce((acc, it) => acc + (it.quantity * it.costPrice), 0)
-                              ) + Number(newSaleShippingCost)
-                            ).toLocaleString("es-AR")} UYU
-                          </span>
-                        </div>
-                        <div>
-                          <span className="block text-[9px] text-indigo-600 uppercase font-sans font-bold">Cost + 60% JUEM</span>
-                          <span className="text-sm font-extrabold text-indigo-600">
-                            $ {Math.round(
-                              newSaleItems.reduce((acc, it) => acc + (it.quantity * it.costPrice), 0) +
-                              0.6 * (
-                                newSaleItems.reduce((acc, it) => acc + it.totalPrice, 0) - 
-                                newSaleItems.reduce((acc, it) => acc + (it.quantity * it.costPrice), 0)
-                              )
-                            ).toLocaleString("es-AR")} UYU
-                          </span>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div>
-                          <span className="block text-[9px] text-emerald-600 uppercase font-sans font-bold">Total Fran</span>
-                          <span className="text-sm font-extrabold text-emerald-600">$ 0 UYU</span>
-                        </div>
-                        <div>
-                          <span className="block text-[9px] text-indigo-600 uppercase font-sans font-bold">100% JUEM + Envío</span>
-                          <span className="text-sm font-extrabold text-indigo-600">
-                            $ {Math.round(
-                              newSaleItems.reduce((acc, it) => acc + it.totalPrice, 0) + Number(newSaleShippingCost)
-                            ).toLocaleString("es-AR")} UYU
-                          </span>
-                        </div>
-                      </>
-                    )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
             </div>
 
             {/* Modal Footer */}
-            <div className="p-5 border-t border-slate-150 dark:border-zinc-800/80 bg-slate-50 dark:bg-zinc-900 flex flex-col sm:flex-row justify-between items-center gap-3">
+            <div className="p-5 border-t border-zinc-800/80 bg-zinc-950/40 flex flex-col sm:flex-row justify-between items-center gap-3">
               <button
                 type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 dark:text-zinc-450 dark:hover:text-zinc-200 cursor-pointer w-full sm:w-auto text-center"
+                onClick={() => { setIsModalOpen(false); setEditingOrderId(null); }}
+                className="px-4 py-2 text-xs font-bold text-zinc-400 hover:text-white hover:bg-zinc-850 rounded-xl transition-all w-full sm:w-auto text-center border border-transparent hover:border-zinc-800 cursor-pointer"
               >
-                Cerrar (Mantener Borrador)
+                {editingOrderId ? "Cancelar" : "Cerrar (Mantener Borrador)"}
               </button>
               
               <button
                 type="button"
                 disabled={isSubmittingNewSale || newSaleItems.length === 0}
                 onClick={handleDispatchSale}
-                className={`px-6 py-2.5 rounded-xl text-xs font-extrabold text-white flex items-center justify-center gap-1.5 cursor-pointer w-full sm:w-auto shadow-md ${
+                className={`px-6 py-2.5 rounded-xl text-xs font-black text-white flex items-center justify-center gap-1.5 cursor-pointer w-full sm:w-auto shadow-lg transition-all active:scale-[0.98] ${
                   isSubmittingNewSale || newSaleItems.length === 0
-                    ? "bg-indigo-300 dark:bg-indigo-950 text-indigo-100 cursor-not-allowed shadow-none"
-                    : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/10 active:scale-98 transition-all"
+                    ? "bg-zinc-850 text-zinc-500 border border-zinc-800/80 cursor-not-allowed shadow-none"
+                    : "bg-indigo-600 hover:bg-indigo-500 shadow-[0_0_15px_rgba(79,70,229,0.3)] hover:shadow-[0_0_20px_rgba(79,70,229,0.45)] border border-indigo-500/50"
                 }`}
               >
                 {isSubmittingNewSale ? (
-                  <span>Procesando venta...</span>
+                  <span>{editingOrderId ? "Guardando cambios..." : "Procesando venta..."}</span>
                 ) : (
                   <>
                     <ArrowRight className="h-4 w-4" />
-                    <span>Despachar Factura ({newSaleItems.reduce((acc, it) => acc + it.quantity, 0)} items)</span>
+                    <span>{editingOrderId ? "Guardar Cambios" : "Despachar Factura"} ({newSaleItems.reduce((acc, it) => acc + it.quantity, 0)} items)</span>
                   </>
                 )}
               </button>

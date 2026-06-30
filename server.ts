@@ -813,6 +813,122 @@ function deductStockMemory(orderItems: any[]): void {
   }
 }
 
+async function reintegrateSingleItemStockDb(client: any, productId: any, variantId: any, qty: number, depositoOrigen: string): Promise<void> {
+  if (qty <= 0) return;
+
+  // Check if product is combo
+  const prodCheck = await client.query(
+    "SELECT is_combo, combo_components FROM public.products WHERE id = $1;",
+    [productId]
+  );
+  
+  if (prodCheck.rows.length > 0) {
+    const isCombo = prodCheck.rows[0].is_combo === true;
+    if (isCombo) {
+      const components = prodCheck.rows[0].combo_components;
+      const compList = Array.isArray(components) ? components : (typeof components === 'string' ? JSON.parse(components) : []);
+      for (const comp of compList) {
+        const compId = comp.productId;
+        const compVarId = comp.variantId || null;
+        const compQty = qty * (Number(comp.quantity) || 1);
+        await reintegrateSingleItemStockDb(client, compId, compVarId, compQty, depositoOrigen);
+      }
+      return; // Do NOT touch stock from the combo itself!
+    }
+  }
+
+  const isMvd = String(depositoOrigen).toLowerCase() === "montevideo";
+  const pinAdd = isMvd ? 0 : qty;
+  const mvdAdd = isMvd ? qty : 0;
+
+  if (variantId) {
+    await client.query(
+      `UPDATE public.product_variants 
+       SET stock = stock + $1, 
+           stock_pinamar = stock_pinamar + $2, 
+           stock_montevideo = stock_montevideo + $3, 
+           updated_at = NOW() 
+       WHERE id = $4;`,
+      [qty, pinAdd, mvdAdd, variantId]
+    );
+
+    await client.query(
+      `UPDATE public.products 
+       SET stock = stock + $1, 
+           stock_pinamar = stock_pinamar + $2, 
+           stock_montevideo = stock_montevideo + $3, 
+           updated_at = NOW() 
+       WHERE id = $4;`,
+      [qty, pinAdd, mvdAdd, productId]
+    );
+  } else if (productId) {
+    await client.query(
+      `UPDATE public.products 
+       SET stock = stock + $1, 
+           stock_pinamar = stock_pinamar + $2, 
+           stock_montevideo = stock_montevideo + $3, 
+           updated_at = NOW() 
+       WHERE id = $4;`,
+      [qty, pinAdd, mvdAdd, productId]
+    );
+  }
+}
+
+async function reintegrateStockDb(client: any, orderId: string, depositoOrigen: string): Promise<void> {
+  const itemsRes = await client.query(
+    "SELECT product_id, variant_id, quantity, product_name FROM public.order_items WHERE order_id = $1;",
+    [orderId]
+  );
+  
+  for (const item of itemsRes.rows) {
+    const qty = Number(item.quantity);
+    if (qty <= 0) continue;
+    await reintegrateSingleItemStockDb(client, item.product_id, item.variant_id || null, qty, depositoOrigen);
+  }
+}
+
+function reintegrateSingleItemStockMemory(productId: any, variantId: any, qty: number, depositoOrigen: string): void {
+  if (qty <= 0) return;
+  const dbProd = currentStoreState.products?.find(p => String(p.id) === String(productId));
+  if (!dbProd) return;
+
+  if (dbProd.isCombo) {
+    const compList = dbProd.comboComponents || [];
+    for (const comp of compList) {
+      const compQty = qty * (Number(comp.quantity) || 1);
+      reintegrateSingleItemStockMemory(comp.productId, comp.variantId || null, compQty, depositoOrigen);
+    }
+    return; // Do NOT touch stock from the combo itself!
+  }
+
+  const isMvd = String(depositoOrigen).toLowerCase() === "montevideo";
+  const pinAdd = isMvd ? 0 : qty;
+  const mvdAdd = isMvd ? qty : 0;
+
+  dbProd.stockPinamar = (dbProd.stockPinamar || 0) + pinAdd;
+  dbProd.stockMontevideo = (dbProd.stockMontevideo || 0) + mvdAdd;
+  dbProd.stock = (dbProd.stock || 0) + qty;
+
+  if (variantId) {
+    const matchVar = dbProd.variants?.find((v: any) => String(v.id) === String(variantId));
+    if (matchVar) {
+      matchVar.stockPinamar = (matchVar.stockPinamar || 0) + pinAdd;
+      matchVar.stockMontevideo = (matchVar.stockMontevideo || 0) + mvdAdd;
+      matchVar.stock = (matchVar.stock || 0) + qty;
+    }
+  }
+}
+
+function reintegrateStockMemory(orderItems: any[], depositoOrigen: string): void {
+  for (const item of orderItems) {
+    const qty = Number(item.quantity || 1);
+    reintegrateSingleItemStockMemory(item.productId, item.variantId || null, qty, depositoOrigen);
+  }
+  if (currentStoreState && currentStoreState.products) {
+    currentStoreState.products = recalculateComboStocks(currentStoreState.products);
+  }
+}
+
 async function approveOrderAndDeductStock(orderId: string, paymentId: string, verifiedPaymentAmount: number): Promise<string> {
   const pool = getDbPool();
   if (pool && !dbUnavailable) {
@@ -1102,7 +1218,7 @@ async function getDbState(): Promise<ShopState> {
     // 7. Fetch orders & their items
     let orders: any[] = [];
     try {
-      const ordersRes = await pool.query("SELECT id, customer_email, customer_name, customer_phone, subtotal, discount_amount, shipping_cost, total, applied_coupon_code, current_status, notes, payment_method, deposito_origen, canal, created_at, updated_at FROM public.orders ORDER BY created_at DESC;");
+      const ordersRes = await pool.query("SELECT id, customer_email, customer_name, customer_phone, subtotal, discount_amount, shipping_cost, total, applied_coupon_code, current_status, notes, payment_method, deposito_origen, canal, bypass_stock_deduction, created_at, updated_at FROM public.orders ORDER BY created_at DESC;");
       
       const itemsRes = await pool.query("SELECT id, order_id, product_id, variant_id, product_name, sku, size_selected, color_selected, unit_price, quantity, total_price FROM public.order_items;");
       const orderItemsMap: Record<string, any[]> = {};
@@ -1140,6 +1256,7 @@ async function getDbState(): Promise<ShopState> {
         paymentMethod: row.payment_method || undefined,
         depositoOrigen: row.deposito_origen || "Pinamar",
         canal: row.canal || "Web",
+        bypassStockDeduction: !!row.bypass_stock_deduction,
         createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
         updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
         items: orderItemsMap[row.id] || []
@@ -1717,6 +1834,7 @@ async function initPostgresStore(): Promise<ShopState | null> {
       ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50);
       ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS deposito_origen VARCHAR(50);
       ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS canal VARCHAR(50);
+      ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS bypass_stock_deduction BOOLEAN DEFAULT false;
     `);
 
     await pool.query(`
@@ -3862,10 +3980,18 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
         return res.status(429).json({ success: false, message: "Demasiados pedidos creados en poco tiempo. Por favor, intente nuevamente en unos minutos." });
       }
 
-      const { customerName, customerEmail, customerPhone, shippingCost, couponCode, notes, items, paymentMethod, depositoOrigen, canal } = req.body;
+      const { customerName, customerEmail, customerPhone, shippingCost, couponCode, notes, items, paymentMethod, depositoOrigen, canal, bypassStockDeduction, createdAt } = req.body;
       
-      if (!customerName || !customerEmail || !items || items.length === 0) {
-        return res.status(400).json({ success: false, message: "Nombre, Correo Electrónico y Artículos del carrito son obligatorios." });
+      if (!customerName || !items || items.length === 0) {
+        return res.status(400).json({ success: false, message: "Nombre y Artículos del carrito son obligatorios." });
+      }
+
+      let parsedCreatedAt: Date | null = null;
+      if (createdAt) {
+        const d = new Date(createdAt);
+        if (!isNaN(d.getTime())) {
+          parsedCreatedAt = d;
+        }
       }
 
       const sanitizedPaymentMethod = sanitizeHtmlString(paymentMethod || "transfer").trim().substring(0, 50);
@@ -3874,9 +4000,14 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
 
       // 2. Input Sanitization to prevent XSS (Stored & Dom XSS injection blocks)
       const sanitizedName = sanitizeHtmlString(customerName).trim().substring(0, 100);
-      const sanitizedEmail = sanitizeHtmlString(customerEmail).trim().substring(0, 100);
+      const sanitizedEmail = sanitizeHtmlString(customerEmail || "cliente@gmail.com").trim().substring(0, 100);
       const sanitizedPhone = sanitizeHtmlString(customerPhone || "").trim().substring(0, 50);
       const sanitizedNotes = sanitizeHtmlString(notes || "").trim().substring(0, 1000);
+      
+      let finalNotes = sanitizedNotes;
+      if (bypassStockDeduction) {
+        finalNotes = `[HISTORIC_NO_STOCK] [Venta Histórica - Sin Descontar Stock] ${sanitizedNotes}`.trim();
+      }
 
       let status: string = "pedido_iniciado"; // initial state
       if (req.body.status && ["pago_aprobado", "pago_pendiente", "pago_rechazado", "pedido_iniciado"].includes(req.body.status)) {
@@ -3903,19 +4034,26 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
         let correctUnitPrice = Number(dbProd.price);
         let activeVariantId = item.variantId;
 
-        if (dbProd.variants && dbProd.variants.length > 0 && item.sizeSelected) {
-          const exactMatch = item.colorSelected 
-            ? dbProd.variants.find((v: any) => v.size === item.sizeSelected && v.color === item.colorSelected)
-            : null;
-          const sizeMatch = dbProd.variants.find((v: any) => v.size === item.sizeSelected);
-          const match = exactMatch || sizeMatch;
-          
-          if (match) {
-            activeVariantId = match.id;
-            if (match.price !== undefined && Number(match.price) > 0) {
-              correctUnitPrice = Number(match.price);
-            } else if (match.priceDelta !== undefined && Number(match.priceDelta) !== 0) {
-              correctUnitPrice = Number(dbProd.price) + Number(match.priceDelta);
+        const authHeader = req.headers.authorization;
+        const isAdmin = isValidToken(authHeader);
+
+        if (isAdmin && item.unitPrice !== undefined && !isNaN(Number(item.unitPrice))) {
+          correctUnitPrice = Number(item.unitPrice);
+        } else {
+          if (dbProd.variants && dbProd.variants.length > 0 && item.sizeSelected) {
+            const exactMatch = item.colorSelected 
+              ? dbProd.variants.find((v: any) => v.size === item.sizeSelected && v.color === item.colorSelected)
+              : null;
+            const sizeMatch = dbProd.variants.find((v: any) => v.size === item.sizeSelected);
+            const match = exactMatch || sizeMatch;
+            
+            if (match) {
+              activeVariantId = match.id;
+              if (match.price !== undefined && Number(match.price) > 0) {
+                correctUnitPrice = Number(match.price);
+              } else if (match.priceDelta !== undefined && Number(match.priceDelta) !== 0) {
+                correctUnitPrice = Number(dbProd.price) + Number(match.priceDelta);
+              }
             }
           }
         }
@@ -3962,39 +4100,41 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
           await client.query("BEGIN;");
           
           // Verify stock with FOR UPDATE lock on every item to prevent race-condition oversellings
-          for (const item of verifiedItems) {
-            if (item.variantId) {
-              const vRes = await client.query(
-                "SELECT stock, size_value, color_name FROM public.product_variants WHERE id = $1 FOR UPDATE;",
-                [item.variantId]
-              );
-              if (vRes.rows.length === 0) {
-                throw new Error(`La variante seleccionada para el producto '${item.productName}' ya no está disponible.`);
-              }
-              const stockAvailable = vRes.rows[0].stock;
-              if (item.quantity > stockAvailable) {
-                const desc = `${vRes.rows[0].size_value || ""}${vRes.rows[0].color_name ? " - " + vRes.rows[0].color_name : ""}`;
-                throw new Error(`Lo sentimos, el producto '${item.productName}' (${desc}) no tiene suficiente stock disponible. Stock disponible: ${stockAvailable}.`);
-              }
-            } else {
-              const pRes = await client.query(
-                "SELECT stock FROM public.products WHERE id = $1 FOR UPDATE;",
-                [item.productId]
-              );
-              if (pRes.rows.length === 0) {
-                throw new Error(`El producto '${item.productName}' ya no está disponible.`);
-              }
-              const stockAvailable = pRes.rows[0].stock;
-              if (item.quantity > stockAvailable) {
-                throw new Error(`Lo sentimos, el producto '${item.productName}' no tiene suficiente stock disponible. Stock disponible: ${stockAvailable}.`);
+          if (!bypassStockDeduction) {
+            for (const item of verifiedItems) {
+              if (item.variantId) {
+                const vRes = await client.query(
+                  "SELECT stock, size_value, color_name FROM public.product_variants WHERE id = $1 FOR UPDATE;",
+                  [item.variantId]
+                );
+                if (vRes.rows.length === 0) {
+                  throw new Error(`La variante seleccionada para el producto '${item.productName}' ya no está disponible.`);
+                }
+                const stockAvailable = vRes.rows[0].stock;
+                if (item.quantity > stockAvailable) {
+                  const desc = `${vRes.rows[0].size_value || ""}${vRes.rows[0].color_name ? " - " + vRes.rows[0].color_name : ""}`;
+                  throw new Error(`Lo sentimos, el producto '${item.productName}' (${desc}) no tiene suficiente stock disponible. Stock disponible: ${stockAvailable}.`);
+                }
+              } else {
+                const pRes = await client.query(
+                  "SELECT stock FROM public.products WHERE id = $1 FOR UPDATE;",
+                  [item.productId]
+                );
+                if (pRes.rows.length === 0) {
+                  throw new Error(`El producto '${item.productName}' ya no está disponible.`);
+                }
+                const stockAvailable = pRes.rows[0].stock;
+                if (item.quantity > stockAvailable) {
+                  throw new Error(`Lo sentimos, el producto '${item.productName}' no tiene suficiente stock disponible. Stock disponible: ${stockAvailable}.`);
+                }
               }
             }
           }
 
           // Insert secure calculated values into postgres
           const orderRes = await client.query(`
-            INSERT INTO public.orders (customer_name, customer_email, customer_phone, subtotal, discount_amount, shipping_cost, total, applied_coupon_code, current_status, notes, payment_method, deposito_origen, canal)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            INSERT INTO public.orders (customer_name, customer_email, customer_phone, subtotal, discount_amount, shipping_cost, total, applied_coupon_code, current_status, notes, payment_method, deposito_origen, canal, bypass_stock_deduction, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, COALESCE($15, NOW()))
             RETURNING id, created_at;
           `, [
             sanitizedName, 
@@ -4006,10 +4146,12 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
             serverTotal, 
             validCouponCodeToSave, 
             status, 
-            sanitizedNotes || null,
+            finalNotes || null,
             sanitizedPaymentMethod,
             sanitizedDepositoOrigen,
-            sanitizedCanal
+            sanitizedCanal,
+            !!bypassStockDeduction,
+            parsedCreatedAt
           ]);
           
           orderId = orderRes.rows[0].id;
@@ -4054,23 +4196,25 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
       } else {
         // Safe, verified file-system backup fallback:
         // Pre-emptively verify in-memory stock limits before generating the offline order
-        for (const item of verifiedItems) {
-          const dbProd = officialProducts.find(p => Number(p.id) === Number(item.productId));
-          if (!dbProd) {
-            return res.status(400).json({ success: false, message: `El producto '${item.productName}' ya no está disponible.` });
-          }
-          if (item.variantId) {
-            const matchVar = dbProd.variants?.find((v: any) => String(v.id) === String(item.variantId));
-            if (!matchVar) {
-              return res.status(400).json({ success: false, message: `La variante seleccionada para el producto '${item.productName}' ya no está disponible.` });
+        if (!bypassStockDeduction) {
+          for (const item of verifiedItems) {
+            const dbProd = officialProducts.find(p => Number(p.id) === Number(item.productId));
+            if (!dbProd) {
+              return res.status(400).json({ success: false, message: `El producto '${item.productName}' ya no está disponible.` });
             }
-            if (item.quantity > (matchVar.stock || 0)) {
-              const desc = `${matchVar.size || ""}${matchVar.color ? " - " + matchVar.color : ""}`;
-              return res.status(400).json({ success: false, message: `Lo sentimos, el producto '${item.productName}' (${desc}) no tiene suficiente stock disponible. Stock disponible: ${matchVar.stock || 0}.` });
-            }
-          } else {
-            if (item.quantity > (dbProd.stock || 0)) {
-              return res.status(400).json({ success: false, message: `Lo sentimos, el producto '${item.productName}' no tiene suficiente stock disponible. Stock disponible: ${dbProd.stock || 0}.` });
+            if (item.variantId) {
+              const matchVar = dbProd.variants?.find((v: any) => String(v.id) === String(item.variantId));
+              if (!matchVar) {
+                return res.status(400).json({ success: false, message: `La variante seleccionada para el producto '${item.productName}' ya no está disponible.` });
+              }
+              if (item.quantity > (matchVar.stock || 0)) {
+                const desc = `${matchVar.size || ""}${matchVar.color ? " - " + matchVar.color : ""}`;
+                return res.status(400).json({ success: false, message: `Lo sentimos, el producto '${item.productName}' (${desc}) no tiene suficiente stock disponible. Stock disponible: ${matchVar.stock || 0}.` });
+              }
+            } else {
+              if (item.quantity > (dbProd.stock || 0)) {
+                return res.status(400).json({ success: false, message: `Lo sentimos, el producto '${item.productName}' no tiene suficiente stock disponible. Stock disponible: ${dbProd.stock || 0}.` });
+              }
             }
           }
         }
@@ -4087,11 +4231,12 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
           total: serverTotal,
           couponCode,
           status: status as any,
-          notes: sanitizedNotes,
+          notes: finalNotes,
+          bypassStockDeduction: !!bypassStockDeduction,
           paymentMethod: sanitizedPaymentMethod,
           depositoOrigen: sanitizedDepositoOrigen as any,
           canal: sanitizedCanal,
-          createdAt: new Date().toISOString(),
+          createdAt: parsedCreatedAt ? parsedCreatedAt.toISOString() : new Date().toISOString(),
           items: verifiedItems.map((i: any) => ({
             productId: String(i.productId),
             variantId: i.variantId ? String(i.variantId) : undefined,
@@ -4106,7 +4251,7 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
         };
 
         // Deduct stock in-memory if status is pago_aprobado
-        if (status === "pago_aprobado") {
+        if (status === "pago_aprobado" && !bypassStockDeduction) {
           deductStockMemory(verifiedItems);
         }
 
@@ -4169,6 +4314,258 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
     } catch (err: any) {
       console.error("Error creating order:", err);
       res.status(500).json({ success: false, message: "Error interno del servidor al crear el pedido.", error: err.message });
+    }
+  });
+
+  // PUT update order manually by administrator (full details)
+  app.put("/api/orders/:id", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación de administrador principal." });
+    }
+
+    const { id } = req.params;
+    const { 
+      customerName, 
+      customerEmail, 
+      customerPhone, 
+      shippingCost, 
+      couponCode, 
+      notes, 
+      items, 
+      paymentMethod, 
+      depositoOrigen, 
+      canal, 
+      bypassStockDeduction, 
+      createdAt, 
+      status 
+    } = req.body;
+
+    if (!customerName || !items || items.length === 0) {
+      return res.status(400).json({ success: false, message: "Nombre y Artículos son obligatorios." });
+    }
+
+    let parsedCreatedAt: Date | null = null;
+    if (createdAt) {
+      const d = new Date(createdAt);
+      if (!isNaN(d.getTime())) {
+        parsedCreatedAt = d;
+      }
+    }
+
+    const sanitizedPaymentMethod = sanitizeHtmlString(paymentMethod || "transfer").trim().substring(0, 50);
+    const sanitizedDepositoOrigen = sanitizeHtmlString(depositoOrigen || "Pinamar").trim().substring(0, 50);
+    const sanitizedCanal = sanitizeHtmlString(canal || "Web").trim().substring(0, 50);
+    const sanitizedName = sanitizeHtmlString(customerName).trim().substring(0, 100);
+    const sanitizedEmail = sanitizeHtmlString(customerEmail || "cliente@gmail.com").trim().substring(0, 100);
+    const sanitizedPhone = sanitizeHtmlString(customerPhone || "").trim().substring(0, 50);
+    const sanitizedNotes = sanitizeHtmlString(notes || "").trim().substring(0, 1000);
+    const finalNotes = sanitizedNotes;
+
+    const finalStatus = status || "pago_aprobado";
+
+    // Recompute subtotal, discount, total server-side
+    const officialState = await getDbState();
+    const officialProducts = officialState.products || [];
+    const officialCoupons = officialState.coupons || [];
+
+    let serverSubtotal = 0;
+    const verifiedItems = [];
+
+    for (const item of items) {
+      const dbProd = officialProducts.find(p => Number(p.id) === Number(item.productId));
+      if (!dbProd) {
+        return res.status(400).json({ success: false, message: `El producto con ID '${item.productId}' ya no está disponible en la tienda.` });
+      }
+
+      let correctUnitPrice = Number(item.unitPrice !== undefined ? item.unitPrice : dbProd.price);
+      let activeVariantId = item.variantId;
+
+      const qty = Math.max(1, parseInt(item.quantity) || 1);
+      const itemTot = correctUnitPrice * qty;
+      serverSubtotal += itemTot;
+
+      verifiedItems.push({
+        productId: dbProd.id,
+        variantId: activeVariantId || null,
+        productName: dbProd.name,
+        sku: item.sku || null,
+        sizeSelected: item.sizeSelected || null,
+        colorSelected: item.colorSelected || null,
+        unitPrice: correctUnitPrice,
+        quantity: qty,
+        totalPrice: itemTot,
+        costPrice: Number(dbProd.precioCompra || 0)
+      });
+    }
+
+    let serverDiscountAmount = 0;
+    let validCouponCodeToSave: string | null = null;
+    if (couponCode) {
+      const cleanCode = String(couponCode).trim().toUpperCase();
+      const dbCoupon = officialCoupons.find(c => c.code.toUpperCase() === cleanCode && c.active !== false);
+      if (dbCoupon) {
+        const now = new Date();
+        const exp = dbCoupon.expiration_date ? new Date(dbCoupon.expiration_date) : null;
+        if (!exp || exp > now) {
+          serverDiscountAmount = Math.round((serverSubtotal * Number(dbCoupon.discount_percent)) / 100);
+          validCouponCodeToSave = dbCoupon.code;
+        }
+      }
+    }
+
+    const verifiedShippingCost = Number(shippingCost || 0);
+    const serverTotal = Math.max(0, serverSubtotal - serverDiscountAmount + verifiedShippingCost);
+
+    try {
+      const pool = getDbPool();
+      if (pool && !dbUnavailable) {
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN;");
+
+          // Fetch existing/original order status and bypass_stock_deduction
+          const oldOrderRes = await client.query(
+            "SELECT current_status, bypass_stock_deduction, deposito_origen FROM public.orders WHERE id = $1 FOR UPDATE;",
+            [id]
+          );
+          
+          if (oldOrderRes.rows.length > 0) {
+            const oldStatus = oldOrderRes.rows[0].current_status;
+            const oldBypass = !!oldOrderRes.rows[0].bypass_stock_deduction;
+            const oldDep = oldOrderRes.rows[0].deposito_origen || "Pinamar";
+            
+            // If it originally deducted stock (approved + not bypassed), return it
+            if (oldStatus === "pago_aprobado" && !oldBypass) {
+              await reintegrateStockDb(client, id, oldDep);
+            }
+          }
+
+          // Update main order table
+          await client.query(`
+            UPDATE public.orders 
+            SET customer_name = $1, customer_email = $2, customer_phone = $3, subtotal = $4, discount_amount = $5, shipping_cost = $6, total = $7, applied_coupon_code = $8, current_status = $9, notes = $10, payment_method = $11, deposito_origen = $12, canal = $13, bypass_stock_deduction = $14, created_at = COALESCE($15, created_at), updated_at = NOW()
+            WHERE id = $16;
+          `, [
+            sanitizedName,
+            sanitizedEmail,
+            sanitizedPhone || null,
+            serverSubtotal,
+            serverDiscountAmount,
+            verifiedShippingCost,
+            serverTotal,
+            validCouponCodeToSave,
+            finalStatus,
+            finalNotes || null,
+            sanitizedPaymentMethod,
+            sanitizedDepositoOrigen,
+            sanitizedCanal,
+            !!bypassStockDeduction,
+            parsedCreatedAt,
+            id
+          ]);
+
+          // Clear existing order items
+          await client.query("DELETE FROM public.order_items WHERE order_id = $1;", [id]);
+
+          // Insert edited items
+          const isUuid = (val: any) => typeof val === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
+          for (const item of verifiedItems) {
+            const cleanVariantId = isUuid(item.variantId) ? item.variantId : null;
+            await client.query(`
+              INSERT INTO public.order_items (order_id, product_id, variant_id, product_name, sku, size_selected, color_selected, unit_price, quantity, total_price)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
+            `, [
+              id,
+              item.productId,
+              cleanVariantId,
+              item.productName,
+              item.sku || null,
+              item.sizeSelected || null,
+              item.colorSelected || null,
+              item.unitPrice,
+              item.quantity,
+              item.totalPrice
+            ]);
+          }
+
+          // If the new edited state requires stock deduction (approved + not bypassed), deduct it
+          if (finalStatus === "pago_aprobado" && !bypassStockDeduction) {
+            await deductStockDb(client, id);
+          }
+
+          await client.query("COMMIT;");
+        } catch (txErr: any) {
+          await client.query("ROLLBACK;");
+          console.error("Error updating order inside transaction:", txErr);
+          return res.status(400).json({ success: false, message: txErr.message || "Error al actualizar el pedido en la base de datos." });
+        } finally {
+          client.release();
+        }
+
+        const dbState = await getDbState();
+        currentStoreState = dbState;
+      } else {
+        // Fallback for file-system storage:
+        if (currentStoreState.orders) {
+          const oldOrder = currentStoreState.orders.find((o: any) => o.id === id);
+          if (oldOrder) {
+            // If it originally deducted stock (approved + not bypassed), return it
+            if (oldOrder.status === "pago_aprobado" && !oldOrder.bypassStockDeduction) {
+              reintegrateStockMemory(oldOrder.items || [], oldOrder.depositoOrigen || "Pinamar");
+            }
+          }
+
+          currentStoreState.orders = currentStoreState.orders.map((o: any) => {
+            if (o.id === id) {
+              return {
+                ...o,
+                customerName: sanitizedName,
+                customerEmail: sanitizedEmail,
+                customerPhone: sanitizedPhone,
+                subtotal: serverSubtotal,
+                discountAmount: serverDiscountAmount,
+                shippingCost: verifiedShippingCost,
+                total: serverTotal,
+                couponCode: validCouponCodeToSave || couponCode,
+                status: finalStatus,
+                notes: finalNotes,
+                bypassStockDeduction: !!bypassStockDeduction,
+                paymentMethod: sanitizedPaymentMethod,
+                depositoOrigen: sanitizedDepositoOrigen,
+                canal: sanitizedCanal,
+                createdAt: parsedCreatedAt ? parsedCreatedAt.toISOString() : o.createdAt,
+                updatedAt: new Date().toISOString(),
+                items: verifiedItems.map((i: any) => ({
+                  productId: String(i.productId),
+                  variantId: i.variantId ? String(i.variantId) : undefined,
+                  productName: i.productName,
+                  sku: i.sku || undefined,
+                  sizeSelected: i.sizeSelected || undefined,
+                  colorSelected: i.colorSelected || undefined,
+                  unitPrice: i.unitPrice,
+                  quantity: i.quantity,
+                  totalPrice: i.totalPrice
+                }))
+              };
+            }
+            return o;
+          });
+
+          // If the new edited state requires stock deduction, deduct it
+          if (finalStatus === "pago_aprobado" && !bypassStockDeduction) {
+            deductStockMemory(verifiedItems);
+          }
+
+          fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+        }
+      }
+
+      res.json({ success: true, message: "Pedido actualizado correctamente.", state: currentStoreState });
+    } catch (err: any) {
+      console.error("Error updating order:", err);
+      res.status(500).json({ success: false, message: "Error interno del servidor al actualizar el pedido.", error: err.message });
     }
   });
 
@@ -4274,12 +4671,45 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
     try {
       const pool = getDbPool();
       if (pool && !dbUnavailable) {
-        // Cascade delete on public.order_items is active in DB, so we only need to delete from public.orders
-        await pool.query("DELETE FROM public.orders WHERE id = $1;", [id]);
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN;");
+          
+          // Get original status, bypass flag, and warehouse to see if we should return stock
+          const orderRes = await client.query(
+            "SELECT current_status, bypass_stock_deduction, deposito_origen FROM public.orders WHERE id = $1 FOR UPDATE;",
+            [id]
+          );
+          
+          if (orderRes.rows.length > 0) {
+            const status = orderRes.rows[0].current_status;
+            const bypass = !!orderRes.rows[0].bypass_stock_deduction;
+            const dep = orderRes.rows[0].deposito_origen || "Pinamar";
+            
+            if (status === "pago_aprobado" && !bypass) {
+              await reintegrateStockDb(client, id, dep);
+            }
+          }
+          
+          // Cascade delete on public.order_items is active in DB, so we only need to delete from public.orders
+          await client.query("DELETE FROM public.orders WHERE id = $1;", [id]);
+          await client.query("COMMIT;");
+        } catch (txErr: any) {
+          await client.query("ROLLBACK;");
+          console.error("Error during order deletion transaction:", txErr);
+          throw txErr;
+        } finally {
+          client.release();
+        }
+        
         const dbState = await getDbState();
         currentStoreState = dbState;
       } else {
         if (currentStoreState.orders) {
+          const order = currentStoreState.orders.find((o: any) => o.id === id);
+          if (order && order.status === "pago_aprobado" && !order.bypassStockDeduction) {
+            reintegrateStockMemory(order.items || [], order.depositoOrigen || "Pinamar");
+          }
           currentStoreState.orders = currentStoreState.orders.filter((o: any) => o.id !== id);
           fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
         }

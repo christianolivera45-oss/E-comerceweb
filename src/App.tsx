@@ -1562,7 +1562,17 @@ export default function App() {
             let compPin = 0;
             let compMvd = 0;
             if (comp.variantId) {
-              const matchVar = compProd.variants?.find(varObj => String(varObj.id) === String(comp.variantId));
+              let matchVar = compProd.variants?.find(varObj => String(varObj.id) === String(comp.variantId));
+              if (!matchVar && comp.comboColor) {
+                const searchColor = comp.comboColor.toLowerCase().trim();
+                matchVar = compProd.variants?.find((v: any) => {
+                  const vColor = (v.color || "").toLowerCase().trim();
+                  return vColor === searchColor || 
+                         vColor.includes(searchColor) || 
+                         searchColor.includes(vColor) ||
+                         (searchColor.substring(0, 3) === vColor.substring(0, 3));
+                });
+              }
               if (matchVar) {
                 compPin = matchVar.stockPinamar !== undefined ? matchVar.stockPinamar : (matchVar.stock || 0);
                 compMvd = matchVar.stockMontevideo !== undefined ? matchVar.stockMontevideo : 0;
@@ -1650,6 +1660,14 @@ export default function App() {
     }
   };
 
+  const getProductActualStock = (p: any) => {
+    if (!p) return 0;
+    if (p.isCombo) {
+      return getComboDynamicStocks(p.comboComponents || [], p.variants || []).stockTotal;
+    }
+    return p.stock ?? 0;
+  };
+
   const filteredAdminProducts = useMemo(() => {
     let filtered = displayProducts;
 
@@ -1659,13 +1677,12 @@ export default function App() {
 
     if (adminProductStockFilter === "instock") {
       filtered = filtered.filter(p => {
-        // If there are variants with stock, it might count. But p.stock has physical total.
-        const st = p.stock ?? 0;
+        const st = getProductActualStock(p);
         return st > 0;
       });
     } else if (adminProductStockFilter === "outofstock") {
       filtered = filtered.filter(p => {
-        const st = p.stock ?? 0;
+        const st = getProductActualStock(p);
         return st === 0;
       });
     }
@@ -4754,30 +4771,47 @@ export default function App() {
                     <span className="text-xs font-mono text-zinc-500 dark:text-zinc-400">({sortedProducts.length} productos)</span>
                   </div>
 
-                  {/* Mobile Layout Mode Toggle (Compact Grid 2 vs List 1) */}
-                  <div className="lg:hidden flex items-center bg-[#0B1730]/60 border border-[#D4A55A]/20 rounded-xl p-0.5 gap-0.5">
+                  {/* Action group: Filters/Sorting + Mobile Layout Toggle */}
+                  <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setMobileLayoutMode("grid")}
-                      className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                        mobileLayoutMode === "grid"
-                          ? "bg-[#D4A55A] text-[#050B1A]"
-                          : "text-zinc-400 hover:text-[#E6BF76]"
+                      onClick={() => setShowFiltersPanel(!showFiltersPanel)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer active:scale-95 ${
+                        showFiltersPanel
+                          ? "bg-[#D4A55A] text-[#050B1A] border-[#D4A55A]"
+                          : store.settings.themeMode === "dark"
+                          ? "bg-[#0B1730]/60 border-[#D4A55A]/20 text-zinc-300 hover:text-[#E6BF76]"
+                          : "bg-slate-50 border-slate-200 text-zinc-700 hover:bg-slate-100"
                       }`}
-                      title="Vista de Cuadrícula"
                     >
-                      <Grid className="w-3.5 h-3.5" />
+                      <Sliders className="w-3.5 h-3.5 text-[#D4A55A]" />
+                      <span>Filtros y Orden</span>
                     </button>
-                    <button
-                      onClick={() => setMobileLayoutMode("list")}
-                      className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                        mobileLayoutMode === "list"
-                          ? "bg-[#D4A55A] text-[#050B1A]"
-                          : "text-zinc-400 hover:text-[#E6BF76]"
-                      }`}
-                      title="Vista de Lista"
-                    >
-                      <List className="w-3.5 h-3.5" />
-                    </button>
+
+                    {/* Mobile Layout Mode Toggle (Compact Grid 2 vs List 1) */}
+                    <div className="lg:hidden flex items-center bg-[#0B1730]/60 border border-[#D4A55A]/20 rounded-xl p-0.5 gap-0.5">
+                      <button
+                        onClick={() => setMobileLayoutMode("grid")}
+                        className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                          mobileLayoutMode === "grid"
+                            ? "bg-[#D4A55A] text-[#050B1A]"
+                            : "text-zinc-400 hover:text-[#E6BF76]"
+                        }`}
+                        title="Vista de Cuadrícula"
+                      >
+                        <Grid className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setMobileLayoutMode("list")}
+                        className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                          mobileLayoutMode === "list"
+                            ? "bg-[#D4A55A] text-[#050B1A]"
+                            : "text-zinc-400 hover:text-[#E6BF76]"
+                        }`}
+                        title="Vista de Lista"
+                      >
+                        <List className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -5228,383 +5262,429 @@ export default function App() {
 
       {/* RENDER ADMIN DASHBOARD - PRIVATE CONTROL PANEL */}
       {activeTab === "admin" && authToken && (
-        <div className="dark flex-grow flex flex-col md:flex-row min-h-0 bg-zinc-950 text-zinc-100">
+        <div className="dark flex-grow flex flex-col md:flex-row min-h-0 bg-zinc-950 text-zinc-100 relative overflow-hidden font-sans">
           
-          {/* Left sidebar nav following Professional Polish theme instructions */}
-          <aside className="w-full md:w-64 bg-zinc-950/90 text-zinc-200 flex flex-col shrink-0 border-r border-zinc-800/40 shadow-xl select-none">
+          {/* Ambient Lighting Orbs - "Luz" backdrop effect for premium tech vibe */}
+          <div className="absolute top-[-10%] left-[-10%] w-[45%] h-[45%] rounded-full bg-indigo-500/10 blur-[120px] pointer-events-none" />
+          <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-650/5 blur-[150px] pointer-events-none" />
+          <div className="absolute top-[30%] left-[60%] w-[35%] h-[35%] rounded-full bg-emerald-500/5 blur-[130px] pointer-events-none" />
+
+          {/* Left sidebar nav with Glassmorphism aesthetic and rich lighting details */}
+          <aside className="w-full md:w-66 bg-zinc-950/85 backdrop-blur-md text-zinc-200 flex flex-col shrink-0 border-r border-zinc-800/40 shadow-[5px_0_30px_rgba(0,0,0,0.35)] select-none z-10 relative">
+            
             {/* Header de menú móvil visible sólo en pantallas chicas */}
-            <div className="flex md:hidden items-center justify-between p-4 bg-zinc-950 border-b border-zinc-800 select-none">
+            <div className="flex md:hidden items-center justify-between p-4 bg-zinc-950/90 border-b border-zinc-800/60 select-none">
               <div className="flex items-center gap-2">
-                <span className="text-base">⚙️</span>
+                <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse shadow-[0_0_8px_#6366f1]" />
                 <span className="text-xs font-black uppercase tracking-widest text-zinc-100">Control Panel</span>
               </div>
               <button
                 type="button"
                 onClick={() => setMobileAdminMenuOpen(!mobileAdminMenuOpen)}
-                className="p-1.5 focus:outline-none hover:bg-zinc-800 rounded-lg transition-colors text-zinc-300 hover:text-white flex items-center justify-center border border-zinc-800"
+                className="p-1.5 focus:outline-none hover:bg-zinc-900 rounded-lg transition-colors text-zinc-300 hover:text-white flex items-center justify-center border border-zinc-800"
                 id="admin-mobile-menu-toggle"
               >
                 {mobileAdminMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
               </button>
             </div>
 
+            {/* Desktop Brand Header for elegant visual hierarchy */}
+            <div className="hidden md:flex flex-col p-5 border-b border-zinc-900/60 bg-zinc-950/50">
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.8)] animate-pulse" />
+                  <div className="absolute inset-0 rounded-full bg-indigo-500/30 scale-150 animate-ping" />
+                </div>
+                <span className="text-xs font-black uppercase tracking-widest text-zinc-100 font-sans">
+                  SISTEMA DE CONTROL
+                </span>
+              </div>
+              <p className="text-[10px] text-zinc-500 mt-1 font-semibold">
+                Consola de Gestión v2.8.5
+              </p>
+            </div>
+
             {/* Contenido colapsable en celular, auto expandido en escritorio */}
-            <div className={`${mobileAdminMenuOpen ? "flex" : "hidden"} md:flex flex-col flex-grow min-h-0`}>
-              <nav className="p-4 space-y-1">
-                <div className="text-[10px] uppercase tracking-widest text-zinc-505 font-extrabold mb-4 px-3 select-none">
-                  Operaciones Comerciales
+            <div className={`${mobileAdminMenuOpen ? "flex" : "hidden"} md:flex flex-col flex-grow min-h-0 overflow-y-auto custom-scrollbar`}>
+              <nav className="p-4 space-y-5">
+                
+                {/* Grupo 0 - Operaciones Principales */}
+                <div>
+                  <div className="text-[9.5px] uppercase tracking-widest text-zinc-500 font-extrabold mb-2.5 px-3 select-none flex items-center gap-1.5">
+                    <span className="w-1 h-1 rounded-full bg-zinc-600" />
+                    <span>Métricas Generales</span>
+                  </div>
+                  <div className="space-y-1">
+                    <button
+                      onClick={() => navigateAdminSection("dashboard")}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        adminSection === "dashboard"
+                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <TrendingUp className={`h-4 w-4 transition-transform duration-300 ${adminSection === "dashboard" ? "scale-110 text-indigo-400" : "text-zinc-400"}`} />
+                      <span>Dashboard Principal</span>
+                    </button>
+
+                    <button
+                      onClick={() => setShowAIAssistantSidebar(!showAIAssistantSidebar)}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        showAIAssistantSidebar
+                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Sparkles className={`h-4 w-4 transition-transform duration-300 ${showAIAssistantSidebar ? "scale-110 text-indigo-400 animate-pulse" : "text-zinc-400"}`} />
+                        <span>Asistente Copilot IA</span>
+                      </div>
+                      <span className={`w-2 h-2 rounded-full ${showAIAssistantSidebar ? "bg-indigo-500 animate-pulse shadow-[0_0_8px_#6366f1]" : "bg-zinc-700"}`} />
+                    </button>
+                  </div>
                 </div>
 
-                <button
-                  onClick={() => navigateAdminSection("dashboard")}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                    adminSection === "dashboard"
-                      ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500"
-                      : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
-                  }`}
-                >
-                  <TrendingUp className="h-4 w-4" />
-                  <span>Dashboard Principal</span>
-                </button>
-
-                <button
-                  onClick={() => setShowAIAssistantSidebar(!showAIAssistantSidebar)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                    showAIAssistantSidebar
-                      ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
-                      : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Sparkles className="h-4 w-4 text-indigo-400" />
-                    <span>Asistente Copilot IA</span>
+                {/* Category Group 1 - Ventas */}
+                <div>
+                  <div className="text-[9.5px] uppercase tracking-widest text-zinc-500 font-extrabold mb-2.5 px-3 select-none flex items-center gap-1.5">
+                    <span className="w-1 h-1 rounded-full bg-indigo-500/40" />
+                    <span>Operaciones de Venta</span>
                   </div>
-                  <span className={`w-1.5 h-1.5 rounded-full ${showAIAssistantSidebar ? "bg-indigo-450 animate-pulse" : "bg-zinc-600"}`} />
-                </button>
+                  <div className="space-y-1">
+                    <button
+                      onClick={() => navigateAdminSection("sales")}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        adminSection === "sales"
+                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <CartIcon className={`h-4 w-4 ${adminSection === "sales" ? "text-indigo-400" : "text-zinc-400"}`} />
+                        <span>Venta de Artículos</span>
+                      </div>
+                      {store.orders && store.orders.filter(o => o.status === "pedido_iniciado" || o.status === "pago_pendiente").length > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-indigo-600 text-white animate-pulse shadow-[0_0_10px_rgba(99,102,241,0.5)]">
+                          {store.orders.filter(o => o.status === "pedido_iniciado" || o.status === "pago_pendiente").length}
+                        </span>
+                      )}
+                    </button>
 
-                {/* Category Group 1 - Operaciones */}
-                <div className="space-y-1.5 pt-4">
-                  <div className="text-[10px] uppercase tracking-widest text-zinc-505 font-extrabold mb-2 px-3 select-none">
-                    Operaciones de Venta
+                    <button
+                      onClick={() => navigateAdminSection("shippings")}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        adminSection === "shippings"
+                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Truck className={`h-4 w-4 ${adminSection === "shippings" ? "text-indigo-400" : "text-zinc-400"}`} />
+                        <span>Planificación Envíos</span>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => navigateAdminSection("stock")}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        adminSection === "stock"
+                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Box className={`h-4 w-4 ${adminSection === "stock" ? "text-indigo-400" : "text-zinc-400"}`} />
+                        <span>Stock Almacén</span>
+                      </div>
+                      {totalStockAlerts > 0 && (
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold shrink-0 shadow-[0_0_8px_rgba(239,68,68,0.3)] ${
+                          outOfStockProducts.length > 0
+                            ? "bg-red-500 text-white"
+                            : "bg-amber-500 text-zinc-950"
+                        }`}>
+                          {totalStockAlerts}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => navigateAdminSection("bills")}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        adminSection === "bills"
+                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Receipt className={`h-4 w-4 ${adminSection === "bills" ? "text-indigo-400" : "text-zinc-400"}`} />
+                        <span>Ingresar Boletas</span>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => navigateAdminSection("finances")}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        adminSection === "finances"
+                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Scale className={`h-4 w-4 ${adminSection === "finances" ? "text-indigo-400" : "text-zinc-400"}`} />
+                        <span>Resumen General</span>
+                      </div>
+                    </button>
                   </div>
-
-                  <button
-                    onClick={() => navigateAdminSection("sales")}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                      adminSection === "sales"
-                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
-                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <CartIcon className="h-4 w-4" />
-                      <span>Control de Pedidos</span>
-                    </div>
-                    {store.orders && store.orders.filter(o => o.status === "pedido_iniciado" || o.status === "pago_pendiente").length > 0 && (
-                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-blue-550 text-white animate-pulse">
-                        {store.orders.filter(o => o.status === "pedido_iniciado" || o.status === "pago_pendiente").length}
-                      </span>
-                    )}
-                  </button>
-
-                  <button
-                    onClick={() => navigateAdminSection("shippings")}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                      adminSection === "shippings"
-                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
-                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Truck className="h-4 w-4 text-zinc-400" />
-                      <span>Planificación Envíos</span>
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={() => navigateAdminSection("stock")}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                      adminSection === "stock"
-                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
-                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Box className="h-4 w-4" />
-                      <span>Stock Almacén</span>
-                    </div>
-                    {totalStockAlerts > 0 && (
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold shrink-0 ${
-                        outOfStockProducts.length > 0
-                          ? "bg-red-500 text-white"
-                          : "bg-amber-500 text-zinc-950"
-                      }`}>
-                        {totalStockAlerts}
-                      </span>
-                    )}
-                  </button>
-
-                  <button
-                    onClick={() => navigateAdminSection("bills")}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                      adminSection === "bills"
-                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
-                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Receipt className="h-4 w-4 text-zinc-400" />
-                      <span>Ingresar Boletas</span>
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={() => navigateAdminSection("finances")}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                      adminSection === "finances"
-                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
-                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Scale className="h-4 w-4 text-zinc-400" />
-                      <span>Resumen General</span>
-                    </div>
-                  </button>
                 </div>
                 
                 {/* Category Group 2 - Catálogo */}
-                <div className="space-y-1.5 pt-4">
-                  <div className="text-[10px] uppercase tracking-widest text-zinc-505 font-extrabold mb-2 px-3 select-none">
-                    Catálogo
+                <div>
+                  <div className="text-[9.5px] uppercase tracking-widest text-zinc-500 font-extrabold mb-2.5 px-3 select-none flex items-center gap-1.5">
+                    <span className="w-1 h-1 rounded-full bg-emerald-500/40" />
+                    <span>Catálogo de Tienda</span>
                   </div>
+                  <div className="space-y-1">
+                    <button
+                      onClick={() => navigateAdminSection("products")}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        adminSection === "products"
+                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Grid className={`h-4 w-4 ${adminSection === "products" ? "text-indigo-400" : "text-zinc-400"}`} />
+                        <span>Mis Productos</span>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-indigo-450 bg-indigo-950 border border-indigo-900/50 px-2 py-0.5 rounded-lg">
+                        {store.products.length}
+                      </span>
+                    </button>
 
-                  <button
-                    onClick={() => navigateAdminSection("products")}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                      adminSection === "products"
-                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
-                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Grid className="h-4 w-4 text-zinc-400" />
-                      <span>Mis Productos</span>
-                    </div>
-                    <span className="text-[10px] font-mono text-zinc-300 bg-zinc-800 px-1.5 py-0.5 rounded">
-                      {store.products.length}
-                    </span>
-                  </button>
+                    <button
+                      onClick={() => navigateAdminSection("categories")}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        adminSection === "categories"
+                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <Sliders className={`h-4 w-4 ${adminSection === "categories" ? "text-indigo-400" : "text-zinc-400"}`} />
+                      <span>Categorías & Menús</span>
+                    </button>
 
-                  <button
-                    onClick={() => navigateAdminSection("categories")}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                      adminSection === "categories"
-                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
-                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <Sliders className="h-4 w-4 text-zinc-400" />
-                    <span>Categorías & Menús</span>
-                  </button>
-
-                  <button
-                    onClick={() => navigateAdminSection("promos")}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                      adminSection === "promos"
-                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
-                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <Tag className="h-4 w-4 text-zinc-400" />
-                    <span>Cupones & Descuentos</span>
-                  </button>
+                    <button
+                      onClick={() => navigateAdminSection("promos")}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        adminSection === "promos"
+                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <Tag className={`h-4 w-4 ${adminSection === "promos" ? "text-indigo-400" : "text-zinc-400"}`} />
+                      <span>Cupones & Descuentos</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Category Group 3 - Personalización */}
-                <div className="space-y-1.5 pt-4">
-                  <div className="text-[10px] uppercase tracking-widest text-zinc-505 font-extrabold mb-2 px-3 select-none">
-                    Visuales y Portada
+                <div>
+                  <div className="text-[9.5px] uppercase tracking-widest text-zinc-500 font-extrabold mb-2.5 px-3 select-none flex items-center gap-1.5">
+                    <span className="w-1 h-1 rounded-full bg-amber-500/40" />
+                    <span>Visuales y Portada</span>
                   </div>
+                  <div className="space-y-1">
+                    <button
+                      onClick={() => navigateAdminSection("general")}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        adminSection === "general"
+                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <Palette className={`h-4 w-4 ${adminSection === "general" ? "text-indigo-400" : "text-zinc-400"}`} />
+                      <span>Marca & Identidad</span>
+                    </button>
 
-                  <button
-                    onClick={() => navigateAdminSection("general")}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                      adminSection === "general"
-                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
-                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <Palette className="h-4 w-4 text-zinc-400" />
-                    <span>Marca & Identidad</span>
-                  </button>
+                    <button
+                      onClick={() => navigateAdminSection("banner")}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        adminSection === "banner"
+                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <Image className={`h-4 w-4 ${adminSection === "banner" ? "text-indigo-400" : "text-zinc-400"}`} />
+                      <span>Banners & Carrusel</span>
+                    </button>
 
-                  <button
-                    onClick={() => navigateAdminSection("banner")}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                      adminSection === "banner"
-                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
-                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <Image className="h-4 w-4 text-zinc-400" />
-                    <span>Banners & Carrusel</span>
-                  </button>
+                    <button
+                      onClick={() => navigateAdminSection("footer")}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        adminSection === "footer"
+                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <Layout className={`h-4 w-4 ${adminSection === "footer" ? "text-indigo-400" : "text-zinc-400"}`} />
+                      <span>Pie de Página (Footer)</span>
+                    </button>
 
-                  <button
-                    onClick={() => navigateAdminSection("footer")}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                      adminSection === "footer"
-                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
-                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <Layout className="h-4 w-4 text-zinc-400" />
-                    <span>Pie de Página (Footer)</span>
-                  </button>
-
-                  <button
-                    onClick={() => navigateAdminSection("cloudinary_explorer")}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                      adminSection === "cloudinary_explorer"
-                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
-                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <FolderOpen className="h-4 w-4 text-amber-500" />
-                    <span>Explorador Cloudinary</span>
-                  </button>
+                    <button
+                      onClick={() => navigateAdminSection("cloudinary_explorer")}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        adminSection === "cloudinary_explorer"
+                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <FolderOpen className={`h-4 w-4 ${adminSection === "cloudinary_explorer" ? "text-amber-400" : "text-zinc-450"}`} />
+                      <span>Explorador Cloudinary</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Category Group 4 - Configuración */}
-                <div className="space-y-1.5 pt-4">
-                  <div className="text-[10px] uppercase tracking-widest text-zinc-505 font-extrabold mb-2 px-3 select-none">
-                    Configuración de Tienda
+                <div>
+                  <div className="text-[9.5px] uppercase tracking-widest text-zinc-500 font-extrabold mb-2.5 px-3 select-none flex items-center gap-1.5">
+                    <span className="w-1 h-1 rounded-full bg-violet-500/40" />
+                    <span>Configuración Central</span>
                   </div>
+                  <div className="space-y-1">
+                    <button
+                      onClick={() => navigateAdminSection("checkout_config")}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        adminSection === "checkout_config"
+                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <ShoppingCart className={`h-4 w-4 ${adminSection === "checkout_config" ? "text-indigo-400" : "text-zinc-400"}`} />
+                      <span>Carrito & Envíos</span>
+                    </button>
 
-                  <button
-                    onClick={() => navigateAdminSection("checkout_config")}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                      adminSection === "checkout_config"
-                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
-                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <ShoppingCart className="h-4 w-4 text-zinc-400" />
-                    <span>Carrito & Envíos</span>
-                  </button>
+                    <button
+                      onClick={() => navigateAdminSection("payments")}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        adminSection === "payments"
+                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <CreditCard className={`h-4 w-4 ${adminSection === "payments" ? "text-indigo-400" : "text-zinc-400"}`} />
+                      <span>Métodos de Pago</span>
+                    </button>
 
-                  <button
-                    onClick={() => navigateAdminSection("payments")}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                      adminSection === "payments"
-                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
-                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <CreditCard className="h-4 w-4 text-zinc-400" />
-                    <span>Métodos de Pago</span>
-                  </button>
-
-                  <button
-                    onClick={() => navigateAdminSection("reviews")}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                      adminSection === "reviews"
-                        ? "bg-[#4285F4]/15 text-[#4285F4] dark:text-blue-400 border-l-2 border-[#4285F4] font-bold"
-                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <Globe className="h-4 w-4 text-[#4285F4]" />
-                    <span>Google Integraciones</span>
-                  </button>
+                    <button
+                      onClick={() => navigateAdminSection("reviews")}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        adminSection === "reviews"
+                          ? "bg-blue-600/15 text-blue-400 border border-blue-500/30 shadow-[0_4px_20px_rgba(59,130,246,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <Globe className={`h-4 w-4 ${adminSection === "reviews" ? "text-blue-400 animate-pulse" : "text-[#4285F4]"}`} />
+                      <span>Google Integraciones</span>
+                    </button>
+                  </div>
                 </div>
 
-                <div className="space-y-1.5 pt-4">
-                  <div className="text-[10px] uppercase tracking-widest text-zinc-505 font-extrabold mb-2 px-3 select-none">
-                    Soporte & Seguridad
+                {/* Category Group 5 - Soporte y Seguridad */}
+                <div>
+                  <div className="text-[9.5px] uppercase tracking-widest text-zinc-500 font-extrabold mb-2.5 px-3 select-none flex items-center gap-1.5">
+                    <span className="w-1 h-1 rounded-full bg-red-500/40" />
+                    <span>Soporte y Seguridad</span>
                   </div>
+                  <div className="space-y-1">
+                    <button
+                      onClick={() => navigateAdminSection("emails")}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        adminSection === "emails"
+                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <Mail className={`h-4 w-4 ${adminSection === "emails" ? "text-indigo-400" : "text-zinc-400"}`} />
+                      <span>Emails de Soporte</span>
+                    </button>
 
-                  <button
-                    onClick={() => navigateAdminSection("emails")}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                      adminSection === "emails"
-                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
-                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <Mail className="h-4 w-4 text-zinc-400" />
-                    <span>Emails de Soporte</span>
-                  </button>
-
-                  <button
-                    onClick={() => navigateAdminSection("security")}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                      adminSection === "security"
-                        ? "bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500 font-bold"
-                        : "hover:bg-zinc-850/60 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    <Lock className="h-4 w-4 text-zinc-400" />
-                    <span>Seguridad de Acceso</span>
-                  </button>
+                    <button
+                      onClick={() => navigateAdminSection("security")}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        adminSection === "security"
+                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <Lock className={`h-4 w-4 ${adminSection === "security" ? "text-indigo-400" : "text-zinc-400"}`} />
+                      <span>Seguridad de Acceso</span>
+                    </button>
+                  </div>
                 </div>
+
               </nav>
 
-              {/* Support Terminal Status Card */}
-              <div className="mt-auto p-4 border-t border-zinc-800 bg-zinc-950/20">
-                <div className="p-3 bg-zinc-900/40 rounded-xl border border-zinc-800 space-y-3">
+              {/* Support Terminal Status Card - Super high quality terminal status */}
+              <div className="mt-auto p-4 border-t border-zinc-900/60 bg-zinc-950/40 relative">
+                <div className="p-3.5 bg-zinc-900/40 backdrop-blur-sm rounded-xl border border-zinc-800/60 shadow-[0_4px_20px_rgba(0,0,0,0.2)] space-y-3.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[9px] font-extrabold uppercase tracking-widest text-zinc-400">Terminal Activo</span>
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span className="text-[8.5px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                      <span>Terminal Activo</span>
+                    </span>
+                    <span className="text-[9px] font-mono text-emerald-400 font-bold bg-emerald-950/50 border border-emerald-900/30 px-1.5 py-0.2 rounded-md">ONLINE</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[10px] text-zinc-300 font-extrabold uppercase font-sans">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-full bg-indigo-950/85 border border-indigo-850 flex items-center justify-center text-[10px] text-indigo-300 font-black font-sans shadow-[0_0_8px_rgba(99,102,241,0.25)]">
                       JU
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[10px] text-zinc-200 truncate font-semibold">Admin Principal</p>
-                      <p className="text-[9px] text-zinc-400 truncate">Sincronización online</p>
+                      <p className="text-[10.5px] text-zinc-150 truncate font-bold font-sans">Admin Principal</p>
+                      <p className="text-[9px] text-zinc-500 truncate font-semibold">Sincronización segura</p>
                     </div>
                   </div>
-                  <div className="border-t border-zinc-800/65 pt-2 shrink-0">
-                    <div className="flex items-center justify-between text-[10px] text-zinc-500 mb-1 font-mono">
+                  <div className="border-t border-zinc-800/50 pt-2.5 shrink-0">
+                    <div className="flex items-center justify-between text-[9.5px] text-zinc-500 mb-1 font-mono font-bold">
                       <span>Espacio de Datos</span>
-                      <span className="text-[9.5px] font-semibold text-indigo-400 uppercase">Activo</span>
+                      <span className="text-[9.5px] font-extrabold text-indigo-400 uppercase">100% ACTIVO</span>
                     </div>
-                    <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden">
-                      <div className="w-1/4 h-full bg-indigo-500"></div>
+                    <div className="w-full h-1 bg-zinc-800/80 rounded-full overflow-hidden">
+                      <div className="w-1/3 h-full bg-gradient-to-r from-indigo-500 to-indigo-400 rounded-full"></div>
                     </div>
-                    <p className="text-[9.5px] text-zinc-400 mt-1 font-mono">
-                      14.5 KB / 1.0 GB
+                    <p className="text-[9px] text-zinc-500 mt-1 font-mono">
+                      14.5 KB / 1.0 GB Utilizado
                     </p>
                   </div>
                 </div>
               </div>
-            </div> {/* Closing mobile wrapper */}
+            </div> {/* Closing wrapper */}
           </aside>
 
           {/* Main admin Workspace workspace */}
-          <main className="flex-1 flex flex-col p-6 gap-6 bg-zinc-950 text-zinc-100 overflow-y-auto">
+          <main className="flex-1 flex flex-col p-6 gap-6 bg-zinc-950 text-zinc-100 overflow-y-auto z-10">
             
             {/* Header control summary */}
             {adminSection !== "stock" && (
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-3 shrink-0">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-3 shrink-0 p-5 bg-zinc-900/20 backdrop-blur-md rounded-2xl border border-zinc-850/60 shadow-[0_8px_30px_rgba(0,0,0,0.12)]">
                 <div>
-                  <h2 className="text-2xl font-bold font-sans text-zinc-100">
-                    {adminSection === "dashboard" && "Dashboard General y Métricas"}
-                    {adminSection === "general" && "Diseño, Tipos y Colores de Marca"}
-                    {adminSection === "banner" && "Carrusel de Portada y Banners"}
-                    {adminSection === "footer" && "Configuración de Columnas del Footer"}
-                    {adminSection === "products" && "Catálogo General de Productos"}
-                    {adminSection === "categories" && "Gestión de Categorías y Subcategorías"}
-                    {adminSection === "promos" && "Herramientas de Cupones y Descuentos"}
-                    {adminSection === "security" && "Configuración y Seguridad de Acceso"}
-                    {adminSection === "stock" && "Nivel de Inventario y Alertas de Stock"}
-                    {adminSection === "payments" && "Administración de Métodos de Pago"}
-                    {adminSection === "reviews" && "Sincronización con Google e Integraciones"}
-                    {adminSection === "assistant" && "Asistente Corporativo de IA"}
+                  <h2 className="text-xl md:text-2xl font-black font-sans text-white tracking-tight flex items-center gap-2">
+                    <span className="w-1.5 h-6 bg-indigo-500 rounded-full shadow-[0_0_8px_#6366f1]" />
+                    <span>
+                      {adminSection === "dashboard" && "Dashboard General y Métricas"}
+                      {adminSection === "general" && "Diseño, Tipos y Colores de Marca"}
+                      {adminSection === "banner" && "Carrusel de Portada y Banners"}
+                      {adminSection === "footer" && "Configuración de Columnas del Footer"}
+                      {adminSection === "products" && "Catálogo General de Productos"}
+                      {adminSection === "categories" && "Gestión de Categorías y Subcategorías"}
+                      {adminSection === "promos" && "Herramientas de Cupones y Descuentos"}
+                      {adminSection === "security" && "Configuración y Seguridad de Acceso"}
+                      {adminSection === "stock" && "Nivel de Inventario y Alertas de Stock"}
+                      {adminSection === "payments" && "Administración de Métodos de Pago"}
+                      {adminSection === "reviews" && "Sincronización con Google e Integraciones"}
+                      {adminSection === "assistant" && "Asistente Corporativo de IA"}
+                    </span>
                   </h2>
-                  <p className="text-slate-600 dark:text-zinc-400 text-xs flex flex-col sm:flex-row sm:items-center gap-3 mt-1.5 leading-relaxed">
+                  <p className="text-zinc-400 text-xs mt-1.5 leading-relaxed max-w-2xl font-semibold">
                     <span>Modifica los contenidos de tu tienda en tiempo real. Los cambios se sincronizarán directamente con tu base de datos central sin tocar código.</span>
                   </p>
                 </div>
@@ -5753,6 +5833,16 @@ export default function App() {
                       ...prev,
                       orders: updatedOrders,
                       products: updatedProducts
+                    };
+                  });
+                }}
+                onOrderUpdated={(updatedOrder) => {
+                  showAdminToast("Venta editada y guardada con éxito.", "success");
+                  setStore(prev => {
+                    const updatedOrders = (prev.orders || []).map(o => o.id === updatedOrder.id ? updatedOrder : o);
+                    return {
+                      ...prev,
+                      orders: updatedOrders
                     };
                   });
                 }}
@@ -6972,7 +7062,7 @@ export default function App() {
                         <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm text-center">
                           <span className="text-[10px] font-extrabold text-zinc-500 dark:text-zinc-400 uppercase">Sin Stock</span>
                           <p className="text-xl font-bold font-mono text-red-500 mt-1">
-                            {store.products.filter(p => p.stock <= 0).length}
+                            {store.products.filter(p => getProductActualStock(p) <= 0).length}
                           </p>
                         </div>
                         <div className="bg-white dark:bg-zinc-950 p-4 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm text-center">
@@ -7077,7 +7167,12 @@ export default function App() {
                                     );
                                   })}
                                   <span>PVP: <strong>${p.price.toFixed(2)}</strong></span>
-                                  <span>Stock: <strong className={p.stock === 0 ? "text-red-400" : "text-emerald-400"}>{p.stock} u</strong></span>
+                                  {(() => {
+                                    const actStock = getProductActualStock(p);
+                                    return (
+                                      <span>Stock: <strong className={actStock === 0 ? "text-red-400" : "text-emerald-400"}>{actStock} u</strong></span>
+                                    );
+                                  })()}
                                 </div>
                               </div>
 

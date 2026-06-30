@@ -218,6 +218,8 @@ export interface OrderItem {
   unitPrice: number;
   quantity: number;
   totalPrice: number;
+  comisionML?: number;
+  costPrice?: number;
 }
 
 export type OrderStatus = 
@@ -240,6 +242,7 @@ export interface Order {
   couponCode?: string;
   status: OrderStatus;
   notes?: string;
+  bypassStockDeduction?: boolean;
   createdAt: string;
   updatedAt?: string;
   items?: OrderItem[];

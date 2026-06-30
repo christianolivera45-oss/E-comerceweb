@@ -253,147 +253,154 @@ export function DashboardGeneral({
     };
   }).sort((a, b) => b.count - a.count);
 
-  const maxProductsCategory = Math.max(...distribution.map(d => d.count), 1);
-
-  // Render main business indicators (5 seconds direct scan setup)
+  const maxProductsCategory = Math.max(...distribution.map(d => d.count), 1);  // Render main business indicators (5 seconds direct scan setup)
   return (
-    <div className="w-full space-y-6 animate-fade-in">
+    <div className="w-full space-y-6 animate-fade-in relative">
       
-      {/* 1. Welcoming Context Ribbon */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 text-zinc-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative overflow-hidden shadow-xl">
-        <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-5 pointer-events-none">
-          <TrendingUp className="h-full w-full stroke-[1px] rotate-12 scale-110" />
+      {/* 1. Welcoming Context Ribbon - Glassmorphic high-end greeting with glowing light bloom */}
+      <div className="bg-zinc-900/40 backdrop-blur-md border border-zinc-800/80 rounded-2xl p-6 text-zinc-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.25)] hover:border-zinc-700/60 transition-all duration-300">
+        <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-[0.03] pointer-events-none">
+          <TrendingUp className="h-full w-full stroke-[1px] rotate-12 scale-110 text-indigo-500" />
         </div>
+        {/* Subtle light accent under greeting */}
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-indigo-500/35 to-transparent" />
+        
         <div className="space-y-1.5 relative z-10">
-          <h3 className="text-xl font-bold tracking-tight text-white font-sans">Panel de Control y Métricas de Juem</h3>
-          <p className="text-xs text-zinc-400 leading-relaxed max-w-3xl">
+          <h3 className="text-xl font-black tracking-tight text-white font-sans flex items-center gap-2">
+            <span>Panel de Control y Métricas de Juem</span>
+          </h3>
+          <p className="text-xs text-zinc-400 leading-relaxed max-w-3xl font-semibold">
             Monitoreo integral de ventas, rendimiento de catálogo, cupones y niveles de stock. Toda la información comercial se encuentra optimizada para facilitar la lectura del administrador y agilizar la toma de decisiones.
           </p>
         </div>
         <div className="flex gap-2 shrink-0 relative z-10">
-          <span className="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg text-[11px] font-bold flex items-center gap-1.5">
-            <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-            <span>Datos en Tiempo Real</span>
+          <span className="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl text-[11px] font-black flex items-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
+            <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_#10b981]"></span>
+            <span>DATOS EN TIEMPO REAL</span>
           </span>
         </div>
       </div>
-
-      {/* 2. Top Tier Sales & Profitability Performance Cards (5-Sec KPI Matrix) */}
+ 
+      {/* 2. Top Tier Sales & Profitability Performance Cards (5-Sec KPI Matrix) - Premium cards with glow and hover animation */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         
         {/* KPI Card 1: Month Sales / Ventas del Mes */}
-        <div className="bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-4">
+        <div className="bg-zinc-900/50 backdrop-blur-md p-5 rounded-2xl border border-zinc-850/85 hover:border-indigo-500/40 shadow-[0_8px_30px_rgba(0,0,0,0.15)] hover:shadow-[0_8px_30px_rgba(99,102,241,0.06)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between space-y-4 group relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-indigo-500/20 group-hover:bg-indigo-500/50 transition-colors duration-300" />
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[11px] uppercase font-bold text-slate-500 dark:text-zinc-400 tracking-wider">Ventas de Últimos 30 Días</span>
-            <div className="h-9 w-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/35 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+            <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Ventas de Últimos 30 Días</span>
+            <div className="h-9 w-9 rounded-xl bg-indigo-950/40 text-indigo-400 flex items-center justify-center border border-indigo-900/30 group-hover:scale-110 transition-transform duration-300">
               <DollarSign className="h-5 w-5" />
             </div>
           </div>
           <div>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+              <span className="text-2xl font-black tracking-tight text-white font-sans">
                 ${salesHistory.totalSales.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
-            <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-1.5 flex items-center gap-0.5">
+            <p className="text-[10px] text-emerald-400 font-bold mt-1.5 flex items-center gap-1 font-sans">
               <ArrowUpRight className="h-3.5 w-3.5 inline shrink-0" />
               <span>+14.2% vs período anterior</span>
             </p>
           </div>
         </div>
-
+ 
         {/* KPI Card 2: Orders Count / Cantidad de Pedidos */}
-        <div className="bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-4">
+        <div className="bg-zinc-900/50 backdrop-blur-md p-5 rounded-2xl border border-zinc-850/85 hover:border-indigo-500/40 shadow-[0_8px_30px_rgba(0,0,0,0.15)] hover:shadow-[0_8px_30px_rgba(99,102,241,0.06)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between space-y-4 group relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-indigo-500/20 group-hover:bg-indigo-500/50 transition-colors duration-300" />
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[11px] uppercase font-bold text-slate-500 dark:text-zinc-400 tracking-wider">Total de Pedidos</span>
-            <div className="h-9 w-9 rounded-xl bg-blue-50 dark:bg-blue-950/35 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+            <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Total de Pedidos</span>
+            <div className="h-9 w-9 rounded-xl bg-indigo-950/40 text-indigo-400 flex items-center justify-center border border-indigo-900/30 group-hover:scale-110 transition-transform duration-300">
               <ShoppingBag className="h-5 w-5" />
             </div>
           </div>
           <div>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+              <span className="text-2xl font-black tracking-tight text-white font-sans">
                 {salesHistory.totalOrders}
               </span>
             </div>
-            <p className="text-[10px] text-slate-600 dark:text-zinc-300 font-semibold mt-1.5">
+            <p className="text-[10px] text-zinc-500 font-bold mt-1.5 font-sans">
               Sincronizado con consultas de WhatsApp
             </p>
           </div>
         </div>
-
+ 
         {/* KPI Card 3: Average Ticket / Ticket Promedio */}
-        <div className="bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-4">
+        <div className="bg-zinc-900/50 backdrop-blur-md p-5 rounded-2xl border border-zinc-850/85 hover:border-indigo-500/40 shadow-[0_8px_30px_rgba(0,0,0,0.15)] hover:shadow-[0_8px_30px_rgba(99,102,241,0.06)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between space-y-4 group relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-indigo-500/20 group-hover:bg-indigo-500/50 transition-colors duration-300" />
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[11px] uppercase font-bold text-slate-500 dark:text-zinc-400 tracking-wider">Ticket Promedio</span>
-            <div className="h-9 w-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/35 text-indigo-600 dark:text-indigo-455 flex items-center justify-center">
+            <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Ticket Promedio</span>
+            <div className="h-9 w-9 rounded-xl bg-indigo-950/40 text-indigo-400 flex items-center justify-center border border-indigo-900/30 group-hover:scale-110 transition-transform duration-300">
               <Tag className="h-5 w-5" />
             </div>
           </div>
           <div>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+              <span className="text-2xl font-black tracking-tight text-white font-sans">
                 ${salesHistory.avgTicket.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
-            <p className="text-[10px] text-slate-600 dark:text-zinc-300 font-semibold mt-1.5">
+            <p className="text-[10px] text-zinc-500 font-bold mt-1.5 font-sans">
               Valor de compra estimado por pedido
             </p>
           </div>
         </div>
-
+ 
         {/* KPI Card 4: Estimated Profit / Ganancia Estimada */}
-        <div className="bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-4 font-sans">
+        <div className="bg-zinc-900/50 backdrop-blur-md p-5 rounded-2xl border border-zinc-850/85 hover:border-indigo-500/40 shadow-[0_8px_30px_rgba(0,0,0,0.15)] hover:shadow-[0_8px_30px_rgba(99,102,241,0.06)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between space-y-4 group relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-emerald-500/20 group-hover:bg-emerald-500/50 transition-colors duration-300" />
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-[11px] uppercase font-bold text-slate-500 dark:text-zinc-400 tracking-wider">Ganancia Estimada</span>
-            <div className="h-9 w-9 rounded-xl bg-violet-50 dark:bg-violet-950/35 text-violet-600 dark:text-violet-400 flex items-center justify-center">
+            <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Ganancia Estimada</span>
+            <div className="h-9 w-9 rounded-xl bg-emerald-950/40 text-emerald-400 flex items-center justify-center border border-emerald-900/30 group-hover:scale-110 transition-transform duration-300">
               <Percent className="h-5 w-5" />
             </div>
           </div>
           <div>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-2xl font-extrabold tracking-tight text-violet-600 dark:text-violet-400">
+              <span className="text-2xl font-black tracking-tight text-emerald-400 font-sans shadow-[0_0_15px_rgba(16,185,129,0.05)]">
                 ${salesHistory.totalProfit.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
-            <p className="text-[10px] text-slate-600 dark:text-zinc-300 font-semibold mt-1.5">
+            <p className="text-[10px] text-zinc-500 font-bold mt-1.5 font-sans">
               Retorno promedio estimado en {(salesHistory.totalProfit / (salesHistory.totalSales || 1) * 100).toFixed(0)}%
             </p>
           </div>
         </div>
-
+ 
       </div>
-
+ 
       {/* 3. Operational Analytics Core Grid (Interactive Charts & Key Sales Indicators) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-        {/* Sales Evolution Chart Panel */}
-        <div className="lg:col-span-8 bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-850 shadow-sm flex flex-col space-y-5">
+ 
+        {/* Sales Evolution Chart Panel - Dark mode aesthetic */}
+        <div className="lg:col-span-8 bg-zinc-900/40 backdrop-blur-md p-5 rounded-2xl border border-zinc-850/85 shadow-[0_8px_30px_rgba(0,0,0,0.2)] flex flex-col space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <div className="space-y-0.5">
-              <h4 className="font-bold text-xs uppercase text-slate-900 dark:text-zinc-200 tracking-wide flex items-center gap-2">
-                <BarChart3 className="h-4.5 w-4.5 text-emerald-500" />
+              <h4 className="font-bold text-xs uppercase text-zinc-200 tracking-wide flex items-center gap-2">
+                <BarChart3 className="h-4.5 w-4.5 text-indigo-400" />
                 <span>Evolución de Ventas (Últimos 30 días)</span>
               </h4>
-              <p className="text-[10px] text-slate-600 dark:text-zinc-400 font-medium">Mueve el cursor por encima de las barras para ver información del día.</p>
+              <p className="text-[10px] text-zinc-500 font-bold">Mueve el cursor por encima de las barras para ver información detallada del día.</p>
             </div>
-
+ 
             {/* Live Interactive Detail bubble */}
             {currentChartSelected && (
-              <div className="bg-slate-50 dark:bg-zinc-900 border border-slate-100 dark:border-zinc-855 px-3 py-1.5 rounded-xl text-left sm:text-right font-sans shrink-0">
-                <p className="text-[10px] text-slate-600 dark:text-zinc-400 font-bold">{formatSpanishDate(currentChartSelected.date)}</p>
-                <div className="flex items-center gap-2.5 mt-0.5">
-                  <span className="text-xs font-extrabold text-slate-900 dark:text-white">${Math.round(currentChartSelected.sales).toLocaleString("es-AR")}</span>
-                  <span className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold px-1.5 py-0.2 rounded-md">{currentChartSelected.ordersCount} {currentChartSelected.ordersCount === 1 ? "pedido" : "pedidos"}</span>
+              <div className="bg-zinc-950/65 backdrop-blur-sm border border-zinc-850 px-3.5 py-1.5 rounded-xl text-left sm:text-right font-sans shrink-0 shadow-inner">
+                <p className="text-[10px] text-zinc-400 font-bold">{formatSpanishDate(currentChartSelected.date)}</p>
+                <div className="flex items-center gap-2.5 mt-0.5 justify-end">
+                  <span className="text-xs font-black text-white">${Math.round(currentChartSelected.sales).toLocaleString("es-AR")}</span>
+                  <span className="text-[9px] bg-emerald-500/15 text-emerald-400 font-extrabold px-1.5 py-0.2 rounded-md">{currentChartSelected.ordersCount} {currentChartSelected.ordersCount === 1 ? "pedido" : "pedidos"}</span>
                 </div>
               </div>
             )}
           </div>
-
+ 
           {/* Elegant Native responsive SVG Chart - Zero delays, full precision */}
           <div className="w-full flex-1 min-h-[220px] flex items-end">
             {salesHistory.dailySales.length === 0 ? (
-              <div className="w-full text-center py-12 text-zinc-400 text-xs font-semibold">
+              <div className="w-full text-center py-12 text-zinc-500 text-xs font-bold">
                 Sube productos al catálogo para simular la evolución comercial e historial.
               </div>
             ) : (
@@ -404,19 +411,19 @@ export function DashboardGeneral({
                   
                   {/* Grid background markers */}
                   <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
-                    <div className="border-t border-dashed border-slate-100 dark:border-zinc-850/50 w-full h-0"></div>
-                    <div className="border-t border-dashed border-slate-100 dark:border-zinc-850/50 w-full h-0"></div>
-                    <div className="border-t border-dashed border-slate-100 dark:border-zinc-850/50 w-full h-0"></div>
-                    <div className="border-b border-solid border-slate-200 dark:border-zinc-800 w-full h-0"></div>
+                    <div className="border-t border-dashed border-zinc-800/40 w-full h-0"></div>
+                    <div className="border-t border-dashed border-zinc-800/40 w-full h-0"></div>
+                    <div className="border-t border-dashed border-zinc-800/40 w-full h-0"></div>
+                    <div className="border-b border-solid border-zinc-800/80 w-full h-0"></div>
                   </div>
-
+ 
                   {/* Render 30 vertical interactive bars */}
                   <div className="relative z-10 w-full h-full flex items-end justify-between gap-[2px] sm:gap-1.5">
                     {salesHistory.dailySales.map((day, idx) => {
                       const maxVal = Math.max(...salesHistory.dailySales.map(x => x.sales), 1);
                       const barHeight = Math.max((day.sales / maxVal) * 100, 4); // minimum 4% visual height for aesthetic value
                       const isSelected = currentChartSelected?.date === day.date;
-
+ 
                       return (
                         <div 
                           key={day.date}
@@ -427,69 +434,69 @@ export function DashboardGeneral({
                           {/* SVG Bar body */}
                           <div 
                             style={{ height: `${barHeight}%` }}
-                            className={`w-full rounded-t-sm transition-all duration-300 ${
+                            className={`w-full rounded-t-[3px] transition-all duration-300 ${
                               isSelected 
-                                ? "bg-gradient-to-t from-emerald-600 to-emerald-400 shadow-lg scale-102" 
-                                : "bg-gradient-to-t from-slate-200 to-slate-350 dark:from-zinc-850 dark:to-zinc-700 hover:from-emerald-500/80 hover:to-emerald-400/80"
+                                ? "bg-gradient-to-t from-indigo-600 to-indigo-400 shadow-[0_0_12px_rgba(99,102,241,0.45)] scale-105" 
+                                : "bg-gradient-to-t from-zinc-800 to-zinc-700 hover:from-indigo-500 hover:to-indigo-400"
                             }`}
                           />
                         </div>
                       );
                     })}
                   </div>
-
+ 
                 </div>
-
+ 
                 {/* Day-by-day label helper at the bottom */}
-                <div className="flex justify-between items-center text-[9px] font-mono text-zinc-400 dark:text-zinc-500 pt-2 border-t border-slate-100 dark:border-zinc-900">
+                <div className="flex justify-between items-center text-[9px] font-mono text-zinc-500 pt-3.5 border-t border-zinc-900">
                   <span>Hace 30 días</span>
-                  <span className="font-semibold text-emerald-500">Historial interactivo</span>
+                  <span className="font-extrabold text-indigo-400 tracking-wider">HISTORIAL DE VENTAS INTERACTIVO</span>
                   <span>Hoy ({formatSpanishDate(today.toISOString().split("T")[0])})</span>
                 </div>
-
+ 
               </div>
             )}
           </div>
         </div>
-
+ 
         {/* Top Products Rankings / Productos más Vendidos */}
-        <div className="lg:col-span-4 bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-850 shadow-sm flex flex-col justify-between space-y-4">
+        <div className="lg:col-span-4 bg-zinc-900/40 backdrop-blur-md p-5 rounded-2xl border border-zinc-850/85 shadow-[0_8px_30px_rgba(0,0,0,0.2)] flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center justify-between">
-              <h4 className="font-bold text-xs uppercase text-slate-900 dark:text-zinc-200 tracking-wide flex items-center gap-2">
-                <TrendingUp className="h-4.5 w-4.5 text-indigo-500" />
+              <h4 className="font-bold text-xs uppercase text-zinc-200 tracking-wide flex items-center gap-2">
+                <TrendingUp className="h-4.5 w-4.5 text-indigo-400" />
                 <span>Productos Más Vendidos</span>
               </h4>
-              <span className="text-[8px] font-mono font-extrabold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded uppercase">Demanda</span>
+              <span className="text-[8px] font-mono font-black bg-indigo-950 text-indigo-400 border border-indigo-900/30 px-2 py-0.5 rounded uppercase tracking-wider">Demanda</span>
             </div>
             
             <div className="space-y-4 pt-4">
               {salesHistory.productsSales.length === 0 ? (
-                <div className="text-center py-10 text-zinc-400 text-xs font-semibold">
+                <div className="text-center py-10 text-zinc-500 text-xs font-semibold">
                   Sube productos al catálogo para rankear artículos en base a ventas estimadas.
                 </div>
               ) : (
                 salesHistory.productsSales.map((ranking, idx) => {
                   const maxQty = Math.max(...salesHistory.productsSales.map(r => r.quantity), 1);
                   const widthPct = Math.min((ranking.quantity / maxQty) * 100, 100);
-
+ 
                   return (
-                    <div key={ranking.product.id} className="space-y-1 font-sans">
+                    <div key={ranking.product.id} className="space-y-1.5 font-sans group">
                       <div className="flex items-center justify-between text-xs gap-3">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-mono text-[9px] font-black text-slate-400">#0{idx + 1}</span>
-                          <span className="font-bold text-slate-800 dark:text-zinc-250 truncate block">{ranking.product.name}</span>
+                          <span className="font-mono text-[9px] font-black text-zinc-500">0{idx + 1}</span>
+                          <span className="font-bold text-zinc-300 truncate block group-hover:text-indigo-400 transition-colors">{ranking.product.name}</span>
                         </div>
-                        <span className="font-mono font-extrabold text-slate-950 dark:text-white shrink-0">
-                          {ranking.quantity} u <span className="text-[9px] text-zinc-400 font-normal">(${Math.round(ranking.revenue)})</span>
+                        <span className="font-mono font-bold text-white shrink-0">
+                          {ranking.quantity} u <span className="text-[9px] text-zinc-500 font-medium">(${Math.round(ranking.revenue)})</span>
                         </span>
                       </div>
                       
                       {/* Indicator percentage line */}
-                      <div className="w-full h-1.5 bg-slate-100 dark:bg-zinc-900 rounded-full overflow-hidden">
+                      <div className="w-full h-1.5 bg-zinc-950 rounded-full overflow-hidden border border-zinc-900">
                         <div 
                           style={{ width: `${widthPct}%` }}
-                          className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full"
+                          className="h-full bg-gradient-to-r from-indigo-500 to-indigo-455 rounded-full shadow-[0_0_8px_rgba(99,102,241,0.5)] transition-all duration-500"
                         />
                       </div>
                     </div>
@@ -498,50 +505,50 @@ export function DashboardGeneral({
               )}
             </div>
           </div>
-
-          <div className="bg-slate-50 dark:bg-zinc-900/50 border border-slate-100 dark:border-zinc-800 p-2.5 rounded-xl flex items-center gap-2 text-[10px] text-slate-600 dark:text-zinc-300 font-semibold">
-            <MessageSquare className="w-4 h-4 text-emerald-500 shrink-0" />
+ 
+          <div className="bg-zinc-950/45 backdrop-blur-sm border border-zinc-850/60 p-3 rounded-xl flex items-center gap-2.5 text-[10px] text-zinc-350 font-bold shadow-inner">
+            <MessageSquare className="w-4.5 h-4.5 text-emerald-500 shrink-0 animate-bounce" />
             <span>Los clientes de WhatsApp compran principalmente el talle estándar de estos modelos.</span>
           </div>
         </div>
-
+ 
       </div>
-
+ 
       {/* 4. Active Low-Stock Alerter Box (Fulfilling alerts visibility requirements) */}
-      <div className="bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-850 shadow-sm space-y-4">
+      <div className="bg-zinc-900/40 backdrop-blur-md p-5 rounded-2xl border border-zinc-850/85 shadow-[0_8px_30px_rgba(0,0,0,0.2)] space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="space-y-0.5">
-            <h4 className="font-bold text-xs uppercase text-slate-900 dark:text-zinc-200 tracking-wide flex items-center gap-2">
-              <AlertCircle className="h-4.5 w-4.5 text-amber-500 animate-pulse" />
+            <h4 className="font-bold text-xs uppercase text-zinc-200 tracking-wide flex items-center gap-2">
+              <AlertCircle className="h-4.5 w-4.5 text-amber-500 animate-pulse shadow-[0_0_10px_rgba(245,158,11,0.25)]" />
               <span>Alertas de Reposición (Stock Bajo)</span>
             </h4>
-            <p className="text-[10px] text-slate-600 dark:text-zinc-400 font-semibold">
+            <p className="text-[10px] text-zinc-500 font-bold">
               Productos activos que superan o igualan el stock de seguridad límite establecido ({lowStockThresholdSetting} unidades).
             </p>
           </div>
-
+ 
           {totalStockAlerts > 0 && (
             <button
               onClick={() => {
                 if (setStockFilterTab) setStockFilterTab("alerts");
                 navigateAdminSection("stock");
               }}
-              className="px-3 py-1 bg-amber-500/10 hover:bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-black uppercase rounded-lg tracking-wider transition cursor-pointer border border-amber-500/20"
+              className="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/15 text-amber-400 text-[10px] font-black uppercase rounded-xl tracking-wider transition-all border border-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.1)] hover:scale-[1.02] cursor-pointer"
             >
               Ver Alertas Completas ({totalStockAlerts})
             </button>
           )}
         </div>
-
+ 
         {totalStockAlerts === 0 ? (
-          <div className="py-6 text-center text-xs text-zinc-400 font-bold border border-dashed border-slate-200 dark:border-zinc-900 rounded-xl">
+          <div className="py-6 text-center text-xs text-zinc-500 font-black border border-dashed border-zinc-800 rounded-2xl">
             ✓ ¡Excelente! No tienes ningún producto en niveles críticos de stock en este momento.
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[...outOfStockProducts, ...lowStockProducts].slice(0, 3).map((prod) => {
               const isOut = prod.stock <= 0;
-
+ 
               return (
                 <div 
                   key={prod.id}
@@ -550,29 +557,29 @@ export function DashboardGeneral({
                     if (setIsNewProductMode) setIsNewProductMode(false);
                     navigateAdminSection("products");
                   }} 
-                  className="p-3 bg-slate-50 hover:bg-slate-100 dark:bg-zinc-900 dark:hover:bg-zinc-850 border border-slate-100 dark:border-zinc-850 rounded-xl flex items-center justify-between cursor-pointer group transition duration-200"
+                  className="p-3 bg-zinc-950/40 hover:bg-zinc-950/70 border border-zinc-850/80 hover:border-indigo-500/30 rounded-xl flex items-center justify-between cursor-pointer group transition-all duration-300 shadow-sm"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <img 
                       src={prod.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=150&q=80"}
                       alt={prod.name}
-                      className="w-10 h-10 rounded-lg object-cover bg-zinc-950 shrink-0 border border-slate-200 dark:border-zinc-800"
+                      className="w-10 h-10 rounded-lg object-cover bg-zinc-950 shrink-0 border border-zinc-800 transition-transform duration-300 group-hover:scale-105"
                     />
                     <div className="min-w-0">
-                      <h5 className="font-bold text-xs text-slate-800 dark:text-zinc-200 truncate leading-tight group-hover:text-indigo-500 transition">{prod.name}</h5>
-                      <span className="text-[9px] uppercase tracking-wider text-slate-500 dark:text-zinc-400 mt-1 block font-extrabold">{prod.category}</span>
+                      <h5 className="font-bold text-xs text-zinc-200 truncate leading-tight group-hover:text-indigo-400 transition-colors">{prod.name}</h5>
+                      <span className="text-[9px] uppercase tracking-wider text-zinc-500 mt-1 block font-black">{prod.category}</span>
                     </div>
                   </div>
-
+ 
                   <div className="text-right shrink-0">
                     <span className={`px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded ${
                       isOut 
-                        ? "bg-red-100 dark:bg-red-950/20 text-red-650 dark:text-red-400" 
-                        : "bg-amber-100 dark:bg-amber-950/20 text-amber-650 dark:text-amber-400"
+                        ? "bg-red-950/40 text-red-400 border border-red-900/30" 
+                        : "bg-amber-950/40 text-amber-400 border border-amber-900/30"
                     }`}>
                       {isOut ? "Agotado" : `${prod.stock} Restantes`}
                     </span>
-                    <span className="text-[9px] text-indigo-500 hover:underline font-bold block mt-1.5">Ajustar stock</span>
+                    <span className="text-[9.5px] text-indigo-400 font-extrabold block mt-1.5 group-hover:underline">Ajustar</span>
                   </div>
                 </div>
               );
@@ -580,117 +587,117 @@ export function DashboardGeneral({
           </div>
         )}
       </div>
-
+ 
       {/* 5. Secondary Metrics Panel (Inventory Value, Category Maps & Promo Campaigns) */}
-      <div className="pt-4 border-t border-slate-200 dark:border-zinc-850">
+      <div className="pt-4 border-t border-zinc-900">
         <div className="mb-4">
-          <h4 className="font-extrabold text-[10px] uppercase text-slate-500 dark:text-zinc-400 tracking-wider flex items-center gap-1.5">
-            <Database className="h-4 w-4 text-zinc-400" />
+          <h4 className="font-extrabold text-[10px] uppercase text-zinc-500 tracking-wider flex items-center gap-1.5">
+            <Database className="h-4 w-4 text-zinc-500" />
             <span>Métricas e Inventario Secundario de Soporte</span>
           </h4>
         </div>
-
+ 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
           {/* Valor del Inventario and Cupones en tarjetas secundarias */}
           <div className="lg:col-span-4 space-y-4">
             
             {/* KPI Card Section: Inventory Value */}
-            <div className="bg-slate-50/50 dark:bg-zinc-900/35 p-5 rounded-2xl border border-slate-200/60 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-4">
+            <div className="bg-zinc-900/40 backdrop-blur-md p-5 rounded-2xl border border-zinc-850/85 shadow-sm flex flex-col justify-between space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-zinc-400 tracking-wider">Valor total del Inventario</span>
+                <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Valor total del Inventario</span>
                 <Box className="h-4 w-4 text-zinc-500" />
               </div>
               <div>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-xl font-bold tracking-tight text-slate-800 dark:text-zinc-200">
+                  <span className="text-xl font-bold tracking-tight text-white font-sans">
                     ${totalInventoryValue.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-600 dark:text-zinc-400 font-semibold mt-1">
+                <p className="text-[10px] text-zinc-500 font-bold mt-1.5">
                   {activeProducts.reduce((sum, p) => sum + p.stock, 0)} unidades físicas valorizadas en costo-compras.
                 </p>
               </div>
             </div>
-
+ 
             {/* KPI Card: Coupons Admin Section */}
             <div 
               onClick={() => navigateAdminSection("promos")} 
-              className="bg-slate-50/50 dark:bg-zinc-900/35 p-5 rounded-2xl border border-slate-200/60 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-4 cursor-pointer hover:border-indigo-500/40 transition group"
+              className="bg-zinc-900/40 backdrop-blur-md p-5 rounded-2xl border border-zinc-850/85 hover:border-indigo-500/30 shadow-sm flex flex-col justify-between space-y-4 cursor-pointer hover:shadow-[0_8px_30px_rgba(99,102,241,0.06)] transition-all duration-300 group"
             >
               <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-zinc-400 tracking-wider">Cupones de Descuento Activos</span>
-                <Tag className="h-4 w-4 text-zinc-500 group-hover:text-indigo-500 transition" />
+                <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Cupones de Descuento Activos</span>
+                <Tag className="h-4 w-4 text-zinc-500 group-hover:text-indigo-400 transition-colors" />
               </div>
               <div>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-xl font-bold tracking-tight text-slate-800 dark:text-zinc-200">
+                  <span className="text-xl font-bold tracking-tight text-white font-sans">
                     {activeCoupons.length}
                   </span>
-                  <span className="text-[10px] font-mono text-slate-600 dark:text-zinc-400 font-semibold">campañas</span>
+                  <span className="text-[10px] font-mono text-zinc-500 font-bold">campañas</span>
                 </div>
-                <p className="text-[9px] text-indigo-500 font-bold mt-1 group-hover:underline flex items-center gap-0.5">
+                <p className="text-[9.5px] text-indigo-400 font-extrabold mt-2 group-hover:underline flex items-center gap-0.5">
                   <span>Administrar Cupones</span>
-                  <ChevronRight className="h-2.5 w-2.5" />
+                  <ChevronRight className="h-3.5 w-3.5" />
                 </p>
               </div>
             </div>
-
+ 
             {/* KPI Card: Payments Admin Section */}
             <div 
               onClick={() => navigateAdminSection("payments")} 
-              className="bg-slate-50/50 dark:bg-zinc-900/35 p-5 rounded-2xl border border-slate-200/60 dark:border-zinc-800 shadow-sm flex flex-col justify-between space-y-4 cursor-pointer hover:border-indigo-500/40 transition group"
+              className="bg-zinc-900/40 backdrop-blur-md p-5 rounded-2xl border border-zinc-850/85 hover:border-indigo-500/30 shadow-sm flex flex-col justify-between space-y-4 cursor-pointer hover:shadow-[0_8px_30px_rgba(99,102,241,0.06)] transition-all duration-300 group"
             >
               <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-zinc-400 tracking-wider">Métodos de Pago</span>
-                <CreditCard className="h-4 w-4 text-zinc-500 group-hover:text-indigo-500 transition" />
+                <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Métodos de Pago</span>
+                <CreditCard className="h-4 w-4 text-zinc-500 group-hover:text-indigo-400 transition-colors" />
               </div>
               <div>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-xl font-bold tracking-tight text-slate-800 dark:text-zinc-200">
+                  <span className="text-xl font-bold tracking-tight text-white font-sans">
                     {[
                       store.settings?.mercadopagoActive !== false,
                       store.settings?.transferActive !== false,
                       store.settings?.cashActive !== false
                      ].filter(Boolean).length}
                   </span>
-                  <span className="text-[10px] font-mono text-slate-600 dark:text-zinc-400 font-semibold">activos</span>
+                  <span className="text-[10px] font-mono text-zinc-500 font-bold">activos</span>
                 </div>
-                <p className="text-[9px] text-indigo-500 font-bold mt-1 group-hover:underline flex items-center gap-0.5">
+                <p className="text-[9.5px] text-indigo-400 font-extrabold mt-2 group-hover:underline flex items-center gap-0.5">
                   <span>Administrar Pagos</span>
-                  <ChevronRight className="h-2.5 w-2.5" />
+                  <ChevronRight className="h-3.5 w-3.5" />
                 </p>
               </div>
             </div>
-
+ 
           </div>
-
+ 
           {/* Table representing category volume shares */}
-          <div className="lg:col-span-8 bg-white dark:bg-zinc-950 p-5 rounded-2xl border border-slate-200 dark:border-zinc-850 shadow-sm flex flex-col space-y-4 justify-between">
+          <div className="lg:col-span-8 bg-zinc-900/40 backdrop-blur-md p-5 rounded-2xl border border-zinc-850/85 shadow-sm flex flex-col space-y-4 justify-between">
             <div>
-              <h5 className="font-bold text-xs uppercase text-slate-900 dark:text-zinc-200 tracking-wide flex items-center gap-2">
-                <Folder className="h-4.5 w-4.5 text-zinc-500" />
+              <h5 className="font-bold text-xs uppercase text-zinc-200 tracking-wide flex items-center gap-2">
+                <Folder className="h-4.5 w-4.5 text-zinc-400" />
                 <span>Distribución del Stock por Categorías</span>
               </h5>
-              <p className="text-[10px] text-slate-600 dark:text-zinc-400 font-semibold">Cantidad y valor monetario del inventario clasificado.</p>
+              <p className="text-[10px] text-zinc-500 font-bold">Cantidad y valor monetario del inventario clasificado.</p>
             </div>
-
-            <div className="space-y-3 pt-2 max-h-[175px] overflow-y-auto pr-1">
+ 
+            <div className="space-y-3.5 pt-2 max-h-[175px] overflow-y-auto pr-1 custom-scrollbar">
               {distribution.map((cat) => {
                 const barPercent = Math.min((cat.count / maxProductsCategory) * 100, 100);
-
+ 
                 return (
-                  <div key={cat.id} className="space-y-1">
-                    <div className="flex justify-between items-center text-[10px]">
-                      <span className="font-bold text-slate-700 dark:text-zinc-350">{cat.nombre}</span>
-                      <span className="font-mono text-zinc-500 font-bold">
-                        {cat.count} uds. <span className="text-zinc-400 font-normal font-sans">(${cat.value.toLocaleString("es-AR")})</span>
+                  <div key={cat.id} className="space-y-1.5 group">
+                    <div className="flex justify-between items-center text-[10.5px]">
+                      <span className="font-bold text-zinc-350 group-hover:text-zinc-200 transition-colors">{cat.nombre}</span>
+                      <span className="font-mono text-zinc-450 font-bold">
+                        {cat.count} uds. <span className="text-zinc-500 font-normal font-sans">(${cat.value.toLocaleString("es-AR")})</span>
                       </span>
                     </div>
-                    <div className="w-full h-1.5 bg-slate-100 dark:bg-zinc-900 rounded-full overflow-hidden">
+                    <div className="w-full h-1.5 bg-zinc-950 rounded-full overflow-hidden border border-zinc-900/50">
                       <div 
                         style={{ width: `${barPercent}%` }}
-                        className="h-full bg-slate-400 dark:bg-zinc-700 rounded-full"
+                        className="h-full bg-indigo-500/80 rounded-full group-hover:bg-indigo-500 transition-all duration-300 shadow-[0_0_6px_rgba(99,102,241,0.3)]"
                       />
                     </div>
                   </div>
@@ -698,10 +705,10 @@ export function DashboardGeneral({
               })}
             </div>
           </div>
-
+ 
         </div>
       </div>
-
+ 
     </div>
   );
 }

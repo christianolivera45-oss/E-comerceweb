@@ -40,7 +40,7 @@ export const DashboardShippings: React.FC<DashboardShippingsProps> = ({
     // Default origins if empty
     const defaultOrigins: ShippingOrigin[] = [
       { id: "Montevideo", name: "JUEM - Montevideo", address: "Coruña 3038 Bis, Montevideo", contact: "098058775 | 096958714" },
-      { id: "Pinamar", name: "JUEM - Pinamar", address: "Ruta 11 Km 320, Pinamar", contact: "098058775 | 096958714" }
+      { id: "Pinamar", name: "JUEM - Pinamar", address: "C. 54, 15100 Pinamar, Departamento de Canelones", contact: "098058775 | 096958714" }
     ];
     if (!store.shippingOrigins || store.shippingOrigins.length === 0) return defaultOrigins;
     return store.shippingOrigins;
@@ -57,13 +57,14 @@ export const DashboardShippings: React.FC<DashboardShippingsProps> = ({
   const [branch, setBranch] = useState<"Pinamar" | "Montevideo">("Montevideo");
   const [shippingCost, setShippingCost] = useState<number>(0);
   const [status, setStatus] = useState<"Pendiente" | "Entregado" | "Cancelado">("Pendiente");
+  const [orderId, setOrderId] = useState<string | null>(null);
 
   // Selection state for printing/viewing label
   const [selectedShipping, setSelectedShipping] = useState<Shipping | null>(null);
 
   // Label UI Customization
   const [labelTheme, setLabelTheme] = useState<"azul-oro" | "termico">("azul-oro");
-  const [printFormat, setPrintFormat] = useState<"compacto" | "media-hoja" | "completa">("compacto");
+  const [printFormat, setPrintFormat] = useState<"compacto" | "media-hoja" | "completa" | "ticket-a4">("compacto");
 
   // Modals
   const [showOriginsModal, setShowOriginsModal] = useState(false);
@@ -108,6 +109,7 @@ export const DashboardShippings: React.FC<DashboardShippingsProps> = ({
     setBranch(ship.branch);
     setShippingCost(ship.shippingCost);
     setStatus(ship.status);
+    setOrderId(ship.orderId || null);
     
     // Auto select to view label
     setSelectedShipping(ship);
@@ -123,6 +125,7 @@ export const DashboardShippings: React.FC<DashboardShippingsProps> = ({
     setComments("");
     setShippingCost(0);
     setStatus("Pendiente");
+    setOrderId(null);
     handleAutoGenerateCode();
   };
 
@@ -143,7 +146,8 @@ export const DashboardShippings: React.FC<DashboardShippingsProps> = ({
       comments,
       branch,
       shippingCost,
-      status
+      status,
+      orderId
     };
 
     try {
@@ -173,6 +177,7 @@ export const DashboardShippings: React.FC<DashboardShippingsProps> = ({
           setComments("");
           setShippingCost(0);
           setStatus("Pendiente");
+          setOrderId(null);
           handleAutoGenerateCode();
         } else {
           alert(d.message || "Error al actualizar envío");
@@ -198,6 +203,7 @@ export const DashboardShippings: React.FC<DashboardShippingsProps> = ({
           setComments("");
           setShippingCost(0);
           setStatus("Pendiente");
+          setOrderId(null);
           handleAutoGenerateCode();
         } else {
           alert(d.message || "Error al registrar envío");
@@ -290,6 +296,7 @@ export const DashboardShippings: React.FC<DashboardShippingsProps> = ({
     setBranch(order.depositoOrigen === "Montevideo" ? "Montevideo" : "Pinamar");
     setShippingCost(order.shippingCost || 0);
     setStatus("Pendiente");
+    setOrderId(order.id);
     setShowSalesModal(false);
   };
 
@@ -339,16 +346,24 @@ export const DashboardShippings: React.FC<DashboardShippingsProps> = ({
     );
   }, [store.orders, saleSearchQuery]);
 
-  // Get active origin details for the preview label
-  const activeOrigin = useMemo(() => {
-    const defaultBranch = selectedShipping?.branch || "Montevideo";
-    return origins.find(o => o.id === defaultBranch) || {
-      id: defaultBranch,
-      name: `JUEM - ${defaultBranch}`,
-      address: defaultBranch === "Montevideo" ? "Coruña 3038 Bis, Montevideo" : "Ruta 11 Km 320, Pinamar",
+  // Get active origin details for the preview label (Always display both branches as per user's request)
+  const mvdOrigin = useMemo(() => {
+    return origins.find(o => o.id === "Montevideo") || {
+      id: "Montevideo",
+      name: "JUEM - Montevideo",
+      address: "Coruña 3038 Bis, Montevideo",
       contact: "098058775 | 096958714"
     };
-  }, [selectedShipping, origins]);
+  }, [origins]);
+
+  const pinOrigin = useMemo(() => {
+    return origins.find(o => o.id === "Pinamar") || {
+      id: "Pinamar",
+      name: "JUEM - Pinamar",
+      address: "C. 54, 15100 Pinamar, Departamento de Canelones",
+      contact: "098058775 | 096958714"
+    };
+  }, [origins]);
 
   // Function to isolatedly trigger printable version of the label
   const handlePrintLabel = () => {
@@ -374,6 +389,21 @@ export const DashboardShippings: React.FC<DashboardShippingsProps> = ({
         .details { font-size: 10px; line-height: 1.3; margin-bottom: 3mm; }
         .order-meta { border-top: 1px solid #000; padding-top: 2mm; margin-top: 4mm; font-size: 9px; text-align: center; }
         .barcode-dummy { font-family: monospace; font-size: 14px; text-align: center; margin-top: 4mm; letter-spacing: 3px; font-weight: bold; }
+      `;
+    } else if (printFormat === "ticket-a4") {
+      printStyles = `
+        @page { size: A4 portrait; margin: 0; }
+        body { font-family: 'Courier New', Courier, monospace; color: #000; background: #fff; margin: 0; padding: 25mm 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; box-sizing: border-box; }
+        .ticket-wrapper { display: flex; flex-direction: column; align-items: center; width: 90mm; }
+        .cut-instruction { font-family: Arial, sans-serif; font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4mm; text-align: center; font-weight: bold; }
+        .label-container { border: 2px dashed #000; padding: 6mm; width: 90mm; background: #fff; box-sizing: border-box; display: flex; flex-direction: column; }
+        .title { font-size: 20px; font-weight: bold; text-align: center; border-bottom: 2px solid #000; padding-bottom: 2mm; margin-bottom: 3mm; letter-spacing: 1px; }
+        .subtitle { font-size: 11px; text-align: center; margin-bottom: 4mm; }
+        .badge { display: block; border: 1px solid #000; text-align: center; padding: 2mm 0; font-weight: bold; font-size: 12px; margin-bottom: 4mm; }
+        .section-title { font-size: 12px; font-weight: bold; text-decoration: underline; margin-bottom: 1.5mm; margin-top: 4mm; }
+        .details { font-size: 11px; line-height: 1.4; margin-bottom: 3.5mm; }
+        .order-meta { border-top: 1px solid #000; padding-top: 3mm; margin-top: 5mm; font-size: 10px; text-align: center; }
+        .barcode-dummy { font-family: monospace; font-size: 16px; text-align: center; margin-top: 5mm; letter-spacing: 3px; font-weight: bold; }
       `;
     } else if (printFormat === "media-hoja") {
       printStyles = `
@@ -415,92 +445,151 @@ export const DashboardShippings: React.FC<DashboardShippingsProps> = ({
           <style>${printStyles}</style>
         </head>
         <body>
-          <div class="label-container">
-            ${printFormat === "compacto" ? `
-              <div class="title">JUEM</div>
-              <div class="subtitle">Tienda de Indumentaria & Accesorios</div>
-              <div class="badge">ETIQUETA DE ENVÍO</div>
-              
-              <div class="section-title">REMITENTE</div>
-              <div class="details">
-                <strong>${activeOrigin.name}</strong><br/>
-                ${activeOrigin.address}<br/>
-                Contact: ${activeOrigin.contact}
-              </div>
-              
-              <div class="section-title">DESTINATARIO (CLIENTE)</div>
-              <div class="details">
-                <strong>${selectedShipping.customerName}</strong><br/>
-                ${selectedShipping.deliveryAddress}<br/>
-                Tel: ${selectedShipping.customerPhone || "Sin registrar"}<br/>
-                Horario: ${selectedShipping.deliveryHours || "No especificado"}
-              </div>
-              
-              ${selectedShipping.comments ? `
-                <div class="section-title">NOTAS / COMENTARIOS</div>
-                <div class="details">${selectedShipping.comments}</div>
-              ` : ""}
-              
-              <div class="order-meta">
-                <strong>PEDIDO: ${selectedShipping.orderNumber}</strong> | Fecha: ${selectedShipping.createdAt.substring(0, 10).split("-").reverse().join("/")}
-              </div>
-              <div class="barcode-dummy">||| | | |||| | | ||| | |||</div>
-            ` : `
-              <div class="header">
-                <div>
-                  <div class="title">JUEM</div>
-                  <div style="font-size:12px; color:#555;">TIENDA DE INDUMENTARIA & ACCESORIOS</div>
-                </div>
+          ${printFormat === "ticket-a4" ? `
+            <div class="ticket-wrapper">
+              <div class="cut-instruction">✂️ CORTE POR LA LÍNEA PUNTEADA PARA PEGAR EN EL PAQUETE</div>
+              <div class="label-container">
+                <div class="title">JUEM</div>
+                <div class="subtitle">Tienda de Indumentaria & Accesorios</div>
                 <div class="badge">ETIQUETA DE ENVÍO</div>
+                
+                <div class="section-title">REMITENTE</div>
+                <div class="details" style="line-height: 1.35; margin-bottom: 3px;">
+                  <div style="margin-bottom: 5px;">
+                    <strong>${mvdOrigin.name}</strong><br/>
+                    📍 ${mvdOrigin.address}<br/>
+                    📞 ${mvdOrigin.contact}
+                  </div>
+                  <div style="border-top: 1px dashed #aaa; padding-top: 4px; margin-top: 4px;">
+                    <strong>${pinOrigin.name}</strong><br/>
+                    📍 ${pinOrigin.address}<br/>
+                    📞 ${pinOrigin.contact}
+                  </div>
+                </div>
+                
+                <div class="section-title">DESTINATARIO (CLIENTE)</div>
+                <div class="details">
+                  <strong>${selectedShipping.customerName}</strong><br/>
+                  📍 <strong>${selectedShipping.deliveryAddress}</strong><br/>
+                  Tel: ${selectedShipping.customerPhone || "Sin registrar"}<br/>
+                  Horario: ${selectedShipping.deliveryHours || "No especificado"}
+                </div>
+                
+                ${selectedShipping.comments ? `
+                  <div class="section-title">NOTAS / COMENTARIOS</div>
+                  <div class="details" style="font-style: italic;">${selectedShipping.comments}</div>
+                ` : ""}
+                
+                <div class="order-meta">
+                  <strong>PEDIDO: ${selectedShipping.orderNumber}</strong><br/>
+                  Fecha: ${selectedShipping.createdAt.substring(0, 10).split("-").reverse().join("/")}<br/>
+                  Origen: ${selectedShipping.branch}
+                </div>
+                <div class="barcode-dummy">||| | | |||| | | ||| | |||</div>
               </div>
-              
-              <div class="grid">
-                <div>
-                  <div class="section">
-                    <div class="section-title">REMITENTE (ORIGEN)</div>
-                    <div class="details">
-                      <strong style="font-size:14px;">${activeOrigin.name}</strong><br/>
-                      <span style="font-size:12px; display:block; margin:2px 0;">📍 ${activeOrigin.address}</span>
-                      <span style="font-size:12px;">📞 ${activeOrigin.contact}</span>
+            </div>
+          ` : `
+            <div class="label-container">
+              ${printFormat === "compacto" ? `
+                <div class="title">JUEM</div>
+                <div class="subtitle">Tienda de Indumentaria & Accesorios</div>
+                <div class="badge">ETIQUETA DE ENVÍO</div>
+                
+                <div class="section-title">REMITENTE</div>
+                <div class="details" style="line-height: 1.35; margin-bottom: 3px;">
+                  <div style="margin-bottom: 5px;">
+                    <strong>${mvdOrigin.name}</strong><br/>
+                    📍 ${mvdOrigin.address}<br/>
+                    📞 ${mvdOrigin.contact}
+                  </div>
+                  <div style="border-top: 1px dashed #aaa; padding-top: 4px; margin-top: 4px;">
+                    <strong>${pinOrigin.name}</strong><br/>
+                    📍 ${pinOrigin.address}<br/>
+                    📞 ${pinOrigin.contact}
+                  </div>
+                </div>
+                
+                <div class="section-title">DESTINATARIO (CLIENTE)</div>
+                <div class="details">
+                  <strong>${selectedShipping.customerName}</strong><br/>
+                  📍 <strong>${selectedShipping.deliveryAddress}</strong><br/>
+                  Tel: ${selectedShipping.customerPhone || "Sin registrar"}<br/>
+                  Horario: ${selectedShipping.deliveryHours || "No especificado"}
+                </div>
+                
+                ${selectedShipping.comments ? `
+                  <div class="section-title">NOTAS / COMENTARIOS</div>
+                  <div class="details">${selectedShipping.comments}</div>
+                ` : ""}
+                
+                <div class="order-meta">
+                  <strong>PEDIDO: ${selectedShipping.orderNumber}</strong> | Fecha: ${selectedShipping.createdAt.substring(0, 10).split("-").reverse().join("/")}
+                </div>
+                <div class="barcode-dummy">||| | | |||| | | ||| | |||</div>
+              ` : `
+                <div class="header">
+                  <div>
+                    <div class="title">JUEM</div>
+                    <div style="font-size:12px; color:#555;">TIENDA DE INDUMENTARIA & ACCESORIOS</div>
+                  </div>
+                  <div class="badge">ETIQUETA DE ENVÍO</div>
+                </div>
+                
+                <div class="grid">
+                  <div>
+                    <div class="section">
+                      <div class="section-title">REMITENTE (ORIGEN)</div>
+                      <div class="details" style="display: flex; flex-direction: column; gap: 8px;">
+                        <div>
+                          <strong style="font-size:13px; display:block; margin-bottom: 2px;">${mvdOrigin.name}</strong>
+                          <span style="font-size:11px; display:block; color: #444;">📍 ${mvdOrigin.address}</span>
+                          <span style="font-size:11px; display:block; color: #444;">📞 Tel: ${mvdOrigin.contact}</span>
+                        </div>
+                        <div style="border-top: 1px dashed #ccc; padding-top: 6px; margin-top: 2px;">
+                          <strong style="font-size:13px; display:block; margin-bottom: 2px;">${pinOrigin.name}</strong>
+                          <span style="font-size:11px; display:block; color: #444;">📍 ${pinOrigin.address}</span>
+                          <span style="font-size:11px; display:block; color: #444;">📞 Tel: ${pinOrigin.contact}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <div class="section">
+                      <div class="section-title">DESTINATARIO (ENTREGA)</div>
+                      <div class="details">
+                        <strong style="font-size:15px;">👤 ${selectedShipping.customerName}</strong><br/>
+                        <span style="font-size:13px; display:block; margin:4px 0; font-weight:bold;">📍 ${selectedShipping.deliveryAddress}</span>
+                        <span style="font-size:12px; display:block; margin:2px 0;">📞 Teléfono: ${selectedShipping.customerPhone || "Sin registrar"}</span>
+                        <span style="font-size:12px; display:block; margin:2px 0;">🕒 Horario: ${selectedShipping.deliveryHours || "No especificado"}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
                 
-                <div>
-                  <div class="section">
-                    <div class="section-title">DESTINATARIO (ENTREGA)</div>
-                    <div class="details">
-                      <strong style="font-size:15px;">👤 ${selectedShipping.customerName}</strong><br/>
-                      <span style="font-size:13px; display:block; margin:4px 0; font-weight:bold;">📍 ${selectedShipping.deliveryAddress}</span>
-                      <span style="font-size:12px; display:block; margin:2px 0;">📞 Teléfono: ${selectedShipping.customerPhone || "Sin registrar"}</span>
-                      <span style="font-size:12px; display:block; margin:2px 0;">🕒 Horario: ${selectedShipping.deliveryHours || "No especificado"}</span>
+                ${selectedShipping.comments ? `
+                  <div class="section" style="margin-top: 4mm;">
+                    <div class="section-title">OBSERVACIONES / DETALLES ESPECIALES</div>
+                    <div class="details" style="font-style: italic; background:#f9f9f9; padding:3mm; border-left:3px solid #000;">
+                      ${selectedShipping.comments}
                     </div>
                   </div>
-                </div>
-              </div>
-              
-              ${selectedShipping.comments ? `
-                <div class="section" style="margin-top: 4mm;">
-                  <div class="section-title">OBSERVACIONES / DETALLES ESPECIALES</div>
-                  <div class="details" style="font-style: italic; background:#f9f9f9; padding:3mm; border-left:3px solid #000;">
-                    ${selectedShipping.comments}
+                ` : ""}
+                
+                <div class="footer">
+                  <div>
+                    <strong>N° PEDIDO:</strong> ${selectedShipping.orderNumber}<br/>
+                    <strong>FECHA DE REPARTO:</strong> ${selectedShipping.createdAt.substring(0, 10).split("-").reverse().join("/")}<br/>
+                    <strong>ORIGEN:</strong> Sucursal ${selectedShipping.branch}
+                  </div>
+                  <div style="text-align:right;">
+                    <div class="barcode-dummy">||| | | |||| | | ||| | |||</div>
+                    <span style="font-size:10px; font-family:monospace;">${selectedShipping.id.substring(0, 8).toUpperCase()}</span>
                   </div>
                 </div>
-              ` : ""}
-              
-              <div class="footer">
-                <div>
-                  <strong>N° PEDIDO:</strong> ${selectedShipping.orderNumber}<br/>
-                  <strong>FECHA DE REPARTO:</strong> ${selectedShipping.createdAt.substring(0, 10).split("-").reverse().join("/")}<br/>
-                  <strong>ORIGEN:</strong> Sucursal ${selectedShipping.branch}
-                </div>
-                <div style="text-align:right;">
-                  <div class="barcode-dummy">||| | | |||| | | ||| | |||</div>
-                  <span style="font-size:10px; font-family:monospace;">${selectedShipping.id.substring(0, 8).toUpperCase()}</span>
-                </div>
-              </div>
-            `}
-          </div>
+              `}
+            </div>
+          `}
           <script>
             window.onload = function() {
               window.print();
@@ -810,20 +899,29 @@ export const DashboardShippings: React.FC<DashboardShippingsProps> = ({
               </div>
 
               {/* Format selection */}
-              <div className="flex bg-zinc-900 rounded border border-zinc-800 p-0.5">
+              <div className="flex bg-zinc-900 rounded border border-zinc-800 p-0.5 overflow-x-auto max-w-full">
                 <button
                   type="button"
                   onClick={() => setPrintFormat("compacto")}
-                  className={`px-2 py-1 text-[9px] font-bold rounded ${
+                  className={`px-2 py-1 text-[9px] font-bold rounded whitespace-nowrap ${
                     printFormat === "compacto" ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-zinc-200"
                   }`}
                 >
-                  Compacto/Ticket
+                  Termo/Ticket
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrintFormat("ticket-a4")}
+                  className={`px-2 py-1 text-[9px] font-bold rounded whitespace-nowrap ${
+                    printFormat === "ticket-a4" ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  Ticket en A4 ✂️
                 </button>
                 <button
                   type="button"
                   onClick={() => setPrintFormat("media-hoja")}
-                  className={`px-2 py-1 text-[9px] font-bold rounded ${
+                  className={`px-2 py-1 text-[9px] font-bold rounded whitespace-nowrap ${
                     printFormat === "media-hoja" ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-zinc-200"
                   }`}
                 >
@@ -832,7 +930,7 @@ export const DashboardShippings: React.FC<DashboardShippingsProps> = ({
                 <button
                   type="button"
                   onClick={() => setPrintFormat("completa")}
-                  className={`px-2 py-1 text-[9px] font-bold rounded ${
+                  className={`px-2 py-1 text-[9px] font-bold rounded whitespace-nowrap ${
                     printFormat === "completa" ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-zinc-200"
                   }`}
                 >
@@ -906,10 +1004,19 @@ export const DashboardShippings: React.FC<DashboardShippingsProps> = ({
                     }`}>
                       REMITENTE:
                     </span>
-                    <div className="leading-relaxed pl-1">
-                      <strong className="block text-sm">{activeOrigin.name}</strong>
-                      <span className="opacity-80 block text-[10px]">📍 {activeOrigin.address}</span>
-                      <span className="opacity-80 block text-[10px]">📞 {activeOrigin.contact}</span>
+                    <div className="leading-relaxed pl-1 space-y-2">
+                      <div>
+                        <strong className="block text-[11px] font-bold">{mvdOrigin.name}</strong>
+                        <span className="opacity-80 block text-[9px]">📍 {mvdOrigin.address}</span>
+                        <span className="opacity-80 block text-[9px]">📞 {mvdOrigin.contact}</span>
+                      </div>
+                      <div className={`border-t pt-1.5 ${
+                        labelTheme === "azul-oro" ? "border-zinc-800/60" : "border-zinc-200"
+                      }`}>
+                        <strong className="block text-[11px] font-bold">{pinOrigin.name}</strong>
+                        <span className="opacity-80 block text-[9px]">📍 {pinOrigin.address}</span>
+                        <span className="opacity-80 block text-[9px]">📞 {pinOrigin.contact}</span>
+                      </div>
                     </div>
                   </div>
 
@@ -976,7 +1083,7 @@ export const DashboardShippings: React.FC<DashboardShippingsProps> = ({
                 className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Printer className="h-4 w-4" />
-                <span>Imprimir Etiqueta ({printFormat === "compacto" ? "Ticket Térmico" : printFormat === "media-hoja" ? "Media Hoja A5" : "Hoja A4"})</span>
+                <span>Imprimir Etiqueta ({printFormat === "compacto" ? "Ticket Térmico" : printFormat === "ticket-a4" ? "Ticket en Hoja A4" : printFormat === "media-hoja" ? "Media Hoja A5" : "Hoja A4"})</span>
               </button>
             </div>
           )}

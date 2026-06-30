@@ -24,7 +24,7 @@ import { v2 as cloudinary } from "cloudinary";
 import multer from "multer";
 import { MercadoPagoConfig, Preference, Payment } from "mercadopago";
 import { sendEmail, emailDeliveryLogs, generateOrderCreatedEmailHtml, generateOrderStatusChangedEmailHtml } from "./server_emails";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 let aiClient: GoogleGenAI | null = null;
 function getGeminiClient(): GoogleGenAI {
@@ -1310,7 +1310,7 @@ async function getDbState(): Promise<ShopState> {
     // Fetch shippings
     let shippings: any[] = [];
     try {
-      const shippingsRes = await pool.query("SELECT id, order_number, customer_name, customer_phone, delivery_hours, delivery_address, comments, branch, shipping_cost, status, created_at, updated_at FROM public.shippings ORDER BY created_at DESC;");
+      const shippingsRes = await pool.query("SELECT id, order_number, customer_name, customer_phone, delivery_hours, delivery_address, comments, branch, shipping_cost, status, created_at, updated_at, order_id FROM public.shippings ORDER BY created_at DESC;");
       shippings = shippingsRes.rows.map(row => ({
         id: row.id,
         orderNumber: row.order_number,
@@ -1323,7 +1323,8 @@ async function getDbState(): Promise<ShopState> {
         shippingCost: Number(row.shipping_cost || 0),
         status: row.status || "Pendiente",
         createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
-        updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined
+        updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
+        orderId: row.order_id || null
       }));
     } catch (shipErr) {
       console.warn("Shippings database table read failed:", shipErr);
@@ -1914,7 +1915,20 @@ async function initPostgresStore(): Promise<ShopState | null> {
       ALTER TABLE public.shippings ADD COLUMN IF NOT EXISTS status VARCHAR(50) NOT NULL DEFAULT 'Pendiente';
       ALTER TABLE public.shippings ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
       ALTER TABLE public.shippings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+      ALTER TABLE public.shippings ADD COLUMN IF NOT EXISTS order_id UUID NULL;
     `);
+
+    // Safely drop NOT NULL constraint on order_id and shipping_method if they were set in an older version of the table
+    try {
+      await pool.query("ALTER TABLE public.shippings ALTER COLUMN order_id DROP NOT NULL;");
+    } catch (err) {
+      console.log("Could not drop NOT NULL constraint on order_id column:", err);
+    }
+    try {
+      await pool.query("ALTER TABLE public.shippings ALTER COLUMN shipping_method DROP NOT NULL;");
+    } catch (err) {
+      console.log("Could not drop NOT NULL constraint on shipping_method column:", err);
+    }
 
     // Create public.shipping_origins table
     await pool.query(`
@@ -1937,15 +1951,17 @@ async function initPostgresStore(): Promise<ShopState | null> {
       ALTER TABLE public.shipping_origins ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
     `);
 
-    // Seed shipping_origins if empty
-    const checkOrigins = await pool.query("SELECT COUNT(*) FROM public.shipping_origins;");
-    if (Number(checkOrigins.rows[0].count) === 0) {
-      await pool.query(`
-        INSERT INTO public.shipping_origins (id, name, address, contact) VALUES
-        ('Montevideo', 'JUEM - Montevideo', 'Coruña 3038 Bis, Montevideo', '098058775 | 096958714'),
-        ('Pinamar', 'JUEM - Pinamar', 'Ruta 11 Km 320, Pinamar', '098058775 | 096958714');
-      `);
-    }
+    // Seed or update shipping_origins to ensure they match exact user-specified details
+    await pool.query(`
+      INSERT INTO public.shipping_origins (id, name, address, contact) VALUES
+      ('Montevideo', 'JUEM - Montevideo', 'Coruña 3038 Bis, Montevideo', '098058775 | 096958714'),
+      ('Pinamar', 'JUEM - Pinamar', 'C. 54, 15100 Pinamar, Departamento de Canelones', '098058775 | 096958714')
+      ON CONFLICT (id) DO UPDATE SET 
+        name = EXCLUDED.name,
+        address = EXCLUDED.address,
+        contact = EXCLUDED.contact,
+        updated_at = NOW();
+    `);
 
     // --- CREATE OPTIMIZED INDEXES FOR HIGH-PERFORMANCE CATALOGUE FETCHES ---
     await pool.query(`
@@ -3605,6 +3621,142 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
     }
   });
 
+  // POST analyze a bill image with Gemini (Protected)
+  app.post("/api/bills/analyze", (req, res, next) => {
+    upload.single("image")(req, res, (err: any) => {
+      if (err) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ success: false, message: "El tamaño del archivo supera el límite de 5MB." });
+        }
+        if (err.message === "MIME_TYPE_NOT_ALLOWED") {
+          return res.status(400).json({ success: false, message: "Tipo de archivo no permitido. Solo se aceptan imágenes." });
+        }
+        return res.status(400).json({ success: false, message: `Error al cargar la imagen: ${err.message}` });
+      }
+      next();
+    });
+  }, async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación de administrador principal." });
+    }
+
+    try {
+      if (!req.file) {
+        return res.status(400).json({ success: false, message: "No se proporcionó ninguna imagen para analizar." });
+      }
+
+      const fileBuffer = req.file.buffer;
+      const mimeType = req.file.mimetype;
+      const base64Data = fileBuffer.toString("base64");
+
+      const ai = getGeminiClient();
+
+      const imagePart = {
+        inlineData: {
+          mimeType: mimeType,
+          data: base64Data,
+        },
+      };
+
+      const promptPart = {
+        text: `Analyze this image of a purchase receipt, invoice, or ticket (boleta) from Uruguay. Extract the transaction details in Spanish. Make sure the output format conforms to the requested JSON schema. If certain optional fields (like providerRut, documentNumber, items) are not found, return empty strings or an empty array. Do your best to estimate the date, currency (must be 'UYU' or 'USD'), subtotal, tax (ivaAmount), and total. For individual items, extract their description, quantity, unit price, and IVA rate ('22%', '10%', 'No Gravado' or '0%').`,
+      };
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: { parts: [imagePart, promptPart] },
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              providerName: {
+                type: Type.STRING,
+                description: "Nombre del proveedor o empresa emisora de la boleta."
+              },
+              providerRut: {
+                type: Type.STRING,
+                description: "RUT del proveedor si figura en la boleta."
+              },
+              documentType: {
+                type: Type.STRING,
+                description: "Tipo de documento (por ejemplo, 'Boleta Contado', 'E-Factura', 'Ticket', etc.)"
+              },
+              documentNumber: {
+                type: Type.STRING,
+                description: "Número de documento, factura o boleta."
+              },
+              date: {
+                type: Type.STRING,
+                description: "Fecha de emisión formateada como YYYY-MM-DD. Si no tiene año, asume el año actual o deja vacío si no se encuentra."
+              },
+              currency: {
+                type: Type.STRING,
+                description: "Moneda de la transacción. Debe ser obligatoriamente 'UYU' o 'USD'."
+              },
+              subtotal: {
+                type: Type.NUMBER,
+                description: "Monto del subtotal antes de impuestos/IVA."
+              },
+              ivaAmount: {
+                type: Type.NUMBER,
+                description: "Monto correspondiente al IVA."
+              },
+              total: {
+                type: Type.NUMBER,
+                description: "Monto total facturado (monto total de la boleta)."
+              },
+              paymentMethod: {
+                type: Type.STRING,
+                description: "Método de pago, típicamente 'Contado' o 'Crédito'."
+              },
+              notes: {
+                type: Type.STRING,
+                description: "Comentarios breves o notas automáticas sobre la compra."
+              },
+              items: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    description: { type: Type.STRING, description: "Descripción o nombre del artículo comprado." },
+                    quantity: { type: Type.NUMBER, description: "Cantidad comprada del artículo." },
+                    unitPrice: { type: Type.NUMBER, description: "Precio unitario del artículo." },
+                    ivaRate: { type: Type.STRING, description: "Tasa de IVA aplicada, ej: '22%', '10%', 'No Gravado', '0%'." }
+                  },
+                  required: ["description", "quantity", "unitPrice", "ivaRate"]
+                },
+                description: "Lista de ítems individuales detallados en la boleta."
+              }
+            },
+            required: ["providerName", "date", "currency", "total"]
+          },
+        },
+      });
+
+      const resultText = response.text;
+      if (!resultText) {
+        throw new Error("No se pudo obtener una respuesta estructurada del análisis de la boleta.");
+      }
+
+      const analyzedData = JSON.parse(resultText.trim());
+
+      res.json({
+        success: true,
+        data: analyzedData
+      });
+
+    } catch (err: any) {
+      console.error("Error analyzing bill with Gemini:", err);
+      res.status(500).json({
+        success: false,
+        message: "Error al analizar la imagen de la boleta mediante IA.",
+        error: err.message
+      });
+    }
+  });
+
   // POST register a new bill/boleta (Protected)
   app.post("/api/bills", async (req, res) => {
     const authHeader = req.headers.authorization;
@@ -3748,7 +3900,7 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
       return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación de administrador principal." });
     }
     try {
-      const { orderNumber, customerName, customerPhone, deliveryHours, deliveryAddress, comments, branch, shippingCost, status } = req.body;
+      const { orderNumber, customerName, customerPhone, deliveryHours, deliveryAddress, comments, branch, shippingCost, status, orderId } = req.body;
       
       if (!orderNumber || !customerName || !deliveryAddress || !branch) {
         return res.status(400).json({ success: false, message: "El número de pedido, cliente, dirección de entrega y sucursal de origen son obligatorios." });
@@ -3764,14 +3916,26 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
       const cost = Number(shippingCost || 0);
       const stat = sanitizeHtmlString(status || "Pendiente").substring(0, 50);
 
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const ordId = (orderId && typeof orderId === "string" && uuidRegex.test(orderId)) ? orderId : null;
+
       const pool = getDbPool();
       let generatedId = "";
 
       if (pool && !dbUnavailable) {
+        // Repair order_id and shipping_method column constraints dynamically
+        try {
+          await pool.query("ALTER TABLE public.shippings ADD COLUMN IF NOT EXISTS order_id UUID NULL;");
+          await pool.query("ALTER TABLE public.shippings ALTER COLUMN order_id DROP NOT NULL;");
+          await pool.query("ALTER TABLE public.shippings ALTER COLUMN shipping_method DROP NOT NULL;");
+        } catch (colErr) {
+          console.log("Could not dynamically drop constraints on columns (POST):", colErr);
+        }
+
         const insertRes = await pool.query(
-          `INSERT INTO public.shippings (order_number, customer_name, customer_phone, delivery_hours, delivery_address, comments, branch, shipping_cost, status, created_at, updated_at) 
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW()) RETURNING id;`,
-          [ordNum, custName, custPhone, delHours, delAddress, comms, brch, cost, stat]
+          `INSERT INTO public.shippings (order_number, customer_name, customer_phone, delivery_hours, delivery_address, comments, branch, shipping_cost, status, order_id, created_at, updated_at) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()) RETURNING id;`,
+          [ordNum, custName, custPhone, delHours, delAddress, comms, brch, cost, stat, ordId]
         );
         generatedId = insertRes.rows[0].id;
         
@@ -3791,7 +3955,8 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
           branch: (brch === "Montevideo" ? "Montevideo" : "Pinamar") as "Pinamar" | "Montevideo",
           shippingCost: cost,
           status: (stat === "Entregado" ? "Entregado" : stat === "Cancelado" ? "Cancelado" : "Pendiente") as "Pendiente" | "Entregado" | "Cancelado",
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          orderId: ordId
         };
         if (!currentStoreState.shippings) {
           currentStoreState.shippings = [];
@@ -3815,7 +3980,8 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
           branch: brch,
           shippingCost: cost,
           status: stat,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          orderId: ordId
         }
       });
     } catch (err: any) {
@@ -3832,7 +3998,7 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
     }
     try {
       const { id } = req.params;
-      const { orderNumber, customerName, customerPhone, deliveryHours, deliveryAddress, comments, branch, shippingCost, status } = req.body;
+      const { orderNumber, customerName, customerPhone, deliveryHours, deliveryAddress, comments, branch, shippingCost, status, orderId } = req.body;
 
       if (!orderNumber || !customerName || !deliveryAddress || !branch) {
         return res.status(400).json({ success: false, message: "El número de pedido, cliente, dirección de entrega y sucursal de origen son obligatorios." });
@@ -3848,13 +4014,25 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
       const cost = Number(shippingCost || 0);
       const stat = sanitizeHtmlString(status || "Pendiente").substring(0, 50);
 
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const ordId = (orderId && typeof orderId === "string" && uuidRegex.test(orderId)) ? orderId : null;
+
       const pool = getDbPool();
       if (pool && !dbUnavailable) {
+        // Repair order_id and shipping_method column constraints dynamically
+        try {
+          await pool.query("ALTER TABLE public.shippings ADD COLUMN IF NOT EXISTS order_id UUID NULL;");
+          await pool.query("ALTER TABLE public.shippings ALTER COLUMN order_id DROP NOT NULL;");
+          await pool.query("ALTER TABLE public.shippings ALTER COLUMN shipping_method DROP NOT NULL;");
+        } catch (colErr) {
+          console.log("Could not dynamically drop constraints on columns (PUT):", colErr);
+        }
+
         await pool.query(
           `UPDATE public.shippings 
-           SET order_number = $1, customer_name = $2, customer_phone = $3, delivery_hours = $4, delivery_address = $5, comments = $6, branch = $7, shipping_cost = $8, status = $9, updated_at = NOW()
-           WHERE id = $10;`,
-          [ordNum, custName, custPhone, delHours, delAddress, comms, brch, cost, stat, id]
+           SET order_number = $1, customer_name = $2, customer_phone = $3, delivery_hours = $4, delivery_address = $5, comments = $6, branch = $7, shipping_cost = $8, status = $9, order_id = $10, updated_at = NOW()
+           WHERE id = $11;`,
+          [ordNum, custName, custPhone, delHours, delAddress, comms, brch, cost, stat, ordId, id]
         );
         
         // Refresh state
@@ -3875,7 +4053,8 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
               branch: (brch === "Montevideo" ? "Montevideo" : "Pinamar") as "Pinamar" | "Montevideo",
               shippingCost: cost,
               status: (stat === "Entregado" ? "Entregado" : stat === "Cancelado" ? "Cancelado" : "Pendiente") as "Pendiente" | "Entregado" | "Cancelado",
-              updatedAt: new Date().toISOString()
+              updatedAt: new Date().toISOString(),
+              orderId: ordId
             };
             fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
           }

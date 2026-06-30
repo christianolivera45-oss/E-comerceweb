@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import { ShopState, Bill, BillItem } from "../types";
 import { 
   Search, 
@@ -15,7 +15,10 @@ import {
   PlusCircle, 
   FileCheck, 
   Info,
-  ChevronDown
+  ChevronDown,
+  Camera,
+  Loader2,
+  Sparkles
 } from "lucide-react";
 
 interface DashboardBillsProps {
@@ -75,6 +78,80 @@ export const DashboardBills: React.FC<DashboardBillsProps> = ({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // AI scanning states and handlers
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanSuccessMessage, setScanSuccessMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleScanClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsScanning(true);
+    setErrorMessage(null);
+    setScanSuccessMessage(null);
+
+    const formData = new FormData();
+    formData.append("image", file);
+
+    try {
+      const response = await fetch("/api/bills/analyze", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${localStorage.getItem("apex_admin_token")}`
+        },
+        body: formData
+      });
+
+      const data = await response.json();
+      if (response.ok && data.success) {
+        const analyzed = data.data;
+        
+        if (analyzed.providerName) setProviderName(analyzed.providerName);
+        if (analyzed.providerRut) setProviderRut(analyzed.providerRut);
+        if (analyzed.documentType) setDocumentType(analyzed.documentType);
+        if (analyzed.documentNumber) setDocumentNumber(analyzed.documentNumber);
+        if (analyzed.date) setDate(analyzed.date);
+        if (analyzed.currency) setCurrency(analyzed.currency);
+        if (analyzed.paymentMethod) setPaymentMethod(analyzed.paymentMethod);
+        if (analyzed.notes) setNotes(analyzed.notes);
+
+        if (analyzed.items && analyzed.items.length > 0) {
+          setEntryMode("detailed");
+          setItems(analyzed.items.map((it: any) => ({
+            description: it.description || "",
+            quantity: Math.max(1, Number(it.quantity) || 1),
+            unitPrice: Math.max(0, Number(it.unitPrice) || 0),
+            totalPrice: (Math.max(1, Number(it.quantity) || 1)) * (Math.max(0, Number(it.unitPrice) || 0)),
+            ivaRate: it.ivaRate || "22%"
+          })));
+        } else {
+          setEntryMode("totals");
+          setManualSubtotal(Number(analyzed.subtotal) || 0);
+          setManualIvaAmount(Number(analyzed.ivaAmount) || 0);
+          setManualTotal(Number(analyzed.total) || 0);
+        }
+
+        setScanSuccessMessage("¡Boleta analizada con éxito! Los datos han sido completados automáticamente.");
+      } else {
+        setErrorMessage(data.message || "No se pudo analizar la boleta. Inténtelo de nuevo o ingrese los datos manualmente.");
+      }
+    } catch (err: any) {
+      setErrorMessage("Error al conectar con el servidor para analizar la boleta.");
+    } finally {
+      setIsScanning(false);
+      if (e.target) {
+        e.target.value = "";
+      }
+    }
+  };
 
   const billsList = useMemo(() => store.bills || [], [store.bills]);
 
@@ -343,7 +420,11 @@ export const DashboardBills: React.FC<DashboardBillsProps> = ({
           </div>
 
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              setScanSuccessMessage(null);
+              setErrorMessage(null);
+              setIsModalOpen(true);
+            }}
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all cursor-pointer shadow-md shadow-indigo-600/10"
           >
             <Plus className="h-4 w-4" />
@@ -589,6 +670,55 @@ export const DashboardBills: React.FC<DashboardBillsProps> = ({
                   <span>{errorMessage}</span>
                 </div>
               )}
+
+              {scanSuccessMessage && (
+                <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs p-3 rounded-lg flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <span>{scanSuccessMessage}</span>
+                </div>
+              )}
+
+              {/* AI BILL SCANNER */}
+              <div className="bg-zinc-900/50 border border-zinc-800/80 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="space-y-1 text-center md:text-left">
+                  <div className="flex items-center gap-2 justify-center md:justify-start">
+                    <Sparkles className="h-4 w-4 text-amber-400 shrink-0" />
+                    <span className="text-xs font-bold text-zinc-200">¿Tienes una foto de la boleta?</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-400">
+                    Sube una foto o tómala con la cámara de tu celular. El asistente inteligente de Gemini completará todos los datos automáticamente.
+                  </p>
+                </div>
+                
+                <div className="shrink-0 w-full md:w-auto">
+                  <input 
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    disabled={isScanning}
+                    onClick={handleScanClick}
+                    className="w-full md:w-auto bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:from-zinc-800 disabled:to-zinc-800 text-white disabled:text-zinc-500 text-xs font-semibold px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer shadow-lg shadow-indigo-950/20"
+                  >
+                    {isScanning ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>Analizando boleta...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Camera className="h-3.5 w-3.5" />
+                        <span>Escanear Boleta con IA</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
 
               {/* SECTION 1: HEADER GENERALS */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

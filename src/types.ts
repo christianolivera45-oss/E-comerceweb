@@ -291,6 +291,7 @@ export interface Shipping {
   status: "Pendiente" | "Entregado" | "Cancelado";
   createdAt: string;
   updatedAt?: string;
+  orderId?: string | null;
 }
 
 export interface ShippingOrigin {

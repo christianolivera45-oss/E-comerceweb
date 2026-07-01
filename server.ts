@@ -23,7 +23,7 @@ import pg from "pg";
 import { v2 as cloudinary } from "cloudinary";
 import multer from "multer";
 import { MercadoPagoConfig, Preference, Payment } from "mercadopago";
-import { sendEmail, emailDeliveryLogs, generateOrderCreatedEmailHtml, generateOrderStatusChangedEmailHtml } from "./server_emails";
+import { sendEmail, emailDeliveryLogs, logEmailDelivery, generateOrderCreatedEmailHtml, generateOrderStatusChangedEmailHtml } from "./server_emails";
 import { GoogleGenAI, Type } from "@google/genai";
 
 let aiClient: GoogleGenAI | null = null;
@@ -93,6 +93,8 @@ const DEFAULT_SHOP_STATE: ShopState = {
     primaryColor: "#3b82f6", // Indigo/Blue
     accentColor: "#10b981", // Emerald
     themeMode: "dark",
+    facebookUrl: "https://facebook.com",
+    instagramUrl: "https://instagram.com",
     promotionBannerText: "🚚 ¡15% de DESCUENTO en toda la tienda! Código: BUELO15",
     showPromotionBanner: true,
     heroSlides: [
@@ -637,6 +639,19 @@ async function sendApprovalEmails(order: any, settings: any) {
       html
     });
 
+    const logId = "email-log-" + Math.random().toString(36).substring(2, 10);
+    await logEmailDelivery({
+      id: logId,
+      timestamp: new Date().toISOString(),
+      to: order.customerEmail,
+      orderId: order.id,
+      emailType: "pago_aprobado",
+      subject,
+      body: html,
+      status: "success",
+      error: undefined
+    });
+
     // Always send a notification / copy of the order details sheet to the company email
     const formattedOrderId = order.id.length > 8 ? order.id.substring(0, 6).toUpperCase() : order.id;
     const companySubject = `[PAGO APROBADO MP] #${formattedOrderId} - ${order.customerName}`;
@@ -649,6 +664,62 @@ async function sendApprovalEmails(order: any, settings: any) {
     console.log(`[Email] Mails de aprobación enviados con éxito para Orden ${order.id}.`);
   } catch (err) {
     console.error(`[Email] Error enviando mails de aprobación para Orden ${order.id}:`, err);
+  }
+}
+
+async function sendPendingEmails(order: any, settings: any) {
+  try {
+    const completeOrderForEmail = {
+      id: order.id,
+      customerName: order.customerName,
+      customerEmail: order.customerEmail,
+      customerPhone: order.customerPhone,
+      subtotal: order.subtotal,
+      discountAmount: order.discountAmount,
+      shippingCost: order.shippingCost,
+      total: order.total,
+      couponCode: order.couponCode || null,
+      notes: order.notes,
+      items: order.items,
+      paymentMethod: order.paymentMethod
+    };
+
+    const { subject, html } = generateOrderCreatedEmailHtml(completeOrderForEmail, settings);
+    const pendingSubject = `[PAGO PENDIENTE MP] ${subject}`;
+
+    // Send and log email to customer
+    await sendEmail({
+      settings: settings,
+      to: order.customerEmail,
+      subject: pendingSubject,
+      html
+    });
+
+    const logId = "email-log-" + Math.random().toString(36).substring(2, 10);
+    await logEmailDelivery({
+      id: logId,
+      timestamp: new Date().toISOString(),
+      to: order.customerEmail,
+      orderId: order.id,
+      emailType: "pago_pendiente",
+      subject: pendingSubject,
+      body: html,
+      status: "success",
+      error: undefined
+    });
+
+    // Always send a notification / copy of the order details sheet to the company email
+    const formattedOrderId = order.id.length > 8 ? order.id.substring(0, 6).toUpperCase() : order.id;
+    const companySubject = `[PAGO PENDIENTE MP] #${formattedOrderId} - ${order.customerName}`;
+    await sendEmail({
+      settings: settings,
+      to: "Juem.mvd@gmail.com",
+      subject: companySubject,
+      html
+    });
+    console.log(`[Email] Mails de pago pendiente enviados con éxito para Orden ${order.id}.`);
+  } catch (err) {
+    console.error(`[Email] Error enviando mails de pago pendiente para Orden ${order.id}:`, err);
   }
 }
 
@@ -2032,11 +2103,27 @@ async function initPostgresStore(): Promise<ShopState | null> {
         updated_at = NOW();
     `);
 
+    // Create public.stock_transfers table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS public.stock_transfers (
+        id VARCHAR(50) PRIMARY KEY,
+        product_id VARCHAR(100) NOT NULL,
+        product_name VARCHAR(255) NOT NULL,
+        variant_id VARCHAR(100) NULL,
+        variant_name VARCHAR(255) NULL,
+        quantity INTEGER NOT NULL,
+        from_deposito VARCHAR(50) NOT NULL,
+        to_deposito VARCHAR(50) NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
     // --- CREATE OPTIMIZED INDEXES FOR HIGH-PERFORMANCE CATALOGUE FETCHES ---
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_products_search ON public.products (active, featured, paused);
       CREATE INDEX IF NOT EXISTS idx_products_category ON public.products (categoria_id, subcategoria_id);
       CREATE INDEX IF NOT EXISTS idx_variants_product ON public.product_variants (product_id, active);
+      CREATE INDEX IF NOT EXISTS idx_stock_transfers_product ON public.stock_transfers (product_id);
     `);
 
     // --- SEED TABLES IF EMPTY ---
@@ -2230,7 +2317,9 @@ async function startServer() {
           "emailSenderSmtpHost",
           "emailSenderSmtpPort",
           "emailSenderSmtpUser",
-          "emailSenderSmtpPass"
+          "emailSenderSmtpPass",
+          "footerCol1Title",
+          "footerCol1Text"
         ];
 
         for (const key of keysToSync) {
@@ -3690,6 +3779,346 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
     }
   });
 
+  // GET all stock transfers (Protected)
+  app.get("/api/stock-transfers", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación de administrador principal." });
+    }
+    try {
+      const pool = getDbPool();
+      if (pool && !dbUnavailable) {
+        const transfersRes = await pool.query(`
+          SELECT id, product_id, product_name, variant_id, variant_name, quantity, from_deposito, to_deposito, created_at 
+          FROM public.stock_transfers 
+          ORDER BY created_at DESC;
+        `);
+        const transfers = transfersRes.rows.map(row => ({
+          id: row.id,
+          productId: row.product_id,
+          productName: row.product_name,
+          variantId: row.variant_id || undefined,
+          variantName: row.variant_name || undefined,
+          quantity: Number(row.quantity),
+          fromDeposito: row.from_deposito,
+          toDeposito: row.to_deposito,
+          createdAt: row.created_at
+        }));
+        res.json({ success: true, transfers });
+      } else {
+        res.json({ success: true, transfers: currentStoreState.stockTransfers || [] });
+      }
+    } catch (err: any) {
+      console.error("Error reading stock transfers:", err);
+      res.status(500).json({ success: false, message: "Error al recuperar transferencias.", error: err.message });
+    }
+  });
+
+  // POST new stock transfer (Protected)
+  app.post("/api/stock-transfers", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación de administrador principal." });
+    }
+    const { productId, productName, variantId, variantName, quantity, fromDeposito, toDeposito } = req.body;
+    if (!productId || !productName || !quantity || !fromDeposito || !toDeposito || quantity <= 0) {
+      return res.status(400).json({ success: false, message: "Faltan parámetros requeridos o cantidad inválida." });
+    }
+    if (fromDeposito === toDeposito) {
+      return res.status(400).json({ success: false, message: "Los depósitos de origen y destino deben ser diferentes." });
+    }
+
+    try {
+      const pool = getDbPool();
+      const transferId = "trans-" + Math.random().toString(36).substring(2, 10);
+      const createdAt = new Date().toISOString();
+
+      if (pool && !dbUnavailable) {
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN;");
+
+          // Determine table and update query
+          if (variantId) {
+            // Check existing stock first
+            const checkRes = await client.query(
+              "SELECT stock_pinamar, stock_montevideo FROM public.product_variants WHERE id = $1 FOR UPDATE;",
+              [variantId]
+            );
+            if (checkRes.rows.length === 0) {
+              throw new Error("Variante no encontrada.");
+            }
+            const currentFromStock = fromDeposito === "Pinamar" ? checkRes.rows[0].stock_pinamar : checkRes.rows[0].stock_montevideo;
+            if (currentFromStock < quantity) {
+              throw new Error(`Stock insuficiente en ${fromDeposito}. Disponible: ${currentFromStock}.`);
+            }
+
+            // Perform transfer and sync total stock too
+            if (fromDeposito === "Pinamar") {
+              await client.query(
+                "UPDATE public.product_variants SET stock_pinamar = GREATEST(0, stock_pinamar - $1), stock_montevideo = stock_montevideo + $1, updated_at = NOW() WHERE id = $2;",
+                [quantity, variantId]
+              );
+            } else {
+              await client.query(
+                "UPDATE public.product_variants SET stock_montevideo = GREATEST(0, stock_montevideo - $1), stock_pinamar = stock_pinamar + $1, updated_at = NOW() WHERE id = $2;",
+                [quantity, variantId]
+              );
+            }
+          } else {
+            // Check existing stock first at product level
+            const checkRes = await client.query(
+              "SELECT stock_pinamar, stock_montevideo FROM public.products WHERE id = $1 FOR UPDATE;",
+              [productId]
+            );
+            if (checkRes.rows.length === 0) {
+              throw new Error("Producto no encontrado.");
+            }
+            const currentFromStock = fromDeposito === "Pinamar" ? checkRes.rows[0].stock_pinamar : checkRes.rows[0].stock_montevideo;
+            if (currentFromStock < quantity) {
+              throw new Error(`Stock insuficiente en ${fromDeposito}. Disponible: ${currentFromStock}.`);
+            }
+
+            // Perform transfer
+            if (fromDeposito === "Pinamar") {
+              await client.query(
+                "UPDATE public.products SET stock_pinamar = GREATEST(0, stock_pinamar - $1), stock_montevideo = stock_montevideo + $1, updated_at = NOW() WHERE id = $2;",
+                [quantity, productId]
+              );
+            } else {
+              await client.query(
+                "UPDATE public.products SET stock_montevideo = GREATEST(0, stock_montevideo - $1), stock_pinamar = stock_pinamar + $1, updated_at = NOW() WHERE id = $2;",
+                [quantity, productId]
+              );
+            }
+          }
+
+          // Insert transfer log
+          await client.query(
+            `INSERT INTO public.stock_transfers (id, product_id, product_name, variant_id, variant_name, quantity, from_deposito, to_deposito, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW());`,
+            [transferId, String(productId), productName, variantId || null, variantName || null, quantity, fromDeposito, toDeposito]
+          );
+
+          await client.query("COMMIT;");
+        } catch (txErr: any) {
+          await client.query("ROLLBACK;");
+          throw txErr;
+        } finally {
+          client.release();
+        }
+
+        // Force memory state reload to match DB
+        const dbState = await getDbState();
+        currentStoreState = dbState;
+      } else {
+        // Fallback for file-based JSON store
+        const products = currentStoreState.products || [];
+        const product = products.find(p => String(p.id) === String(productId));
+        if (!product) {
+          return res.status(404).json({ success: false, message: "Producto no encontrado en la memoria de la tienda." });
+        }
+
+        if (variantId) {
+          const variant = product.variants?.find(v => String(v.id) === String(variantId));
+          if (!variant) {
+            return res.status(404).json({ success: false, message: "Variante no encontrada." });
+          }
+          const currentFromStock = fromDeposito === "Pinamar" ? (variant.stockPinamar || 0) : (variant.stockMontevideo || 0);
+          if (currentFromStock < quantity) {
+            return res.status(400).json({ success: false, message: `Stock insuficiente en ${fromDeposito}. Disponible: ${currentFromStock}.` });
+          }
+
+          if (fromDeposito === "Pinamar") {
+            variant.stockPinamar = Math.max(0, (variant.stockPinamar || 0) - quantity);
+            variant.stockMontevideo = (variant.stockMontevideo || 0) + quantity;
+          } else {
+            variant.stockMontevideo = Math.max(0, (variant.stockMontevideo || 0) - quantity);
+            variant.stockPinamar = (variant.stockPinamar || 0) + quantity;
+          }
+        } else {
+          const currentFromStock = fromDeposito === "Pinamar" ? (product.stockPinamar || 0) : (product.stockMontevideo || 0);
+          if (currentFromStock < quantity) {
+            return res.status(400).json({ success: false, message: `Stock insuficiente en ${fromDeposito}. Disponible: ${currentFromStock}.` });
+          }
+
+          if (fromDeposito === "Pinamar") {
+            product.stockPinamar = Math.max(0, (product.stockPinamar || 0) - quantity);
+            product.stockMontevideo = (product.stockMontevideo || 0) + quantity;
+          } else {
+            product.stockMontevideo = Math.max(0, (product.stockMontevideo || 0) - quantity);
+            product.stockPinamar = (product.stockPinamar || 0) + quantity;
+          }
+        }
+
+        const logRecord = {
+          id: transferId,
+          productId: String(productId),
+          productName,
+          variantId: variantId || undefined,
+          variantName: variantName || undefined,
+          quantity,
+          fromDeposito,
+          toDeposito,
+          createdAt
+        };
+
+        if (!currentStoreState.stockTransfers) {
+          currentStoreState.stockTransfers = [];
+        }
+        currentStoreState.stockTransfers.unshift(logRecord);
+
+        await saveDbState(currentStoreState);
+      }
+
+      res.json({ success: true, message: "Transferencia de mercadería registrada exitosamente." });
+    } catch (err: any) {
+      console.error("Error making stock transfer:", err);
+      res.status(500).json({ success: false, message: err.message || "Error al realizar la transferencia.", error: err.message });
+    }
+  });
+
+  // DELETE /api/stock-transfers/:id (Protected - Revert stock transfer)
+  app.delete("/api/stock-transfers/:id", async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!isValidToken(authHeader)) {
+      return res.status(403).json({ success: false, message: "Acceso denegado. Se requiere autenticación de administrador principal." });
+    }
+    const { id } = req.params;
+
+    try {
+      const pool = getDbPool();
+
+      if (pool && !dbUnavailable) {
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN;");
+
+          // 1. Get the transfer record to know details
+          const transferRes = await client.query(
+            "SELECT id, product_id, product_name, variant_id, quantity, from_deposito, to_deposito FROM public.stock_transfers WHERE id = $1 FOR UPDATE;",
+            [id]
+          );
+
+          if (transferRes.rows.length === 0) {
+            throw new Error("La transferencia no existe o ya fue revertida.");
+          }
+
+          const transfer = transferRes.rows[0];
+          const productId = transfer.product_id;
+          const variantId = transfer.variant_id;
+          const quantity = Number(transfer.quantity);
+          const fromDeposito = transfer.from_deposito;
+          const toDeposito = transfer.to_deposito;
+
+          // 2. Revert the stock (From -> To originally, so To -> From now)
+          // To gets decremented by quantity, From gets incremented by quantity
+          if (variantId) {
+            // Check existing stock of variant
+            const varCheck = await client.query(
+              "SELECT stock_pinamar, stock_montevideo FROM public.product_variants WHERE id = $1 FOR UPDATE;",
+              [variantId]
+            );
+            if (varCheck.rows.length > 0) {
+              if (fromDeposito === "Pinamar") {
+                // Pinamar gets incremented, Montevideo gets decremented
+                await client.query(
+                  "UPDATE public.product_variants SET stock_pinamar = stock_pinamar + $1, stock_montevideo = GREATEST(0, stock_montevideo - $1), updated_at = NOW() WHERE id = $2;",
+                  [quantity, variantId]
+                );
+              } else {
+                // Montevideo gets incremented, Pinamar gets decremented
+                await client.query(
+                  "UPDATE public.product_variants SET stock_montevideo = stock_montevideo + $1, stock_pinamar = GREATEST(0, stock_pinamar - $1), updated_at = NOW() WHERE id = $2;",
+                  [quantity, variantId]
+                );
+              }
+            }
+          } else {
+            // Check existing stock of product
+            const prodCheck = await client.query(
+              "SELECT stock_pinamar, stock_montevideo FROM public.products WHERE id = $1 FOR UPDATE;",
+              [productId]
+            );
+            if (prodCheck.rows.length > 0) {
+              if (fromDeposito === "Pinamar") {
+                await client.query(
+                  "UPDATE public.products SET stock_pinamar = stock_pinamar + $1, stock_montevideo = GREATEST(0, stock_montevideo - $1), updated_at = NOW() WHERE id = $2;",
+                  [quantity, productId]
+                );
+              } else {
+                await client.query(
+                  "UPDATE public.products SET stock_montevideo = stock_montevideo + $1, stock_pinamar = GREATEST(0, stock_pinamar - $1), updated_at = NOW() WHERE id = $2;",
+                  [quantity, productId]
+                );
+              }
+            }
+          }
+
+          // 3. Delete the transfer log record
+          await client.query("DELETE FROM public.stock_transfers WHERE id = $1;", [id]);
+
+          await client.query("COMMIT;");
+        } catch (txErr: any) {
+          await client.query("ROLLBACK;");
+          throw txErr;
+        } finally {
+          client.release();
+        }
+
+        // Force memory state reload to match DB
+        const dbState = await getDbState();
+        currentStoreState = dbState;
+      } else {
+        // Fallback for file-based JSON store
+        if (!currentStoreState.stockTransfers) {
+          currentStoreState.stockTransfers = [];
+        }
+        const idx = currentStoreState.stockTransfers.findIndex(t => String(t.id) === String(id));
+        if (idx === -1) {
+          return res.status(404).json({ success: false, message: "La transferencia no existe en la memoria." });
+        }
+
+        const transfer = currentStoreState.stockTransfers[idx];
+        const products = currentStoreState.products || [];
+        const product = products.find(p => String(p.id) === String(transfer.productId));
+
+        if (product) {
+          const qty = Number(transfer.quantity);
+          if (transfer.variantId) {
+            const variant = product.variants?.find(v => String(v.id) === String(transfer.variantId));
+            if (variant) {
+              if (transfer.fromDeposito === "Pinamar") {
+                variant.stockPinamar = (variant.stockPinamar || 0) + qty;
+                variant.stockMontevideo = Math.max(0, (variant.stockMontevideo || 0) - qty);
+              } else {
+                variant.stockMontevideo = (variant.stockMontevideo || 0) + qty;
+                variant.stockPinamar = Math.max(0, (variant.stockPinamar || 0) - qty);
+              }
+            }
+          } else {
+            if (transfer.fromDeposito === "Pinamar") {
+              product.stockPinamar = (product.stockPinamar || 0) + qty;
+              product.stockMontevideo = Math.max(0, (product.stockMontevideo || 0) - qty);
+            } else {
+              product.stockMontevideo = (product.stockMontevideo || 0) + qty;
+              product.stockPinamar = Math.max(0, (product.stockPinamar || 0) - qty);
+            }
+          }
+        }
+
+        // Remove from list
+        currentStoreState.stockTransfers.splice(idx, 1);
+        await saveDbState(currentStoreState);
+      }
+
+      res.json({ success: true, message: "Transferencia revertida y existencias acomodadas exitosamente." });
+    } catch (err: any) {
+      console.error("Error reverting stock transfer:", err);
+      res.status(500).json({ success: false, message: err.message || "Error al revertir la transferencia.", error: err.message });
+    }
+  });
+
   // POST analyze a bill image with Gemini (Protected)
   app.post("/api/bills/analyze", (req, res, next) => {
     upload.single("image")(req, res, (err: any) => {
@@ -4515,48 +4944,8 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
         }
       }
 
-      // Automatic email notification
-      const isMercadoPago = String(sanitizedPaymentMethod || "").toLowerCase().includes("mercadopago") || String(sanitizedPaymentMethod || "").toLowerCase().includes("mercado_pago");
-      
-      if (!isMercadoPago) {
-        try {
-          const completeOrderForEmail = {
-            id: orderId,
-            customerName: sanitizedName,
-            customerEmail: sanitizedEmail,
-            customerPhone: sanitizedPhone,
-            subtotal: serverSubtotal,
-            discountAmount: serverDiscountAmount,
-            shippingCost: verifiedShippingCost,
-            total: serverTotal,
-            couponCode: couponCode || null,
-            notes: sanitizedNotes,
-            items: verifiedItems,
-            paymentMethod: sanitizedPaymentMethod
-          };
-          const { subject, html } = generateOrderCreatedEmailHtml(completeOrderForEmail, currentStoreState.settings);
-          
-          // Send and log email to customer
-          sendEmail({
-            settings: currentStoreState.settings,
-            to: sanitizedEmail,
-            subject,
-            html
-          }).catch(err => console.error("Error in sendEmail for created order:", err));
-
-          // Always send a notification / copy of the order details sheet to the company email
-          const formattedOrderId = orderId.length > 8 ? orderId.substring(0, 6).toUpperCase() : orderId;
-          const companySubject = `[NUEVO PEDIDO] #${formattedOrderId} - ${sanitizedName}`;
-          sendEmail({
-            settings: currentStoreState.settings,
-            to: "Juem.mvd@gmail.com",
-            subject: companySubject,
-            html
-          }).catch(err => console.error("Error sending order notification copy to Juem.mvd@gmail.com:", err));
-        } catch (emailErr) {
-          console.error("Error preparing auto email for created order:", emailErr);
-        }
-      }
+      // No automatic email notification here anymore per user request. 
+      // Email notifications are now exclusively dispatched for Mercado Pago transactions (approved or pending) via the webhook/feedback handlers.
 
       res.status(201).json({ success: true, orderId });
     } catch (err: any) {
@@ -5165,6 +5554,20 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
         // Force state reload
         const dbState = await getDbState();
         currentStoreState = dbState;
+
+        if (finalOrderState === "pago_pendiente") {
+          const order = dbState.orders?.find(o => o.id === orderId);
+          if (order) {
+            const emailAlreadySent = emailDeliveryLogs.some(
+              log => String(log.orderId) === String(orderId) && log.emailType === "pago_pendiente"
+            );
+            if (!emailAlreadySent) {
+              sendPendingEmails(order, dbState.settings).catch(err => {
+                console.error("Error sending pending email in feedback:", err);
+              });
+            }
+          }
+        }
       } catch (dbUpdateError) {
         console.error(`[Error DB Sinc] Falló actualizar pedido ${orderId} tras pago:`, dbUpdateError);
       }
@@ -5487,6 +5890,37 @@ No añadas formato markdown (como \`\`\`json) ni texto explicativo. Solo el JSON
           }
         }
         console.log(`[MercadoPago Webhook] Orden ${orderId} actualizada a 'pago_rechazado'.`);
+      } else if (verifiedStatus === "pending" || verifiedStatus === "in_process") {
+        // Update order status to pending securely
+        const pool = getDbPool();
+        if (pool && !dbUnavailable) {
+          await pool.query("UPDATE public.orders SET current_status = 'pago_pendiente', updated_at = NOW() WHERE id = $1 AND current_status != 'pago_aprobado';", [orderId]);
+        } else {
+          if (currentStoreState.orders) {
+            currentStoreState.orders = currentStoreState.orders.map(o => {
+              if (o.id === orderId && o.status !== "pago_aprobado") {
+                return { ...o, status: "pago_pendiente" as any, updatedAt: new Date().toISOString() };
+              }
+              return o;
+            });
+            fs.writeFileSync(STORE_FILE, JSON.stringify(currentStoreState, null, 2), "utf-8");
+          }
+        }
+        console.log(`[MercadoPago Webhook] Orden ${orderId} actualizada a 'pago_pendiente'.`);
+
+        // Send pending email if not sent yet
+        const dbState = await getDbState();
+        const order = dbState.orders?.find(o => o.id === orderId);
+        if (order) {
+          const emailAlreadySent = emailDeliveryLogs.some(
+            log => String(log.orderId) === String(orderId) && log.emailType === "pago_pendiente"
+          );
+          if (!emailAlreadySent) {
+            sendPendingEmails(order, dbState.settings).catch(err => {
+              console.error("Error sending pending email in webhook:", err);
+            });
+          }
+        }
       } else {
         console.log(`[MercadoPago Webhook] Estado de pago '${verifiedStatus}' sin acciones necesarias.`);
       }

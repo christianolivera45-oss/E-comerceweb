@@ -2,6 +2,9 @@ import { useState, useEffect, useMemo, FormEvent } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Search,
+  ArrowRight,
+  Check,
+  Package,
   ShoppingBag,
   Sliders,
   Settings,
@@ -47,6 +50,9 @@ import {
   X,
   Ruler,
   ChevronRight,
+  ArrowLeftRight,
+  History,
+  RotateCcw,
   ChevronLeft,
   TrendingUp,
   TrendingDown,
@@ -89,7 +95,7 @@ import {
   Receipt,
   Scale
 } from "lucide-react";
-import { Product, SiteSettings, ShopState, CartItem, Category, Subcategory, ProductVariant, is3DProduct, Shipping, ShippingOrigin } from "./types";
+import { Product, SiteSettings, ShopState, CartItem, Category, Subcategory, ProductVariant, is3DProduct, Shipping, ShippingOrigin, StockTransfer } from "./types";
 import ThemeStyles from "./components/ThemeStyles";
 import ProductCard from "./components/ProductCard";
 import ProductSlider from "./components/ProductSlider";
@@ -239,6 +245,8 @@ const DEFAULT_SETTINGS: SiteSettings = {
   googleAnalyticsId: "",
   googleTagManagerId: "",
   metaPixelId: "",
+  facebookUrl: "https://facebook.com",
+  instagramUrl: "https://instagram.com",
   whatsappNumber: "5491123456789",
   primaryColor: "#2563eb",
   accentColor: "#10b981",
@@ -285,8 +293,8 @@ const DEFAULT_SETTINGS: SiteSettings = {
   logoImageUrl: "",
   footerCol1Title: "🚀 Compra Personalizada",
   footerCol1Text: "Realiza tus pedidos seleccionando tus talles y colores favoritos. El carrito envía una lista formateada directo a nuestro WhatsApp de atención oficial para coordinar pago y entrega express.",
-  footerCol2Title: "🌟 Calidad Asegurada",
-  footerCol2Text: "Todos los productos que visualizas pasan por un control estricto de empaque y selección. Ofrecemos cambio de talle inmediato dentro de las 72 horas de recibida tu compra.",
+  footerCol2Title: "📍 Sucursal Montevideo",
+  footerCol2Text: "Dirección: Coruña 3038, 12000 Montevideo. Teléfono: 095 085 181. Todos los productos que visualizas pasan por un control estricto de selección y empaque.",
   footerCol3Title: "📞 Soporte Directo",
   footerCol3Text: "¿Habiendo dudas con talles o stock rápido? Pícale al botón de consulta express en la ficha de cada producto y un asesor te responderá inmediatamente en WhatsApp.",
   footerCopyright: "Desarrollado con tecnología de punta responsive. Reservados todos los derechos.",
@@ -1034,7 +1042,7 @@ export default function App() {
 
   // Search & Navigation
   const [activeTab, setActiveTab] = useState<"storefront" | "admin" | "checkout">("storefront");
-  const [adminSection, setAdminSection] = useState<"general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales" | "reviews" | "bills" | "finances" | "shippings" | "assistant" | "cloudinary_explorer">("dashboard");
+  const [adminSection, setAdminSection] = useState<"general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales" | "reviews" | "bills" | "finances" | "shippings" | "assistant" | "cloudinary_explorer">("finances");
   const [showAIAssistantSidebar, setShowAIAssistantSidebar] = useState(false);
   const [showAdminDevicePreview, setShowAdminDevicePreview] = useState(true);
   const [mobileAdminMenuOpen, setMobileAdminMenuOpen] = useState(false);
@@ -1077,6 +1085,28 @@ export default function App() {
   const [stockPinFilter, setStockPinFilter] = useState<string>("all");
   const [sortField, setSortField] = useState<string>("");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
+  // Stock Transfer States
+  const [stockSubSection, setStockSubSection] = useState<"list" | "transfer" | "history">("list");
+  const [stockTransfers, setStockTransfers] = useState<StockTransfer[]>([]);
+  const [transfersLoading, setTransfersLoading] = useState<boolean>(false);
+  const [transferProductId, setTransferProductId] = useState<string>("");
+  const [transferVariantId, setTransferVariantId] = useState<string>("");
+  const [transferQty, setTransferQty] = useState<number>(1);
+  const [transferFrom, setTransferFrom] = useState<"Pinamar" | "Montevideo">("Pinamar");
+  const [transferTo, setTransferTo] = useState<"Pinamar" | "Montevideo">("Montevideo");
+  const [transferSearchQuery, setTransferSearchQuery] = useState<string>("");
+  const [transferStep, setTransferStep] = useState<number>(1);
+  const [transferItems, setTransferItems] = useState<Array<{
+    id: string;
+    productId: string;
+    productName: string;
+    variantId?: string;
+    variantName?: string;
+    sku?: string;
+    quantity: number;
+    maxAvailable: number;
+  }>>([]);
 
   const toggleSort = (field: string) => {
     if (sortField === field) {
@@ -1132,6 +1162,9 @@ export default function App() {
     if (section === "emails") {
       fetchEmailLogs();
     }
+    if (section === "stock") {
+      fetchStockTransfers();
+    }
   };
 
   // URL routing helpers
@@ -1180,7 +1213,10 @@ export default function App() {
       else if (sub === "categories") setAdminSection("categories");
       else if (sub === "promos") setAdminSection("promos");
       else if (sub === "security") setAdminSection("security");
-      else if (sub === "stock") setAdminSection("stock");
+      else if (sub === "stock") {
+        setAdminSection("stock");
+        fetchStockTransfers();
+      }
       else if (sub === "dashboard") setAdminSection("dashboard");
       else if (sub === "banner") setAdminSection("banner");
       else if (sub === "footer") setAdminSection("footer");
@@ -1191,7 +1227,8 @@ export default function App() {
         setAdminSection("emails");
         fetchEmailLogs();
       }
-      else setAdminSection("dashboard");
+      else if (sub === "finances") setAdminSection("finances");
+      else setAdminSection("finances");
 
       // Verify session token integrity on every URL change
       const token = localStorage.getItem("apex_admin_token");
@@ -1843,6 +1880,160 @@ export default function App() {
       console.error("Error fetching email logs", e);
     } finally {
       setEmailLogsLoading(false);
+    }
+  };
+
+  const fetchStockTransfers = async () => {
+    setTransfersLoading(true);
+    try {
+      const activeToken = localStorage.getItem("apex_admin_token") || authToken;
+      const res = await fetch("/api/stock-transfers", {
+        headers: { "Authorization": `Bearer ${activeToken}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStockTransfers(data.transfers || []);
+      }
+    } catch (e) {
+      console.error("Error fetching stock transfers", e);
+    } finally {
+      setTransfersLoading(false);
+    }
+  };
+
+  const executeStockTransfer = async (payload: {
+    productId: string;
+    productName: string;
+    variantId?: string;
+    variantName?: string;
+    quantity: number;
+    fromDeposito: "Pinamar" | "Montevideo";
+    toDeposito: "Pinamar" | "Montevideo";
+  }) => {
+    try {
+      const activeToken = localStorage.getItem("apex_admin_token") || authToken;
+      const res = await fetch("/api/stock-transfers", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${activeToken}`
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("¡Transferencia registrada y existencias actualizadas!", "success");
+        fetchStoreData(true);
+        fetchStockTransfers();
+        setStockSubSection("history");
+        setTransferProductId("");
+        setTransferVariantId("");
+        setTransferQty(1);
+        setTransferStep(1);
+      } else {
+        showToast(data.message || "Error al realizar la transferencia", "error");
+      }
+    } catch (e: any) {
+      console.error("Error executing stock transfer", e);
+      showToast("Error de conexión al realizar la transferencia", "error");
+    }
+  };
+
+  const executeBulkStockTransfer = async (
+    items: Array<{
+      productId: string;
+      productName: string;
+      variantId?: string;
+      variantName?: string;
+      quantity: number;
+    }>,
+    fromDep: "Pinamar" | "Montevideo",
+    toDep: "Pinamar" | "Montevideo"
+  ) => {
+    setTransfersLoading(true);
+    try {
+      const activeToken = localStorage.getItem("apex_admin_token") || authToken;
+      let successCount = 0;
+      let errors: string[] = [];
+
+      for (const item of items) {
+        const payload = {
+          productId: item.productId,
+          productName: item.productName,
+          variantId: item.variantId,
+          variantName: item.variantName,
+          quantity: item.quantity,
+          fromDeposito: fromDep,
+          toDeposito: toDep
+        };
+
+        const res = await fetch("/api/stock-transfers", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${activeToken}`
+          },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+          successCount++;
+        } else {
+          errors.push(`${item.productName}${item.variantName ? ` (${item.variantName})` : ""}: ${data.message || "Error"}`);
+        }
+      }
+
+      if (successCount > 0) {
+        showToast(`¡Se registraron ${successCount} transferencias de forma exitosa!`, "success");
+        if (errors.length > 0) {
+          showToast(`Algunos errores ocurrieron: ${errors.join(", ")}`, "error");
+        }
+        fetchStoreData(true);
+        fetchStockTransfers();
+        setTransferItems([]);
+        setTransferProductId("");
+        setTransferVariantId("");
+        setTransferQty(1);
+        setTransferStep(1);
+        setStockSubSection("history");
+      } else {
+        showToast(`No se pudo registrar ninguna transferencia: ${errors.join("; ")}`, "error");
+      }
+    } catch (e: any) {
+      console.error("Error executing bulk transfer", e);
+      showToast("Error de conexión al registrar la transferencia múltiple.", "error");
+    } finally {
+      setTransfersLoading(false);
+    }
+  };
+
+  const revertStockTransfer = async (id: string) => {
+    if (!window.confirm("¿Estás seguro de que deseas anular esta transferencia? Esto revertirá los niveles de stock (sumará stock al depósito de origen y restará del de destino) y eliminará el registro de transferencia.")) {
+      return;
+    }
+    setTransfersLoading(true);
+    try {
+      const activeToken = localStorage.getItem("apex_admin_token") || authToken;
+      const res = await fetch(`/api/stock-transfers/${id}`, {
+        method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${activeToken}`,
+          "Content-Type": "application/json"
+        }
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("¡Transferencia revertida y existencias acomodadas!", "success");
+        fetchStoreData(true);
+        fetchStockTransfers();
+      } else {
+        showToast(data.message || "Error al revertir la transferencia", "error");
+      }
+    } catch (e: any) {
+      console.error("Error reverting stock transfer", e);
+      showToast("Error de conexión al revertir la transferencia", "error");
+    } finally {
+      setTransfersLoading(false);
     }
   };
 
@@ -4583,7 +4774,7 @@ export default function App() {
                                   ? "bg-[#D4A55A]/15 text-[#E6BF76] border border-[#D4A55A]/60 font-black shadow-sm"
                                   : store.settings.themeMode === "dark"
                                   ? "bg-zinc-900/40 text-zinc-400 border border-zinc-905 hover:text-white"
-                                  : "bg-slate-50 text-zinc-600 border border-slate-150 hover:bg-slate-100"
+                                  : "bg-slate-50 text-zinc-600 border border-slate-200 hover:bg-slate-100"
                               }`}
                             >
                               {option.label}
@@ -4722,7 +4913,7 @@ export default function App() {
                     <div className={`absolute bottom-0 left-0 right-0 p-4 border-t flex gap-3 z-20 ${
                       store.settings.themeMode === "dark"
                         ? "bg-[#090F21]/95 border-zinc-900/80 text-white backdrop-blur-md"
-                        : "bg-white/95 border-slate-150 text-zinc-950 backdrop-blur-md"
+                        : "bg-white/95 border-slate-200 text-zinc-950 backdrop-blur-md"
                     }`}>
                       {(onlyInStock || sortBy !== "featured" || selectedCategory !== "todos" || selectedSubcategory !== "all") && (
                         <button
@@ -5057,29 +5248,31 @@ export default function App() {
             
             <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6 lg:gap-10">
               {/* BRAND COLUMN / REDES SOCIALES */}
-              <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ${
+              <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 flex flex-col justify-between ${
                 store.settings.themeMode === "dark"
                   ? "bg-[#0B1730] border-[#D4A55A]/15 hover:border-[#D4A55A]/40 shadow-sm"
                   : "bg-white border-slate-200 shadow-sm"
               }`}>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="p-1.5 rounded-lg bg-[#D4A55A]/10 text-[#E6BF76]">
-                    <Globe className="h-4 w-4" />
-                  </span>
-                  <h4 className={`font-bold text-xs uppercase tracking-wider font-sans ${
-                    store.settings.themeMode === "dark" ? "text-[#F4EAD7]" : "text-slate-900"
-                  }`}>
-                    Nuestras Redes
-                  </h4>
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="p-1.5 rounded-lg bg-[#D4A55A]/10 text-[#E6BF76]">
+                      <Globe className="h-4 w-4" />
+                    </span>
+                    <h4 className={`font-bold text-xs uppercase tracking-wider font-sans ${
+                      store.settings.themeMode === "dark" ? "text-[#F4EAD7]" : "text-slate-900"
+                    }`}>
+                      Nuestras Redes
+                    </h4>
+                  </div>
+                  
+                  <p className="text-xs leading-relaxed opacity-85 mb-4">
+                    Sigue nuestras publicaciones, novedades del talle y promociones imperdibles agregadas diariamente.
+                  </p>
                 </div>
-                
-                <p className="text-xs leading-relaxed opacity-85 mb-4">
-                  Sigue nuestras publicaciones, novedades del talle y promociones imperdibles agregadas diariamente.
-                </p>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 mt-auto">
                   <a 
-                    href="https://instagram.com" 
+                    href={store.settings.instagramUrl || "https://instagram.com"} 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="p-2.5 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold bg-gradient-to-r from-[#F58529] via-[#DD2A7B] to-[#8134AF] hover:brightness-110 text-white border-none shadow-sm transition-transform duration-100 active:scale-95 cursor-pointer"
@@ -5090,7 +5283,7 @@ export default function App() {
                     <span>Instagram</span>
                   </a>
                   <a 
-                    href="https://facebook.com" 
+                    href={store.settings.facebookUrl || "https://facebook.com"} 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="p-2.5 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold bg-[#1877F2] hover:bg-[#165EAB] text-white border-none shadow-sm transition-transform duration-100 active:scale-95 cursor-pointer"
@@ -5104,76 +5297,128 @@ export default function App() {
               </div>
 
               {/* COLUMN 2 (Feature 1 - Compra Personalizada) */}
-              <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ${
-                store.settings.themeMode === "dark"
-                  ? "bg-[#0B1730] border-[#D4A55A]/15 hover:border-[#D4A55A]/40 shadow-sm"
-                  : "bg-white border-slate-200 shadow-sm"
-              }`}>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="p-1.5 rounded-lg bg-[#D4A55A]/10 text-[#E6BF76]">
-                    <ShoppingCart className="h-4 w-4" />
-                  </span>
-                  <h4 className={`font-bold text-xs uppercase tracking-wider font-sans ${
-                    store.settings.themeMode === "dark" ? "text-[#F4EAD7]" : "text-slate-900"
-                  }`}>
-                    {store.settings.footerCol1Title || "🚀 Compra Personalizada"}
-                  </h4>
-                </div>
-                <p className="text-xs leading-relaxed opacity-85">
-                  {store.settings.footerCol1Text || "Realiza tus pedidos seleccionando tus talles y colores favoritos. El carrito envía una lista formateada directo a nuestro WhatsApp de atención oficial para coordinar pago y entrega express."}
-                </p>
-              </div>
-
-              {/* COLUMN 3 (Feature 2 - Calidad Asegurada) */}
-              <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 ${
-                store.settings.themeMode === "dark"
-                  ? "bg-[#0B1730] border-[#D4A55A]/15 hover:border-[#D4A55A]/40 shadow-sm"
-                  : "bg-white border-slate-200 shadow-sm"
-              }`}>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="p-1.5 rounded-lg bg-[#D4A55A]/10 text-[#E6BF76]">
-                    <ShieldCheck className="h-4 w-4" />
-                  </span>
-                  <h4 className={`font-bold text-xs uppercase tracking-wider font-sans ${
-                    store.settings.themeMode === "dark" ? "text-[#F4EAD7]" : "text-slate-900"
-                  }`}>
-                    {store.settings.footerCol2Title || "🌟 Calidad Asegurada"}
-                  </h4>
-                </div>
-                <p className="text-xs leading-relaxed opacity-85">
-                  {store.settings.footerCol2Text || "Todos los productos que visualizas pasan por un control estricto de empaque y selección. Ofrecemos cambio de talle inmediato dentro de las 72 horas de recibida tu compra."}
-                </p>
-              </div>
-
-              {/* COLUMN 4 (Google Maps / Ubicación Comercial) */}
-              <div id="footer-map" className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 flex flex-col justify-between ${
+              <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 flex flex-col justify-between ${
                 store.settings.themeMode === "dark"
                   ? "bg-[#0B1730] border-[#D4A55A]/15 hover:border-[#D4A55A]/40 shadow-sm"
                   : "bg-white border-slate-200 shadow-sm"
               }`}>
                 <div>
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="p-1.5 rounded-lg bg-[#D4A55A]/10 text-[#E6BF76]">
+                      <ShoppingCart className="h-4 w-4" />
+                    </span>
+                    <h4 className={`font-bold text-xs uppercase tracking-wider font-sans ${
+                      store.settings.themeMode === "dark" ? "text-[#F4EAD7]" : "text-slate-900"
+                    }`}>
+                      {store.settings.footerCol1Title || "🚀 Compra Personalizada"}
+                    </h4>
+                  </div>
+                  <p className="text-xs leading-relaxed opacity-85">
+                    {store.settings.footerCol1Text || "Realiza tus pedidos seleccionando tus talles y colores favoritos. El carrito envía una lista formateada directo a nuestro WhatsApp de atención oficial para coordinar pago y entrega express."}
+                  </p>
+                </div>
+
+                <div className="mt-6 space-y-3">
+                  {/* Badges of payment methods */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {["Visa", "Mastercard", "OCA", "Líder", "Diners", "Abitab", "Redpagos", "Transferencia"].map((mp) => (
+                      <span 
+                        key={mp}
+                        className={`text-[10px] font-semibold px-2 py-1 rounded-md border ${
+                          store.settings.themeMode === "dark"
+                            ? "bg-zinc-900/60 border-zinc-800 text-zinc-300"
+                            : "bg-slate-50 border-slate-200 text-slate-600"
+                        }`}
+                      >
+                        {mp}
+                      </span>
+                    ))}
+                  </div>
+                  
+                  {/* SSL badge */}
+                  <div className={`flex items-center gap-1.5 text-[10px] font-semibold ${
+                    store.settings.themeMode === "dark" ? "text-[#E6BF76]" : "text-amber-700"
+                  }`}>
+                    <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    <span>Transacción 100% Protegida</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* COLUMN 3 (Feature 2 - Sucursal Montevideo) */}
+              <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 flex flex-col justify-between ${
+                store.settings.themeMode === "dark"
+                  ? "bg-[#0B1730] border-[#D4A55A]/15 hover:border-[#D4A55A]/40 shadow-sm"
+                  : "bg-white border-slate-200 shadow-sm"
+              }`}>
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
                     <span className="p-1.5 rounded-lg bg-[#D4A55A]/10 text-[#E6BF76]">
                       <MapPin className="h-4 w-4" />
                     </span>
                     <h4 className={`font-bold text-xs uppercase tracking-wider font-sans ${
                       store.settings.themeMode === "dark" ? "text-[#F4EAD7]" : "text-slate-900"
                     }`}>
-                      Nuestra Ubicación
+                      📍 Sucursal Montevideo
                     </h4>
                   </div>
-                  <p className="text-[11px] leading-relaxed opacity-80 mb-3">
-                    Visítanos en nuestra tienda física. Consulta horarios y rutas directamente en el mapa interactivo.
-                  </p>
+                  <div className="text-xs space-y-2 mb-3 opacity-85">
+                    <p className="text-[11px] leading-relaxed">
+                      <strong className="text-[#E6BF76]">Dirección:</strong> Coruña 3038 Bis, Montevideo
+                    </p>
+                    <p className="text-[11px] leading-relaxed">
+                      <strong className="text-[#E6BF76]">Teléfono:</strong> 098058775
+                    </p>
+                  </div>
                 </div>
                 <div className="w-full h-[140px] rounded-xl overflow-hidden border border-[#D4A55A]/15 relative">
                   <iframe 
-                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3277.7005578324!2d-55.86459034517074!3d-34.763135191187786!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x95a021e5c567911d%3A0x601fcf5d591c0db4!2sJuem!5e0!3m2!1ses-419!2suy!4v1781623339597!5m2!1ses-419!2suy" 
+                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3273.500741407378!2d-56.15203782349302!3d-34.868770171545755!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x959f808dc42ec093%3A0x20632d6daf9aa5fc!2sCoru%C3%B1a%203038%2C%2012000%20Montevideo%2C%20Departamento%20de%20Montevideo!5e0!3m2!1ses-419!2suy!4v1782910027474!5m2!1ses-419!2suy" 
                     className="absolute inset-0 w-full h-full"
                     style={{ border: 0 }} 
                     allowFullScreen={true} 
                     loading="lazy" 
-                    referrerPolicy="no-referrer-when-downgrade"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                  ></iframe>
+                </div>
+              </div>
+
+              {/* COLUMN 4 (Google Maps / Ubicación Comercial - Sucursal Pinamar) */}
+              <div id="footer-map" className={`p-4 sm:p-5 rounded-2xl border transition-all duration-300 flex flex-col justify-between ${
+                store.settings.themeMode === "dark"
+                  ? "bg-[#0B1730] border-[#D4A55A]/15 hover:border-[#D4A55A]/40 shadow-sm"
+                  : "bg-white border-slate-200 shadow-sm"
+              }`}>
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="p-1.5 rounded-lg bg-[#D4A55A]/10 text-[#E6BF76]">
+                      <MapPin className="h-4 w-4" />
+                    </span>
+                    <h4 className={`font-bold text-xs uppercase tracking-wider font-sans ${
+                      store.settings.themeMode === "dark" ? "text-[#F4EAD7]" : "text-slate-900"
+                    }`}>
+                      📍 Sucursal Pinamar
+                    </h4>
+                  </div>
+                  <div className="text-xs space-y-2 mb-3 opacity-85">
+                    <p className="text-[11px] leading-relaxed">
+                      <strong className="text-[#E6BF76]">Dirección:</strong> C. 54, 15100 Pinamar, Departamento de Canelones
+                    </p>
+                    <p className="text-[11px] leading-relaxed">
+                      <strong className="text-[#E6BF76]">Teléfono:</strong> 098058775
+                    </p>
+                  </div>
+                </div>
+                <div className="w-full h-[140px] rounded-xl overflow-hidden border border-[#D4A55A]/15 relative">
+                  <iframe 
+                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3277.703532468259!2d-55.8671867242527!3d-34.76306027289764!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x95a021e5c567911d%3A0x601fcf5d591c0db4!2sJuem!5e0!3m2!1ses-419!2suy!4v1782909992678!5m2!1ses-419!2suy" 
+                    className="absolute inset-0 w-full h-full"
+                    style={{ border: 0 }} 
+                    allowFullScreen={true} 
+                    loading="lazy" 
+                    referrerPolicy="strict-origin-when-cross-origin"
                   ></iframe>
                 </div>
               </div>
@@ -5307,7 +5552,7 @@ export default function App() {
           
           {/* Ambient Lighting Orbs - "Luz" backdrop effect for premium tech vibe */}
           <div className="absolute top-[-10%] left-[-10%] w-[45%] h-[45%] rounded-full bg-indigo-500/10 blur-[120px] pointer-events-none" />
-          <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-650/5 blur-[150px] pointer-events-none" />
+          <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-600/5 blur-[150px] pointer-events-none" />
           <div className="absolute top-[30%] left-[60%] w-[35%] h-[35%] rounded-full bg-emerald-500/5 blur-[130px] pointer-events-none" />
 
           {/* Left sidebar nav with Glassmorphism aesthetic and rich lighting details */}
@@ -5357,6 +5602,20 @@ export default function App() {
                   </div>
                   <div className="space-y-1">
                     <button
+                      onClick={() => navigateAdminSection("finances")}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        adminSection === "finances"
+                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Scale className={`h-4 w-4 ${adminSection === "finances" ? "text-indigo-400" : "text-zinc-400"}`} />
+                        <span>Resumen General</span>
+                      </div>
+                    </button>
+
+                    <button
                       onClick={() => navigateAdminSection("dashboard")}
                       className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
                         adminSection === "dashboard"
@@ -5365,7 +5624,7 @@ export default function App() {
                       }`}
                     >
                       <TrendingUp className={`h-4 w-4 transition-transform duration-300 ${adminSection === "dashboard" ? "scale-110 text-indigo-400" : "text-zinc-400"}`} />
-                      <span>Dashboard Principal</span>
+                      <span>Dashboard Web</span>
                     </button>
 
                     <button
@@ -5426,15 +5685,18 @@ export default function App() {
                     </button>
 
                     <button
-                      onClick={() => navigateAdminSection("stock")}
+                      onClick={() => {
+                        navigateAdminSection("stock");
+                        setStockSubSection("list");
+                      }}
                       className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
-                        adminSection === "stock"
+                        adminSection === "stock" && stockSubSection !== "transfer"
                           ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
                           : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <Box className={`h-4 w-4 ${adminSection === "stock" ? "text-indigo-400" : "text-zinc-400"}`} />
+                        <Box className={`h-4 w-4 ${adminSection === "stock" && stockSubSection !== "transfer" ? "text-indigo-400" : "text-zinc-400"}`} />
                         <span>Stock Almacén</span>
                       </div>
                       {totalStockAlerts > 0 && (
@@ -5449,6 +5711,23 @@ export default function App() {
                     </button>
 
                     <button
+                      onClick={() => {
+                        navigateAdminSection("stock");
+                        setStockSubSection("transfer");
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
+                        adminSection === "stock" && stockSubSection === "transfer"
+                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
+                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <ArrowLeftRight className={`h-4 w-4 ${adminSection === "stock" && stockSubSection === "transfer" ? "text-indigo-400" : "text-zinc-400"}`} />
+                        <span>Transferencia de Artículos</span>
+                      </div>
+                    </button>
+
+                    <button
                       onClick={() => navigateAdminSection("bills")}
                       className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
                         adminSection === "bills"
@@ -5459,20 +5738,6 @@ export default function App() {
                       <div className="flex items-center gap-3">
                         <Receipt className={`h-4 w-4 ${adminSection === "bills" ? "text-indigo-400" : "text-zinc-400"}`} />
                         <span>Ingresar Boletas</span>
-                      </div>
-                    </button>
-
-                    <button
-                      onClick={() => navigateAdminSection("finances")}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
-                        adminSection === "finances"
-                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
-                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Scale className={`h-4 w-4 ${adminSection === "finances" ? "text-indigo-400" : "text-zinc-400"}`} />
-                        <span>Resumen General</span>
                       </div>
                     </button>
                   </div>
@@ -6001,6 +6266,39 @@ export default function App() {
                         onChange={(e) => setEditingSettings({ ...editingSettings, siteSubtitle: e.target.value })}
                         className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white"
                       />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-extrabold text-[#1877F2] dark:text-blue-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+                          <svg className="h-3.5 w-3.5 fill-[#1877F2] dark:fill-blue-400" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                          </svg>
+                          Enlace de Facebook
+                        </label>
+                        <input
+                          type="text"
+                          value={editingSettings.facebookUrl || ""}
+                          onChange={(e) => setEditingSettings({ ...editingSettings, facebookUrl: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono"
+                          placeholder="https://facebook.com/tu-pagina"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-extrabold text-[#DD2A7B] dark:text-pink-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+                          <svg className="h-3.5 w-3.5 fill-[#DD2A7B] dark:fill-pink-400" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 2.163c3.204 0 3.584.012 4.85.071 3.253.147 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.148 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.051.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z" />
+                          </svg>
+                          Enlace de Instagram
+                        </label>
+                        <input
+                          type="text"
+                          value={editingSettings.instagramUrl || ""}
+                          onChange={(e) => setEditingSettings({ ...editingSettings, instagramUrl: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs outline-none focus:ring-1 focus:ring-blue-500 text-slate-900 dark:text-white font-mono"
+                          placeholder="https://instagram.com/tu-usuario"
+                        />
+                      </div>
                     </div>
 
                     <div>
@@ -7734,7 +8032,7 @@ export default function App() {
                                 readOnly
                                 disabled
                                 value={newProduct.precioCon40 || ""}
-                                className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950/80 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs text-slate-500 font-mono font-bold cursor-not-allowed select-none"
+                                className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950/80 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs text-slate-500 font-mono font-bold cursor-not-allowed select-none"
                                 placeholder="Precio Compra + 40%"
                               />
                             </div>
@@ -8757,7 +9055,7 @@ export default function App() {
                 )}
 
                 {/* Step Wizard Action Buttons */}
-                <div className="pt-2 border-t border-slate-100 dark:border-zinc-850 flex justify-between gap-3">
+                <div className="pt-2 border-t border-slate-100 dark:border-zinc-800 flex justify-between gap-3">
                   <button
                     type="button"
                     onClick={() => {
@@ -9197,7 +9495,7 @@ export default function App() {
                                 readOnly
                                 disabled
                                 value={editingProduct.precioCon40 || ""}
-                                className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950/80 border border-slate-200 dark:border-zinc-850 rounded-lg text-xs text-slate-500 font-mono font-bold cursor-not-allowed select-none"
+                                className="w-full px-3 py-2 bg-slate-100 dark:bg-zinc-950/80 border border-slate-200 dark:border-zinc-800 rounded-lg text-xs text-slate-500 font-mono font-bold cursor-not-allowed select-none"
                                 placeholder="Precio Compra + 40%"
                               />
                             </div>
@@ -9387,7 +9685,7 @@ export default function App() {
                     {editingProductStep === 3 && (
                       <>
                         {editingProduct.isCombo ? (
-                          <div className="p-4 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-850 w-full mb-4">
+                          <div className="p-4 bg-white dark:bg-zinc-950 rounded-xl border border-slate-200 dark:border-zinc-800 w-full mb-4">
                             <ComboComponentsBuilder
                               products={store.products}
                               components={editingProduct.comboComponents || []}
@@ -10471,7 +10769,7 @@ export default function App() {
                             <button
                               type="submit"
                               disabled={saving}
-                              className="w-full py-2 bg-indigo-650 bg-indigo-650 text-white font-bold rounded-lg text-xs hover:bg-indigo-700 transition shadow cursor-pointer text-center"
+                              className="w-full py-2 bg-indigo-600 bg-indigo-600 text-white font-bold rounded-lg text-xs hover:bg-indigo-700 transition shadow cursor-pointer text-center"
                             >
                               {saving ? "Salvando..." : "Guardar Modificaciones"}
                             </button>
@@ -11229,7 +11527,7 @@ export default function App() {
                             }}
                             className={`px-4 py-2 rounded-xl font-bold hover:scale-[1.02] active:scale-[0.98] transition flex items-center gap-1.5 text-xs shadow-sm cursor-pointer ${
                               showAIAssistantSidebar
-                                ? "bg-indigo-650 text-white"
+                                ? "bg-indigo-600 text-white"
                                 : "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                             }`}
                           >
@@ -11239,8 +11537,50 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* TABLA PRINCIPAL DE INVENTARIO */}
-                      <div className="bg-white dark:bg-zinc-950 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+                      {/* SUB-SECCIONES DE STOCK */}
+                      <div className="flex border-b border-slate-200 dark:border-zinc-800 gap-2 overflow-x-auto pb-px">
+                        <button
+                          onClick={() => setStockSubSection("list")}
+                          className={`px-4 py-2 text-xs font-bold transition flex items-center gap-1.5 border-b-2 cursor-pointer whitespace-nowrap ${
+                            stockSubSection === "list"
+                              ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400 font-black"
+                              : "border-transparent text-slate-500 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                          }`}
+                        >
+                          <List className="h-4 w-4" />
+                          <span>Listado de Existencias</span>
+                        </button>
+
+                        <button
+                          onClick={() => setStockSubSection("transfer")}
+                          className={`px-4 py-2 text-xs font-bold transition flex items-center gap-1.5 border-b-2 cursor-pointer whitespace-nowrap ${
+                            stockSubSection === "transfer"
+                              ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400 font-black"
+                              : "border-transparent text-slate-500 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                          }`}
+                        >
+                          <ArrowLeftRight className="h-4 w-4" />
+                          <span>Transferir Mercadería</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setStockSubSection("history");
+                            fetchStockTransfers();
+                          }}
+                          className={`px-4 py-2 text-xs font-bold transition flex items-center gap-1.5 border-b-2 cursor-pointer whitespace-nowrap ${
+                            stockSubSection === "history"
+                              ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400 font-black"
+                              : "border-transparent text-slate-500 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                          }`}
+                        >
+                          <History className="h-4 w-4" />
+                          <span>Historial de Transferencias</span>
+                        </button>
+                      </div>
+
+                      {stockSubSection === "list" && (
+                        <div className="bg-white dark:bg-zinc-950 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm overflow-hidden">
                         <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-50/50 dark:bg-zinc-950/50">
                           <div className="flex items-center gap-2.5">
                             <span className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse"></span>
@@ -11371,6 +11711,10 @@ export default function App() {
                                   </div>
                                 </th>
 
+                                <th className="py-3 px-4 text-center bg-slate-50 dark:bg-zinc-900 sticky top-0 uppercase text-[10px] tracking-wider select-none">
+                                  Acciones
+                                </th>
+
                               </tr>
 
 
@@ -11378,7 +11722,7 @@ export default function App() {
                             <tbody className="divide-y divide-slate-150 dark:divide-zinc-850">
                               {paginatedItems.length === 0 ? (
                                 <tr>
-                                  <td colSpan={8} className="p-8 text-center text-zinc-500 text-xs">
+                                  <td colSpan={9} className="p-8 text-center text-zinc-500 text-xs">
                                     Ningún artículo coincide con tu búsqueda actual o filtros.
                                   </td>
                                 </tr>
@@ -11599,6 +11943,30 @@ export default function App() {
                                           </button>
                                         </div>
                                       </td>
+
+                                      {/* ACCIONES */}
+                                      <td className="py-3 px-4 text-center">
+                                        <button
+                                          onClick={() => {
+                                            setTransferProductId(String(item.productId));
+                                            setTransferVariantId(item.variantId ? String(item.variantId) : "");
+                                            setTransferQty(1);
+                                            if ((item.stockPinamar || 0) >= (item.stockMontevideo || 0)) {
+                                              setTransferFrom("Pinamar");
+                                              setTransferTo("Montevideo");
+                                            } else {
+                                              setTransferFrom("Montevideo");
+                                              setTransferTo("Pinamar");
+                                            }
+                                            setStockSubSection("transfer");
+                                          }}
+                                          className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] rounded-lg shadow-xs cursor-pointer transition inline-flex items-center gap-1.5 mx-auto"
+                                          title="Transferir stock de este artículo"
+                                        >
+                                          <ArrowLeftRight className="h-3 w-3" />
+                                          <span>Transferir</span>
+                                        </button>
+                                      </td>
                                     </tr>
                                   );
                                 })
@@ -11626,7 +11994,7 @@ export default function App() {
                               const shouldShow = pageNo === 1 || pageNo === totalPages || Math.abs(pageNo - safePage) <= 1;
                               if (!shouldShow) {
                                 if (pageNo === 2 || pageNo === totalPages - 1) {
-                                  return <span key={pageNo} className="px-1 text-xs text-zinc-450 dark:text-zinc-600 select-none font-bold">...</span>;
+                                  return <span key={pageNo} className="px-1 text-xs text-slate-600 dark:text-zinc-400 select-none font-bold">...</span>;
                                 }
                                 return null;
                               }
@@ -11656,8 +12024,788 @@ export default function App() {
                         </div>
 
                       </div>
-                    </div>
-                  );
+                    )}
+
+                    {stockSubSection === "transfer" && (
+                      <div className="max-w-3xl mx-auto animate-fade-in space-y-6">
+                        {/* ENCABEZADO Y PASOS */}
+                        <div className="bg-white dark:bg-zinc-950 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-xs p-6">
+                          <div className="text-center space-y-2 mb-6">
+                            <h2 className="text-lg font-black uppercase text-slate-900 dark:text-zinc-100 tracking-wider">
+                              Transferir Mercadería Múltiple
+                            </h2>
+                            <p className="text-slate-500 dark:text-zinc-400 text-xs">
+                              Planifica, agrega múltiples artículos y transfiere mercadería de forma instantánea entre depósitos con registro automático de transacciones.
+                            </p>
+                          </div>
+
+                          {/* STEPPER VISUAL */}
+                          <div className="flex items-center justify-between max-w-sm mx-auto relative px-4">
+                            {/* Line connector */}
+                            <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-slate-100 dark:bg-zinc-800 -translate-y-1/2 z-0" />
+                            {/* Colored active line */}
+                            <div 
+                              className="absolute top-1/2 left-0 h-0.5 bg-indigo-600 dark:bg-indigo-500 -translate-y-1/2 z-0 transition-all duration-500" 
+                              style={{ width: `${transferStep === 2 ? 100 : 0}%` }}
+                            />
+
+                            {[
+                              { label: "1. Armar Lista", step: 1 },
+                              { label: "2. Confirmar Envío", step: 2 },
+                            ].map((s) => {
+                              const isActive = transferStep >= s.step;
+                              const isCurrent = transferStep === s.step;
+                              return (
+                                <div key={s.step} className="flex flex-col items-center relative z-10">
+                                  <button
+                                    onClick={() => {
+                                      if (s.step === 1 || transferItems.length > 0) {
+                                        setTransferStep(s.step);
+                                      }
+                                    }}
+                                    disabled={transferItems.length === 0 && s.step > 1}
+                                    className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all duration-300 ${
+                                      isCurrent
+                                        ? "bg-indigo-600 text-white ring-4 ring-indigo-500/20"
+                                        : isActive
+                                        ? "bg-indigo-500 text-white"
+                                        : "bg-slate-100 text-slate-400 dark:bg-zinc-900 dark:text-zinc-500"
+                                    }`}
+                                  >
+                                    {s.step}
+                                  </button>
+                                  <span className={`text-[10px] font-bold mt-1.5 transition-colors ${
+                                    isCurrent
+                                      ? "text-indigo-600 dark:text-indigo-400"
+                                      : isActive
+                                      ? "text-slate-700 dark:text-zinc-300"
+                                      : "text-slate-400 dark:text-zinc-500"
+                                  }`}>
+                                    {s.label}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* PASO 1: SELECCIÓN DE RUTA Y AGREGAR ARTÍCULOS */}
+                        {transferStep === 1 && (
+                          <div className="space-y-6">
+                            {/* MASTER ROUTE CONFIG */}
+                            <div className="bg-white dark:bg-zinc-950 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm p-6 space-y-4">
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs font-black uppercase text-slate-700 dark:text-zinc-300 tracking-wider">
+                                  Ruta del Traslado de Stock
+                                </span>
+                                <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">
+                                  * Todos los artículos de la lista se enviarán por esta ruta
+                                </span>
+                              </div>
+                              
+                              <div className="flex items-center justify-between gap-4">
+                                {/* ORIGEN */}
+                                <div className="flex-1 p-3 bg-white dark:bg-zinc-900 rounded-lg border border-slate-250 dark:border-zinc-750 text-center">
+                                  <span className="text-[9px] font-bold text-red-500 uppercase block">DESDE (Origen)</span>
+                                  <span className="text-sm font-extrabold text-slate-800 dark:text-zinc-100 block mt-1 uppercase">
+                                    {transferFrom}
+                                  </span>
+                                </div>
+                                
+                                {/* SWAP BUTTON */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const nextFrom = transferFrom === "Pinamar" ? "Montevideo" : "Pinamar";
+                                    setTransferFrom(nextFrom);
+                                    setTransferTo(nextFrom === "Pinamar" ? "Montevideo" : "Pinamar");
+                                    // Clear current item selection to avoid state mismatches
+                                    setTransferProductId("");
+                                    setTransferVariantId("");
+                                    setTransferQty(1);
+                                    if (transferItems.length > 0) {
+                                      setTransferItems([]);
+                                      showToast("Se cambió la ruta de traslado. La lista de artículos fue reiniciada.", "info");
+                                    }
+                                  }}
+                                  className="p-3.5 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-md hover:scale-110 active:scale-95 transition-all cursor-pointer"
+                                  title="Invertir dirección de envío"
+                                >
+                                  <ArrowLeftRight className="h-4 w-4" />
+                                </button>
+                                
+                                {/* DESTINO */}
+                                <div className="flex-1 p-3 bg-white dark:bg-zinc-900 rounded-lg border border-slate-200 dark:border-zinc-800 text-center">
+                                  <span className="text-[9px] font-bold text-emerald-500 uppercase block">HACIA (Destino)</span>
+                                  <span className="text-sm font-extrabold text-slate-800 dark:text-zinc-100 block mt-1 uppercase">
+                                    {transferTo}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* LIST OF ADDED ITEMS */}
+                            <div className="bg-white dark:bg-zinc-950 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm p-6 space-y-4">
+                              <div className="flex items-center justify-between">
+                                <h3 className="text-xs font-black uppercase text-slate-800 dark:text-zinc-200 tracking-wider">
+                                  Artículos en la lista de transferencia ({transferItems.length})
+                                </h3>
+                                {transferItems.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setTransferItems([]);
+                                      showToast("Lista vaciada.", "info");
+                                    }}
+                                    className="text-xs text-red-500 hover:text-red-600 font-bold transition flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                    <span>Vaciar Lista</span>
+                                  </button>
+                                )}
+                              </div>
+
+                              {transferItems.length === 0 ? (
+                                <div className="p-8 text-center border-2 border-dashed border-slate-200 dark:border-zinc-800 rounded-xl space-y-2">
+                                  <p className="text-xs text-slate-500 dark:text-zinc-400 font-bold">
+                                    No has agregado ningún artículo a la transferencia aún.
+                                  </p>
+                                  <p className="text-[10px] text-slate-400 dark:text-zinc-500">
+                                    Utiliza el buscador de artículos a continuación para seleccionar productos y añadirlos.
+                                  </p>
+                                </div>
+                              ) : (
+                                <div className="border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden divide-y divide-slate-100 dark:divide-zinc-900">
+                                  {transferItems.map((item, idx) => {
+                                    return (
+                                      <div key={item.id} className="p-3 bg-slate-50/30 dark:bg-zinc-900/10 flex items-center justify-between text-xs gap-3">
+                                        <div className="flex items-center gap-3">
+                                          <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 dark:bg-zinc-900 p-1 rounded">
+                                            #{idx + 1}
+                                          </span>
+                                          <div>
+                                            <div className="font-extrabold text-slate-800 dark:text-zinc-100">
+                                              {item.productName}
+                                            </div>
+                                            {item.variantName && (
+                                              <div className="text-[10px] text-indigo-500 font-semibold mt-0.5">
+                                                Variante: {item.variantName}
+                                              </div>
+                                            )}
+                                            {item.sku && (
+                                              <div className="text-[10px] text-slate-600 dark:text-zinc-400 mt-0.5 font-mono font-bold">
+                                                SKU: {item.sku}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-4">
+                                          <div className="flex items-center gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setTransferItems(prev => prev.map(i => {
+                                                  if (i.id === item.id) {
+                                                    return { ...i, quantity: Math.max(1, i.quantity - 1) };
+                                                  }
+                                                  return i;
+                                                }));
+                                              }}
+                                              className="w-6 h-6 flex items-center justify-center bg-white border border-slate-200 dark:bg-zinc-800 dark:border-zinc-700 rounded text-xs font-bold"
+                                            >
+                                              -
+                                            </button>
+                                            <span className="w-8 text-center font-extrabold text-slate-800 dark:text-zinc-150">
+                                              {item.quantity}u
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setTransferItems(prev => prev.map(i => {
+                                                  if (i.id === item.id) {
+                                                    return { ...i, quantity: Math.min(i.maxAvailable, i.quantity + 1) };
+                                                  }
+                                                  return i;
+                                                }));
+                                              }}
+                                              disabled={item.quantity >= item.maxAvailable}
+                                              className="w-6 h-6 flex items-center justify-center bg-white border border-slate-200 dark:bg-zinc-800 dark:border-zinc-700 rounded text-xs font-bold disabled:opacity-50"
+                                            >
+                                              +
+                                            </button>
+                                          </div>
+
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setTransferItems(prev => prev.filter(i => i.id !== item.id));
+                                              showToast("Artículo removido de la lista.", "info");
+                                            }}
+                                            className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded transition cursor-pointer"
+                                            title="Eliminar de la lista"
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+
+                              {transferItems.length > 0 && (
+                                <div className="pt-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setTransferStep(2)}
+                                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2"
+                                  >
+                                    <span>Siguiente Paso: Confirmar Transferencia ({transferItems.length} artículos)</span>
+                                    <ChevronRight className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* ADD NEW PRODUCT FORM */}
+                            <div className="bg-white dark:bg-zinc-950 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm p-6 space-y-4">
+                              <div>
+                                <h3 className="text-xs font-black uppercase text-slate-900 dark:text-zinc-100 tracking-wider">
+                                  Añadir Artículo a la lista
+                                </h3>
+                                <p className="text-slate-700 dark:text-zinc-350 text-[11px] font-semibold mt-1">
+                                  Busca un producto a continuación, define la variante y la cantidad a transferir, y agrégalo a la lista de arriba.
+                                </p>
+                              </div>
+
+                              {transferProductId ? (() => {
+                                const selectedProduct = (store.products || []).find(p => String(p.id) === String(transferProductId));
+                                if (!selectedProduct) return null;
+
+                                const hasVariants = selectedProduct?.variants && selectedProduct.variants.length > 0;
+                                const selectedVariant = hasVariants 
+                                  ? selectedProduct?.variants?.find(v => { if (v.id && transferVariantId && String(v.id) === String(transferVariantId)) return true; if (v.sku && transferVariantId && String(v.sku) === String(transferVariantId)) return true; const comboKey = `${v.size}-${v.color}`; if (transferVariantId && comboKey === transferVariantId) return true; return false; })
+                                  : undefined;
+
+                                const sourceStock = hasVariants
+                                  ? (selectedVariant ? (transferFrom === "Pinamar" ? (selectedVariant.stockPinamar || 0) : (selectedVariant.stockMontevideo || 0)) : 0)
+                                  : (transferFrom === "Pinamar" ? (selectedProduct.stockPinamar || 0) : (selectedProduct.stockMontevideo || 0));
+
+                                const destStock = hasVariants
+                                  ? (selectedVariant ? (transferTo === "Pinamar" ? (selectedVariant.stockPinamar || 0) : (selectedVariant.stockMontevideo || 0)) : 0)
+                                  : (transferTo === "Pinamar" ? (selectedProduct.stockPinamar || 0) : (selectedProduct.stockMontevideo || 0));
+
+                                return (
+                                  <div className="space-y-4 p-4 bg-slate-50 dark:bg-zinc-900/30 rounded-xl border border-slate-200 dark:border-zinc-800 animate-fade-in">
+                                    <div className="flex items-center justify-between gap-4">
+                                      <div className="flex items-center gap-3">
+                                        <img 
+                                          src={selectedProduct.imageUrl || "https://images.unsplash.com/photo-1551028719-00167b16eac5?auto=format&fit=crop&w=100&q=80"}
+                                          className="h-12 w-12 rounded-lg object-cover bg-zinc-100 border border-slate-200"
+                                          referrerPolicy="no-referrer"
+                                        />
+                                        <div>
+                                          <h4 className="font-extrabold text-xs text-slate-900 dark:text-zinc-100">
+                                            {selectedProduct.name} {selectedVariant ? <span className="text-indigo-600 dark:text-indigo-400 font-bold">({selectedVariant.size} / {selectedVariant.color})</span> : ""}
+                                          </h4>
+                                          <p className="text-[10px] font-mono text-slate-600 dark:text-zinc-400 font-bold mt-0.5">
+                                            SKU: {selectedVariant ? (selectedVariant.sku || selectedProduct.codigo || "SIN SKU") : (selectedProduct.codigo || "SIN SKU")}
+                                          </p>
+                                          <div className="flex gap-4 mt-1 text-[10px] font-bold">
+                                            <span className="text-red-500">Stock Origen ({transferFrom}): <strong className="font-mono">{sourceStock}u</strong></span>
+                                            <span className="text-emerald-500">Stock Destino ({transferTo}): <strong className="font-mono">{destStock}u</strong></span>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setTransferProductId("");
+                                          setTransferVariantId("");
+                                          setTransferQty(1);
+                                        }}
+                                        className="px-2.5 py-1.5 bg-white hover:bg-slate-100 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 font-bold text-[10px] rounded-lg transition"
+                                      >
+                                        Cambiar
+                                      </button>
+                                    </div>
+
+                                    {hasVariants && (
+                                      <div className="space-y-1">
+                                        <label className="block text-[10px] font-black text-slate-800 dark:text-zinc-200 uppercase tracking-wider">
+                                          Seleccionar Variante
+                                        </label>
+                                        <select
+                                          value={transferVariantId}
+                                          onChange={(e) => {
+                                            setTransferVariantId(e.target.value);
+                                            setTransferQty(1);
+                                          }}
+                                          className="w-full px-3 py-1.5 text-xs bg-white dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 rounded-xl font-extrabold text-slate-900 dark:text-zinc-100 focus:ring-1 focus:ring-indigo-500"
+                                        >
+                                          {selectedProduct.variants!.map(v => {
+                                            const varSrcStock = transferFrom === "Pinamar" ? (v.stockPinamar || 0) : (v.stockMontevideo || 0);
+                                            const varDestStock = transferTo === "Pinamar" ? (v.stockPinamar || 0) : (v.stockMontevideo || 0);
+                                            return (
+                                              <option key={v.id} value={v.id}>
+                                                {v.size} / {v.color} — [Disponibles en {transferFrom}: {varSrcStock}u | En {transferTo}: {varDestStock}u]
+                                              </option>
+                                            );
+                                          })}
+                                        </select>
+                                      </div>
+                                    )}
+
+                                    <div className="space-y-2">
+                                      <span className="text-[10px] font-black uppercase text-slate-800 dark:text-zinc-200 block">Cantidad a Transferir</span>
+                                      
+                                      {sourceStock <= 0 ? (
+                                        <div className="text-center py-2 text-[11px] font-bold text-red-500 bg-red-500/5 rounded-lg border border-red-500/10">
+                                          No hay existencias disponibles de este artículo en {transferFrom} para poder transferir.
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-4">
+                                          <div className="flex items-center border border-slate-200 dark:border-zinc-800 rounded-xl bg-white dark:bg-zinc-900 p-1 shrink-0">
+                                            <button
+                                              type="button"
+                                              onClick={() => setTransferQty(prev => Math.max(1, prev - 1))}
+                                              className="w-8 h-8 flex items-center justify-center font-bold text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-lg"
+                                            >
+                                              -
+                                            </button>
+                                            <input
+                                              type="number"
+                                              min={1}
+                                              max={sourceStock}
+                                              value={transferQty}
+                                              onChange={(e) => {
+                                                const parsed = parseInt(e.target.value) || 1;
+                                                setTransferQty(Math.max(1, Math.min(sourceStock, parsed)));
+                                              }}
+                                              className="w-14 text-center font-extrabold text-xs bg-transparent border-none focus:outline-none focus:ring-0 text-slate-900 dark:text-white"
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={() => setTransferQty(prev => Math.min(sourceStock, prev + 1))}
+                                              className="w-8 h-8 flex items-center justify-center font-bold text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-lg"
+                                            >
+                                              +
+                                            </button>
+                                          </div>
+
+                                          <div className="text-left text-[10px] text-slate-700 dark:text-zinc-300 font-extrabold self-center">
+                                            Límite: <strong className="text-slate-950 dark:text-white font-black">{sourceStock}u</strong> en depósito de origen.
+                                          </div>
+
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const itemKey = transferVariantId ? `${selectedProduct.id}-${transferVariantId}` : String(selectedProduct.id);
+                                              
+                                              const exists = transferItems.find(i => {
+                                                const key = i.variantId ? `${i.productId}-${i.variantId}` : i.productId;
+                                                return key === itemKey;
+                                              });
+
+                                              if (exists) {
+                                                setTransferItems(prev => prev.map(i => {
+                                                  const key = i.variantId ? `${i.productId}-${i.variantId}` : i.productId;
+                                                  if (key === itemKey) {
+                                                    const newQty = Math.min(sourceStock, i.quantity + transferQty);
+                                                    return { ...i, quantity: newQty };
+                                                  }
+                                                  return i;
+                                                }));
+                                                showToast(`Se actualizó la cantidad de "${selectedProduct.name}" en la lista.`, "success");
+                                              } else {
+                                                setTransferItems(prev => [
+                                                  ...prev,
+                                                  {
+                                                    id: itemKey,
+                                                    productId: String(selectedProduct.id),
+                                                    productName: selectedProduct.name,
+                                                    variantId: transferVariantId || undefined,
+                                                    variantName: hasVariants && selectedVariant ? `${selectedVariant.size} / ${selectedVariant.color}` : undefined,
+                                                    sku: selectedVariant ? (selectedVariant.sku || selectedProduct.codigo || "SIN SKU") : (selectedProduct.codigo || "SIN SKU"),
+                                                    quantity: transferQty,
+                                                    maxAvailable: sourceStock
+                                                  }
+                                                ]);
+                                                showToast(`"${selectedProduct.name}" agregado a la lista.`, "success");
+                                              }
+
+                                              setTransferProductId("");
+                                              setTransferVariantId("");
+                                              setTransferQty(1);
+                                            }}
+                                            className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                                          >
+                                            <Plus className="h-4 w-4" />
+                                            <span>Agregar a la Transferencia</span>
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })() : (
+                                <div className="space-y-4">
+                                  <div className="relative">
+                                    <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400 dark:text-zinc-500" />
+                                    <input
+                                      type="text"
+                                      placeholder="Buscar artículo por nombre o SKU..."
+                                      value={transferSearchQuery}
+                                      onChange={(e) => setTransferSearchQuery(e.target.value)}
+                                      className="w-full pl-9 pr-4 py-2.5 text-xs bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-900 dark:text-white"
+                                    />
+                                  </div>
+
+                                  <div className="max-h-60 overflow-y-auto border border-slate-200 dark:border-zinc-800 rounded-xl divide-y divide-slate-100 dark:divide-zinc-900 custom-scrollbar">
+                                    {(() => {
+                                      const query = transferSearchQuery.toLowerCase().trim();
+                                      const flattenedItems: any[] = [];
+
+                                      (store.products || []).filter(p => p.active !== false).forEach(product => {
+                                        const hasVariants = product.variants && product.variants.length > 0;
+                                        if (hasVariants) {
+                                          product.variants!.forEach(variant => {
+                                            const vSku = variant.sku || product.codigo || "";
+                                            const vName = `${product.name} - ${variant.size} / ${variant.color}`;
+                                            if (
+                                              !query ||
+                                              vName.toLowerCase().includes(query) ||
+                                              vSku.toLowerCase().includes(query)
+                                            ) {
+                                              flattenedItems.push({
+                                                id: `${product.id}-${variant.id || variant.sku}`,
+                                                productId: product.id,
+                                                variantId: variant.id,
+                                                sku: vSku || "SIN SKU",
+                                                name: product.name,
+                                                variantName: `${variant.size} / ${variant.color}`,
+                                                imageUrl: variant.imageUrl || product.imageUrl,
+                                                stockMontevideo: variant.stockMontevideo || 0,
+                                                stockPinamar: variant.stockPinamar || 0,
+                                                sourceStock: transferFrom === "Pinamar" ? (variant.stockPinamar || 0) : (variant.stockMontevideo || 0),
+                                                isVariant: true,
+                                                productObj: product
+                                              });
+                                            }
+                                          });
+                                        } else {
+                                          const pSku = product.codigo || "";
+                                          if (
+                                            !query ||
+                                            (product.name || "").toLowerCase().includes(query) ||
+                                            pSku.toLowerCase().includes(query)
+                                          ) {
+                                            flattenedItems.push({
+                                              id: product.id,
+                                              productId: product.id,
+                                              variantId: undefined,
+                                              sku: pSku || "SIN SKU",
+                                              name: product.name,
+                                              variantName: "",
+                                              imageUrl: product.imageUrl,
+                                              stockMontevideo: product.stockMontevideo || 0,
+                                              stockPinamar: product.stockPinamar || 0,
+                                              sourceStock: transferFrom === "Pinamar" ? (product.stockPinamar || 0) : (product.stockMontevideo || 0),
+                                              isVariant: false,
+                                              productObj: product
+                                            });
+                                          }
+                                        }
+                                      });
+
+                                      if (flattenedItems.length === 0) {
+                                        return <div className="p-6 text-center text-xs text-slate-500 dark:text-zinc-400">Ningún artículo activo coincide con la búsqueda.</div>;
+                                      }
+
+                                      return flattenedItems.slice(0, 30).map(item => {
+                                        return (
+                                          <button
+                                            key={item.id}
+                                            disabled={item.sourceStock <= 0}
+                                            onClick={() => {
+                                              setTransferProductId(String(item.productId));
+                                              setTransferVariantId(item.variantId ? String(item.variantId) : "");
+                                              setTransferQty(1);
+                                            }}
+                                            className={`w-full p-3 text-left hover:bg-slate-50 dark:hover:bg-zinc-900/50 flex items-center justify-between transition group cursor-pointer ${
+                                              item.sourceStock <= 0 ? "opacity-45 cursor-not-allowed bg-slate-50/20" : ""
+                                            }`}
+                                          >
+                                            <div className="flex items-center gap-3">
+                                              <img 
+                                                src={item.imageUrl}
+                                                className="h-10 w-10 rounded-lg object-cover bg-zinc-100 border border-slate-200 dark:border-zinc-800"
+                                                referrerPolicy="no-referrer"
+                                              />
+                                              <div>
+                                                <div className="text-xs font-black text-slate-900 dark:text-zinc-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                                                  {item.name} {item.variantName ? <span className="text-indigo-600 dark:text-indigo-400 font-bold">({item.variantName})</span> : ""}
+                                                </div>
+                                                <div className="text-[10px] font-mono text-slate-600 dark:text-zinc-400 font-bold mt-0.5">SKU: {item.sku}</div>
+                                              </div>
+                                            </div>
+                                            <div className="text-right text-[10px] font-mono shrink-0 bg-slate-100 dark:bg-zinc-900 px-2 py-1 rounded-lg border border-slate-200 dark:border-zinc-800">
+                                              <div className="text-slate-700 dark:text-zinc-300 font-bold">MVD: <strong className="text-slate-950 dark:text-white font-black">{item.stockMontevideo}u</strong></div>
+                                              <div className="text-slate-700 dark:text-zinc-300 font-bold">PIN: <strong className="text-slate-950 dark:text-white font-black">{item.stockPinamar}u</strong></div>
+                                            </div>
+                                          </button>
+                                        );
+                                      });
+                                    })()}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* PASO 2: SIMULACIÓN DE SALDOS Y CONFIRMACIÓN */}
+                        {transferStep === 2 && (
+                          <div className="bg-white dark:bg-zinc-950 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm p-6 space-y-6 animate-fade-in">
+                            <div>
+                              <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Paso 2 de 2</span>
+                              <h3 className="text-sm font-black uppercase text-slate-800 dark:text-zinc-200 tracking-wider mt-1">
+                                Revisar y Confirmar Traslado
+                              </h3>
+                              <p className="text-slate-500 dark:text-zinc-400 text-xs">
+                                Verifica la lista de artículos, cantidades y el balance final estimado de inventario antes de registrar la transferencia.
+                              </p>
+                            </div>
+
+                            {/* ROUTE SUMMARY */}
+                            <div className="bg-indigo-600/5 dark:bg-indigo-500/5 p-4 rounded-xl border border-indigo-500/10 flex items-center justify-between text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 bg-red-500 text-white font-bold text-[9px] rounded-sm">ORIGEN</span>
+                                <strong className="text-slate-800 dark:text-zinc-200 uppercase font-black">{transferFrom}</strong>
+                              </div>
+                              <div className="flex-1 border-t-2 border-dashed border-indigo-300 dark:border-indigo-800/80 mx-4 relative">
+                                <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-indigo-50 dark:bg-zinc-900 px-2 text-[10px] text-indigo-600 font-extrabold uppercase">
+                                  Mover {transferItems.reduce((acc, curr) => acc + curr.quantity, 0)} unidades
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <strong className="text-slate-800 dark:text-zinc-200 uppercase font-black">{transferTo}</strong>
+                                <span className="px-2 py-0.5 bg-emerald-500 text-white font-bold text-[9px] rounded-sm">DESTINO</span>
+                              </div>
+                            </div>
+
+                            {/* COMPARATIVE BALANCES LIST */}
+                            <div className="space-y-3">
+                              <h4 className="text-[11px] font-black uppercase text-slate-700 dark:text-zinc-300 tracking-wider">
+                                Simulación de Existencias Resultantes
+                              </h4>
+
+                              <div className="border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden divide-y divide-slate-100 dark:divide-zinc-900">
+                                <div className="bg-slate-50 dark:bg-zinc-900/40 p-3 grid grid-cols-12 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                  <div className="col-span-6">Artículo / Variante</div>
+                                  <div className="col-span-2 text-center">Cantidad</div>
+                                  <div className="col-span-2 text-right">Saldo {transferFrom}</div>
+                                  <div className="col-span-2 text-right">Saldo {transferTo}</div>
+                                </div>
+
+                                {transferItems.map((item) => {
+                                  const prod = (store.products || []).find(p => String(p.id) === String(item.productId));
+                                  const hasVariants = prod?.variants && prod.variants.length > 0;
+                                  const variant = hasVariants 
+                                    ? prod?.variants?.find(v => String(v.id) === String(item.variantId))
+                                    : undefined;
+
+                                  const fromStockBefore = hasVariants
+                                    ? (variant ? (transferFrom === "Pinamar" ? (variant.stockPinamar || 0) : (variant.stockMontevideo || 0)) : 0)
+                                    : (transferFrom === "Pinamar" ? (prod?.stockPinamar || 0) : (prod?.stockMontevideo || 0));
+
+                                  const toStockBefore = hasVariants
+                                    ? (variant ? (transferTo === "Pinamar" ? (variant.stockPinamar || 0) : (variant.stockMontevideo || 0)) : 0)
+                                    : (transferTo === "Pinamar" ? (prod?.stockPinamar || 0) : (prod?.stockMontevideo || 0));
+
+                                  const fromStockAfter = Math.max(0, fromStockBefore - item.quantity);
+                                  const toStockAfter = toStockBefore + item.quantity;
+
+                                  return (
+                                    <div key={item.id} className="p-3 grid grid-cols-12 text-xs items-center bg-white dark:bg-zinc-950">
+                                      <div className="col-span-6 pr-2">
+                                        <div className="font-extrabold text-slate-800 dark:text-zinc-150 truncate">{item.productName}</div>
+                                        {item.variantName && (
+                                          <div className="text-[9px] text-indigo-500 font-bold mt-0.5">
+                                            Variante: {item.variantName}
+                                          </div>
+                                        )}
+                                        {item.sku && (
+                                          <div className="text-[9px] text-slate-600 dark:text-zinc-400 font-mono font-bold">
+                                            SKU: {item.sku}
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      <div className="col-span-2 text-center font-black text-indigo-600 dark:text-indigo-400 font-mono">
+                                        {item.quantity}u
+                                      </div>
+
+                                      <div className="col-span-2 text-right font-mono text-[11px] space-y-0.5">
+                                        <div className="text-slate-550 dark:text-zinc-500 line-through font-semibold">{fromStockBefore}u</div>
+                                        <div className="text-red-500 font-extrabold">{fromStockAfter}u</div>
+                                      </div>
+
+                                      <div className="col-span-2 text-right font-mono text-[11px] space-y-0.5">
+                                        <div className="text-slate-550 dark:text-zinc-500 font-semibold">{toStockBefore}u</div>
+                                        <div className="text-emerald-500 font-extrabold">{toStockAfter}u</div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* ACTIONS */}
+                            <div className="flex items-center gap-4 pt-2">
+                              <button
+                                type="button"
+                                onClick={() => setTransferStep(1)}
+                                className="px-4 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-slate-700 dark:text-zinc-300 font-bold text-xs rounded-xl transition flex items-center justify-center gap-2"
+                              >
+                                <ChevronLeft className="h-4 w-4" />
+                                <span>Volver a Editar Lista</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                disabled={transfersLoading || transferItems.length === 0}
+                                onClick={() => executeBulkStockTransfer(transferItems, transferFrom, transferTo)}
+                                className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-md hover:scale-[1.01] active:scale-[0.99] transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                              >
+                                {transfersLoading ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    <span>Registrando Traslado Múltiple...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Check className="h-4 w-4" />
+                                    <span>Confirmar y Procesar Transferencia de {transferItems.length} artículos</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {stockSubSection === "history" && (
+                      <div className="bg-white dark:bg-zinc-950 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm overflow-hidden animate-fade-in">
+                        <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between bg-slate-50/50 dark:bg-zinc-950/50">
+                          <div className="flex items-center gap-2.5">
+                            <History className="h-4 w-4 text-indigo-500" />
+                            <h3 className="font-extrabold text-xs uppercase text-slate-900 dark:text-zinc-200 tracking-wider">
+                              REGISTRO GENERAL DE MOVIMIENTOS
+                            </h3>
+                          </div>
+                          <button
+                            onClick={fetchStockTransfers}
+                            disabled={transfersLoading}
+                            className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-850 dark:hover:bg-zinc-800 text-slate-600 dark:text-zinc-400 rounded-lg text-xs font-semibold transition flex items-center gap-1 cursor-pointer"
+                          >
+                            <RefreshCw className={`h-3 w-3 ${transfersLoading ? "animate-spin" : ""}`} />
+                            <span>Actualizar Historial</span>
+                          </button>
+                        </div>
+
+                        {transfersLoading ? (
+                          <div className="p-12 text-center space-y-3">
+                            <Loader2 className="h-8 w-8 text-indigo-500 animate-spin mx-auto" />
+                            <p className="text-xs text-zinc-500 font-bold">Cargando bitácora de transferencias...</p>
+                          </div>
+                        ) : stockTransfers.length === 0 ? (
+                          <div className="p-12 text-center text-zinc-500 text-xs font-semibold">
+                            Aún no se han registrado transferencias de stock entre Montevideo y Pinamar.
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse text-xs">
+                              <thead>
+                                <tr className="bg-slate-50 dark:bg-zinc-900 text-slate-500 dark:text-zinc-400 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-zinc-800">
+                                  <th className="py-3 px-4">Fecha y Hora</th>
+                                  <th className="py-3 px-4">ID Transferencia</th>
+                                  <th className="py-3 px-4">Artículo / Variante</th>
+                                  <th className="py-3 px-4 text-center">Movimiento</th>
+                                  <th className="py-3 px-4 text-center">Cantidad</th>
+                                  <th className="py-3 px-4 text-right">Acción</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 dark:divide-zinc-900 font-medium">
+                                {stockTransfers.map((log) => {
+                                  const formattedDate = new Date(log.createdAt).toLocaleString("es-UY", {
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    second: "2-digit"
+                                  });
+                                  return (
+                                    <tr key={log.id} className="hover:bg-slate-50/50 dark:hover:bg-zinc-900/10">
+                                      <td className="py-3.5 px-4 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+                                        {formattedDate}
+                                      </td>
+                                      <td className="py-3.5 px-4 font-mono text-[10px] text-slate-500">
+                                        #{log.id}
+                                      </td>
+                                      <td className="py-3.5 px-4">
+                                        <div className="flex flex-col">
+                                          <span className="font-bold text-slate-800 dark:text-zinc-100">
+                                            {log.productName}
+                                          </span>
+                                          {log.variantName && (
+                                            <span className="text-[9px] font-extrabold font-mono text-indigo-500 mt-0.5">
+                                              Variante: {log.variantName}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td className="py-3.5 px-4 text-center">
+                                        <div className="inline-flex items-center gap-2 bg-slate-100 dark:bg-zinc-900 py-1 px-3 rounded-full text-[10px] font-bold">
+                                          <span className={log.fromDeposito === "Montevideo" ? "text-indigo-600 dark:text-indigo-400" : "text-amber-600 dark:text-amber-450"}>
+                                            {log.fromDeposito}
+                                          </span>
+                                          <ArrowLeftRight className="h-3 w-3 text-zinc-400" />
+                                          <span className={log.toDeposito === "Montevideo" ? "text-indigo-600 dark:text-indigo-400" : "text-amber-600 dark:text-amber-450"}>
+                                            {log.toDeposito}
+                                          </span>
+                                        </div>
+                                      </td>
+                                      <td className="py-3.5 px-4 text-center font-mono font-black text-slate-800 dark:text-white text-[12px]">
+                                        {log.quantity}
+                                      </td>
+                                      <td className="py-3.5 px-4 text-right">
+                                        <button
+                                          type="button"
+                                          onClick={() => revertStockTransfer(log.id)}
+                                          title="Revertir Traslado"
+                                          className="p-1 text-slate-400 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-zinc-900 rounded-lg transition inline-flex items-center gap-1 cursor-pointer font-bold text-[10px]"
+                                        >
+                                          <RotateCcw className="h-3.5 w-3.5" />
+                                          <span>Anular</span>
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                  </div>
+                );
                 })()}
 
                 {/* AI Assistant panel onboarding to the new sidebar */}

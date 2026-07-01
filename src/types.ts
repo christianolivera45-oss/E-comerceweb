@@ -176,6 +176,8 @@ export interface SiteSettings {
   googleAnalyticsId?: string;
   googleTagManagerId?: string;
   metaPixelId?: string;
+  facebookUrl?: string;
+  instagramUrl?: string;
 }
 
 export interface Category {
@@ -301,6 +303,18 @@ export interface ShippingOrigin {
   contact: string;
 }
 
+export interface StockTransfer {
+  id: string;
+  productId: string;
+  productName: string;
+  variantId?: string;
+  variantName?: string;
+  quantity: number;
+  fromDeposito: "Pinamar" | "Montevideo";
+  toDeposito: "Pinamar" | "Montevideo";
+  createdAt: string;
+}
+
 export interface ShopState {
   products: Product[];
   categories: string[]; // compatible fallback
@@ -313,6 +327,7 @@ export interface ShopState {
   bills?: Bill[]; // entered provider bills/expenses
   shippings?: Shipping[];
   shippingOrigins?: ShippingOrigin[];
+  stockTransfers?: StockTransfer[];
 }
 
 export interface CartItem {

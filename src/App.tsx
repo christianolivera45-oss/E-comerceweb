@@ -95,7 +95,7 @@ import {
   Receipt,
   Scale
 } from "lucide-react";
-import { Product, SiteSettings, ShopState, CartItem, Category, Subcategory, ProductVariant, is3DProduct, Shipping, ShippingOrigin, StockTransfer } from "./types";
+import { Product, SiteSettings, ShopState, CartItem, Category, Subcategory, ProductVariant, is3DProduct, Shipping, ShippingOrigin, StockTransfer, StockAdjustment } from "./types";
 import ThemeStyles from "./components/ThemeStyles";
 import ProductCard from "./components/ProductCard";
 import ProductSlider from "./components/ProductSlider";
@@ -123,13 +123,21 @@ import { FolderOpen } from "lucide-react";
 
 export const normalizeText = (text: string): string => {
   if (!text) return "";
-  return text
+  let norm = text
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "") // remove accents
     .replace(/[^a-z0-9 ]/g, " ")     // replace non-alphanumeric with space
     .replace(/\s+/g, " ")            // collapse multi-spaces
     .trim();
+
+  // Handle common typo or equivalence: 'negor' to 'negro'
+  norm = norm.split(" ").map(word => {
+    if (word === "negor") return "negro";
+    return word;
+  }).join(" ");
+
+  return norm;
 };
 
 export const generateSlug = (text: string): string => {
@@ -165,9 +173,16 @@ export const calculateRelevance = (
   const subCat = (dbSubcategories || []).find(s => s.id === product.subcategoria_id);
   const subCatName = subCat ? normalizeText(subCat.nombre) : "";
 
-  // Normalize colors and sizes to act as tags
-  const colorsStr = (product.colors || []).map(normalizeText).join(" ");
-  const sizesStr = (product.sizes || []).map(normalizeText).join(" ");
+  // Normalize colors and sizes to act as tags, including from variants to handle dynamic product options
+  const topColors = product.colors || [];
+  const variantColors = (product.variants || []).map(v => v.color).filter(Boolean);
+  const allColors = Array.from(new Set([...topColors, ...variantColors]));
+  const colorsStr = allColors.map(normalizeText).join(" ");
+
+  const topSizes = product.sizes || [];
+  const variantSizes = (product.variants || []).map(v => v.size).filter(Boolean);
+  const allSizes = Array.from(new Set([...topSizes, ...variantSizes]));
+  const sizesStr = allSizes.map(normalizeText).join(" ");
 
   const queryTokens = normalizedQuery.split(" ").filter(t => t.length > 0);
   if (queryTokens.length === 0) return 0;
@@ -1042,7 +1057,7 @@ export default function App() {
 
   // Search & Navigation
   const [activeTab, setActiveTab] = useState<"storefront" | "admin" | "checkout">("storefront");
-  const [adminSection, setAdminSection] = useState<"general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales" | "reviews" | "bills" | "finances" | "shippings" | "assistant" | "cloudinary_explorer">("finances");
+  const [adminSection, setAdminSection] = useState<"general" | "products" | "categories" | "promos" | "security" | "stock" | "dashboard" | "banner" | "footer" | "payments" | "checkout_config" | "sales" | "reviews" | "bills" | "finances" | "shippings" | "assistant" | "cloudinary_explorer">("dashboard");
   const [showAIAssistantSidebar, setShowAIAssistantSidebar] = useState(false);
   const [showAdminDevicePreview, setShowAdminDevicePreview] = useState(true);
   const [mobileAdminMenuOpen, setMobileAdminMenuOpen] = useState(false);
@@ -1087,8 +1102,16 @@ export default function App() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   // Stock Transfer States
-  const [stockSubSection, setStockSubSection] = useState<"list" | "transfer" | "history">("list");
+  const [stockSubSection, setStockSubSection] = useState<"list" | "transfer" | "history" | "adjustments">("list");
   const [stockTransfers, setStockTransfers] = useState<StockTransfer[]>([]);
+  
+  // Direct Stock Adjustment Confirmation Modal States
+  const [showStockAdjustmentModal, setShowStockAdjustmentModal] = useState<boolean>(false);
+  const [pendingStockItem, setPendingStockItem] = useState<any>(null);
+  const [pendingStockField, setPendingStockField] = useState<string>("");
+  const [pendingStockValue, setPendingStockValue] = useState<number>(0);
+  const [stockAdjustmentReason, setStockAdjustmentReason] = useState<string>("Auditoría / Conteo Físico");
+  const [customStockAdjustmentReason, setCustomStockAdjustmentReason] = useState<string>("");
   const [transfersLoading, setTransfersLoading] = useState<boolean>(false);
   const [transferProductId, setTransferProductId] = useState<string>("");
   const [transferVariantId, setTransferVariantId] = useState<string>("");
@@ -1227,8 +1250,8 @@ export default function App() {
         setAdminSection("emails");
         fetchEmailLogs();
       }
-      else if (sub === "finances") setAdminSection("finances");
-      else setAdminSection("finances");
+      else if (sub === "finances") setAdminSection("dashboard");
+      else setAdminSection("dashboard");
 
       // Verify session token integrity on every URL change
       const token = localStorage.getItem("apex_admin_token");
@@ -3367,7 +3390,14 @@ export default function App() {
     showAdminToast(`Límite de stock bajo configurado: ${newThreshold} unidades.`, "success");
   };
 
-  const handleUpdateStockItem = async (item: any, field: string, value: any) => {
+  const handleUpdateStockItem = async (item: any, field: string, value: any, reasonStr?: string) => {
+    let originalStock = 0;
+    if (field === "stockMontevideo") {
+      originalStock = item.stockMontevideo || 0;
+    } else if (field === "stockPinamar") {
+      originalStock = item.stockPinamar || 0;
+    }
+
     const updatedProducts = store.products.map(p => {
       if (p.id !== item.productId) return p;
 
@@ -3423,9 +3453,44 @@ export default function App() {
       return updatedProduct;
     });
 
-    const updatedState = { ...store, products: updatedProducts };
+    let updatedAdjustments = store.stockAdjustments || [];
+    if (field === "stockMontevideo" || field === "stockPinamar") {
+      const newValue = Math.max(0, Math.round(parseInt(value) || 0));
+      const adjustment: StockAdjustment = {
+        id: `ADJ-${Date.now()}-${Math.floor(Math.random() * 900) + 100}`,
+        sku: item.sku || "SIN-SKU",
+        productName: item.name,
+        variantName: item.variantName || undefined,
+        deposito: field === "stockMontevideo" ? "Montevideo" : "Pinamar",
+        stockAnterior: originalStock,
+        stockNuevo: newValue,
+        motivo: reasonStr || "Ajuste Directo Rápido",
+        usuario: "Administrador",
+        createdAt: new Date().toISOString()
+      };
+      updatedAdjustments = [adjustment, ...updatedAdjustments];
+    }
+
+    const updatedState = { 
+      ...store, 
+      products: updatedProducts,
+      stockAdjustments: updatedAdjustments
+    };
     setStore(updatedState);
     await saveStateToServer(updatedState);
+  };
+
+  const requestStockAdjustment = (item: any, field: string, newValue: number) => {
+    const currentVal = field === "stockMontevideo" ? (item.stockMontevideo || 0) : (item.stockPinamar || 0);
+    if (Math.round(newValue) === Math.round(currentVal)) {
+      return;
+    }
+    setPendingStockItem(item);
+    setPendingStockField(field);
+    setPendingStockValue(newValue);
+    setStockAdjustmentReason("Auditoría / Conteo Físico");
+    setCustomStockAdjustmentReason("");
+    setShowStockAdjustmentModal(true);
   };
 
   // CRUD handlers - Coupons
@@ -4226,6 +4291,8 @@ export default function App() {
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               setSearchQuery(tempSearchQuery);
+                              setSelectedCategory("todos");
+                              setSelectedSubcategory("all");
                               setShowSuggestions(false);
                             }
                           }}
@@ -4393,6 +4460,8 @@ export default function App() {
                               <button
                                 onClick={() => {
                                   setSearchQuery(tempSearchQuery);
+                                  setSelectedCategory("todos");
+                                  setSelectedSubcategory("all");
                                   setShowSuggestions(false);
                                 }}
                                 className="hover:underline font-bold bg-transparent border-0 cursor-pointer text-[#E6BF76]"
@@ -5602,20 +5671,6 @@ export default function App() {
                   </div>
                   <div className="space-y-1">
                     <button
-                      onClick={() => navigateAdminSection("finances")}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
-                        adminSection === "finances"
-                          ? "bg-indigo-600/15 text-indigo-400 border border-indigo-500/30 shadow-[0_4px_20px_rgba(99,102,241,0.15)]"
-                          : "hover:bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 border border-transparent"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Scale className={`h-4 w-4 ${adminSection === "finances" ? "text-indigo-400" : "text-zinc-400"}`} />
-                        <span>Resumen General</span>
-                      </div>
-                    </button>
-
-                    <button
                       onClick={() => navigateAdminSection("dashboard")}
                       className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-xs font-bold tracking-wide transition-all duration-300 hover:translate-x-0.5 cursor-pointer ${
                         adminSection === "dashboard"
@@ -5624,7 +5679,7 @@ export default function App() {
                       }`}
                     >
                       <TrendingUp className={`h-4 w-4 transition-transform duration-300 ${adminSection === "dashboard" ? "scale-110 text-indigo-400" : "text-zinc-400"}`} />
-                      <span>Dashboard Web</span>
+                      <span>Dashboard y Finanzas</span>
                     </button>
 
                     <button
@@ -5990,9 +6045,6 @@ export default function App() {
                       {adminSection === "assistant" && "Asistente Corporativo de IA"}
                     </span>
                   </h2>
-                  <p className="text-zinc-400 text-xs mt-1.5 leading-relaxed max-w-2xl font-semibold">
-                    <span>Modifica los contenidos de tu tienda en tiempo real. Los cambios se sincronizarán directamente con tu base de datos central sin tocar código.</span>
-                  </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 self-stretch md:self-auto justify-end">
@@ -6059,7 +6111,7 @@ export default function App() {
             )}
 
             {/* DYNAMIC SECTIONS GRID */}
-            {adminSection === "dashboard" ? (
+            {(adminSection === "dashboard" || adminSection === "finances") ? (
               <DashboardGeneral
                 store={store}
                 navigateAdminSection={navigateAdminSection}
@@ -6185,10 +6237,6 @@ export default function App() {
                     showAdminToast("Error de conexión al eliminar la boleta.", "error");
                   }
                 }}
-              />
-            ) : adminSection === "finances" ? (
-              <DashboardResumenGeneral
-                store={store}
               />
             ) : adminSection === "shippings" ? (
               <DashboardShippings
@@ -11577,6 +11625,20 @@ export default function App() {
                           <History className="h-4 w-4" />
                           <span>Historial de Transferencias</span>
                         </button>
+
+                        <button
+                          onClick={() => {
+                            setStockSubSection("adjustments");
+                          }}
+                          className={`px-4 py-2 text-xs font-bold transition flex items-center gap-1.5 border-b-2 cursor-pointer whitespace-nowrap ${
+                            stockSubSection === "adjustments"
+                              ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400 font-black"
+                              : "border-transparent text-slate-500 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                          }`}
+                        >
+                          <Scale className="h-4 w-4" />
+                          <span>Historial de Ajustes Directos</span>
+                        </button>
                       </div>
 
                       {stockSubSection === "list" && (
@@ -11868,8 +11930,7 @@ export default function App() {
                                           <button
                                             onClick={() => {
                                               const nextVal = Math.max(0, item.stockMontevideo - 1);
-                                              handleUpdateStockItem(item, "stockMontevideo", nextVal);
-                                              showToast(`MVD de ${item.sku}: ${nextVal}u`, "success");
+                                              requestStockAdjustment(item, "stockMontevideo", nextVal);
                                             }}
                                             className="w-5 h-5 flex items-center justify-center rounded-md bg-slate-100 dark:bg-zinc-800 text-zinc-500 hover:bg-red-500 hover:text-white transition opacity-0 group-hover:opacity-100 cursor-pointer"
                                             title="Descontar 1 unidad"
@@ -11878,10 +11939,16 @@ export default function App() {
                                           </button>
                                           <input
                                             type="number"
-                                            value={Math.round(item.stockMontevideo || 0)}
-                                            onChange={(e) => {
+                                            key={`${item.sku}-mvd-${item.stockMontevideo}`}
+                                            defaultValue={Math.round(item.stockMontevideo || 0)}
+                                            onBlur={(e) => {
                                               const val = Math.max(0, parseInt(e.target.value) || 0);
-                                              handleUpdateStockItem(item, "stockMontevideo", val);
+                                              requestStockAdjustment(item, "stockMontevideo", val);
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Enter") {
+                                                (e.target as HTMLInputElement).blur();
+                                              }
                                             }}
                                             className={`w-12 text-center bg-transparent focus:bg-white dark:focus:bg-zinc-950 rounded-md border-0 focus:ring-1 focus:ring-indigo-500 font-extrabold p-0 focus:p-1 outline-hidden transition ${
                                               item.stockMontevideo <= 0
@@ -11892,8 +11959,7 @@ export default function App() {
                                           <button
                                             onClick={() => {
                                               const nextVal = item.stockMontevideo + 1;
-                                              handleUpdateStockItem(item, "stockMontevideo", nextVal);
-                                              showToast(`MVD de ${item.sku}: ${nextVal}u`, "success");
+                                              requestStockAdjustment(item, "stockMontevideo", nextVal);
                                             }}
                                             className="w-5 h-5 flex items-center justify-center rounded-md bg-slate-100 dark:bg-zinc-800 text-zinc-500 hover:bg-emerald-500 hover:text-white transition opacity-0 group-hover:opacity-100 cursor-pointer"
                                             title="Sumar 1 unidad"
@@ -11909,8 +11975,7 @@ export default function App() {
                                           <button
                                             onClick={() => {
                                               const nextVal = Math.max(0, item.stockPinamar - 1);
-                                              handleUpdateStockItem(item, "stockPinamar", nextVal);
-                                              showToast(`PIN de ${item.sku}: ${nextVal}u`, "success");
+                                              requestStockAdjustment(item, "stockPinamar", nextVal);
                                             }}
                                             className="w-5 h-5 flex items-center justify-center rounded-md bg-slate-100 dark:bg-zinc-800 text-zinc-500 hover:bg-red-500 hover:text-white transition opacity-0 group-hover:opacity-100 cursor-pointer"
                                             title="Descontar 1 unidad"
@@ -11919,10 +11984,16 @@ export default function App() {
                                           </button>
                                           <input
                                             type="number"
-                                            value={Math.round(item.stockPinamar || 0)}
-                                            onChange={(e) => {
+                                            key={`${item.sku}-pin-${item.stockPinamar}`}
+                                            defaultValue={Math.round(item.stockPinamar || 0)}
+                                            onBlur={(e) => {
                                               const val = Math.max(0, parseInt(e.target.value) || 0);
-                                              handleUpdateStockItem(item, "stockPinamar", val);
+                                              requestStockAdjustment(item, "stockPinamar", val);
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Enter") {
+                                                (e.target as HTMLInputElement).blur();
+                                              }
                                             }}
                                             className={`w-12 text-center bg-transparent focus:bg-white dark:focus:bg-zinc-950 rounded-md border-0 focus:ring-1 focus:ring-indigo-500 font-extrabold p-0 focus:p-1 outline-hidden transition ${
                                               item.stockPinamar <= 0
@@ -11933,8 +12004,7 @@ export default function App() {
                                           <button
                                             onClick={() => {
                                               const nextVal = item.stockPinamar + 1;
-                                              handleUpdateStockItem(item, "stockPinamar", nextVal);
-                                              showToast(`PIN de ${item.sku}: ${nextVal}u`, "success");
+                                              requestStockAdjustment(item, "stockPinamar", nextVal);
                                             }}
                                             className="w-5 h-5 flex items-center justify-center rounded-md bg-slate-100 dark:bg-zinc-800 text-zinc-500 hover:bg-emerald-500 hover:text-white transition opacity-0 group-hover:opacity-100 cursor-pointer"
                                             title="Sumar 1 unidad"
@@ -12216,9 +12286,44 @@ export default function App() {
                                             >
                                               -
                                             </button>
-                                            <span className="w-8 text-center font-extrabold text-slate-800 dark:text-zinc-150">
-                                              {item.quantity}u
-                                            </span>
+                                            <div className="flex items-center gap-1">
+                                              <input
+                                                type="number"
+                                                min={1}
+                                                max={item.maxAvailable}
+                                                value={item.quantity === 0 ? "" : item.quantity}
+                                                onChange={(e) => {
+                                                  const valStr = e.target.value;
+                                                  if (valStr === "") {
+                                                    setTransferItems(prev => prev.map(i => {
+                                                      if (i.id === item.id) {
+                                                        return { ...i, quantity: 0 };
+                                                      }
+                                                      return i;
+                                                    }));
+                                                    return;
+                                                  }
+                                                  const parsed = parseInt(valStr) || 0;
+                                                  const finalVal = Math.min(item.maxAvailable, parsed);
+                                                  setTransferItems(prev => prev.map(i => {
+                                                    if (i.id === item.id) {
+                                                      return { ...i, quantity: finalVal };
+                                                    }
+                                                    return i;
+                                                  }));
+                                                }}
+                                                onBlur={() => {
+                                                  setTransferItems(prev => prev.map(i => {
+                                                    if (i.id === item.id && i.quantity < 1) {
+                                                      return { ...i, quantity: 1 };
+                                                    }
+                                                    return i;
+                                                  }));
+                                                }}
+                                                className="w-11 text-center font-extrabold text-slate-800 dark:text-zinc-100 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-750 rounded py-0.5 text-xs focus:ring-1 focus:ring-indigo-500"
+                                              />
+                                              <span className="text-[10px] font-bold text-slate-500 dark:text-zinc-400">u</span>
+                                            </div>
                                             <button
                                               type="button"
                                               onClick={() => {
@@ -12379,10 +12484,20 @@ export default function App() {
                                               type="number"
                                               min={1}
                                               max={sourceStock}
-                                              value={transferQty}
+                                              value={transferQty === 0 ? "" : transferQty}
                                               onChange={(e) => {
-                                                const parsed = parseInt(e.target.value) || 1;
-                                                setTransferQty(Math.max(1, Math.min(sourceStock, parsed)));
+                                                const valStr = e.target.value;
+                                                if (valStr === "") {
+                                                  setTransferQty(0);
+                                                  return;
+                                                }
+                                                const parsed = parseInt(valStr) || 0;
+                                                setTransferQty(Math.min(sourceStock, parsed));
+                                              }}
+                                              onBlur={() => {
+                                                if (transferQty < 1) {
+                                                  setTransferQty(1);
+                                                }
                                               }}
                                               className="w-14 text-center font-extrabold text-xs bg-transparent border-none focus:outline-none focus:ring-0 text-slate-900 dark:text-white"
                                             />
@@ -12793,6 +12908,134 @@ export default function App() {
                                           <RotateCcw className="h-3.5 w-3.5" />
                                           <span>Anular</span>
                                         </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {stockSubSection === "adjustments" && (
+                      <div className="bg-white dark:bg-zinc-950 rounded-2xl border border-slate-200 dark:border-zinc-800 shadow-sm overflow-hidden animate-fade-in">
+                        <div className="p-4 border-b border-slate-200 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-50/50 dark:bg-zinc-950/50">
+                          <div className="flex items-center gap-2.5">
+                            <Scale className="h-4 w-4 text-indigo-500" />
+                            <h3 className="font-extrabold text-xs uppercase text-slate-900 dark:text-zinc-200 tracking-wider">
+                              HISTORIAL DE AJUSTES MANUALES DIRECTOS
+                            </h3>
+                            <span className="px-2 py-0.5 text-[10px] font-bold bg-indigo-100 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-400 rounded-full font-mono">
+                              {(store.stockAdjustments || []).length} Ajustes
+                            </span>
+                          </div>
+                          {/* Clear History Button */}
+                          {(store.stockAdjustments || []).length > 0 && (
+                            <button
+                              onClick={async () => {
+                                if (window.confirm("¿Está seguro de que desea limpiar la bitácora de ajustes manuales? Esta acción es irreversible.")) {
+                                  const updatedState = { ...store, stockAdjustments: [] };
+                                  setStore(updatedState);
+                                  await saveStateToServer(updatedState);
+                                  showToast("Historial de ajustes directos borrado.", "success");
+                                }
+                              }}
+                              className="px-2.5 py-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 text-xs font-bold rounded-lg transition border border-red-200 dark:border-red-900 flex items-center gap-1.5 cursor-pointer"
+                            >
+                              Limpiar Historial
+                            </button>
+                          )}
+                        </div>
+
+                        {!store.stockAdjustments || store.stockAdjustments.length === 0 ? (
+                          <div className="p-12 text-center space-y-2">
+                            <Scale className="h-10 w-10 text-zinc-300 dark:text-zinc-700 mx-auto" />
+                            <p className="text-xs text-zinc-500 font-bold">Aún no se han registrado ajustes directos de stock.</p>
+                            <p className="text-[11px] text-zinc-400 max-w-xs mx-auto">
+                              Cuando modifique el stock usando los botones de incremento/decremento o escriba directamente un valor en la tabla, el cambio quedará auditado aquí con su respectivo motivo.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse text-xs">
+                              <thead>
+                                <tr className="bg-slate-50 dark:bg-zinc-900 text-slate-500 dark:text-zinc-400 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-zinc-800">
+                                  <th className="py-3 px-4">Fecha y Hora</th>
+                                  <th className="py-3 px-4">ID Ajuste</th>
+                                  <th className="py-3 px-4">Artículo / Variante</th>
+                                  <th className="py-3 px-4">SKU</th>
+                                  <th className="py-3 px-4 text-center">Depósito</th>
+                                  <th className="py-3 px-4 text-center">Cambio Stock</th>
+                                  <th className="py-3 px-4">Motivo / Razón</th>
+                                  <th className="py-3 px-4">Autor</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 dark:divide-zinc-900 font-medium">
+                                {store.stockAdjustments.map((log) => {
+                                  const formattedDate = new Date(log.createdAt).toLocaleString("es-UY", {
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    second: "2-digit"
+                                  });
+                                  const diff = log.stockNuevo - log.stockAnterior;
+                                  return (
+                                    <tr key={log.id} className="hover:bg-slate-50/50 dark:hover:bg-zinc-900/10">
+                                      <td className="py-3.5 px-4 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+                                        {formattedDate}
+                                      </td>
+                                      <td className="py-3.5 px-4 font-mono text-[10px] text-zinc-500">
+                                        #{log.id}
+                                      </td>
+                                      <td className="py-3.5 px-4">
+                                        <div className="flex flex-col">
+                                          <span className="font-bold text-slate-800 dark:text-zinc-100">
+                                            {log.productName}
+                                          </span>
+                                          {log.variantName && (
+                                            <span className="text-[9px] font-extrabold font-mono text-indigo-500 mt-0.5">
+                                              Variante: {log.variantName}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td className="py-3.5 px-4 font-mono font-bold text-slate-700 dark:text-zinc-350">
+                                        {log.sku}
+                                      </td>
+                                      <td className="py-3.5 px-4 text-center">
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                                          log.deposito === "Montevideo" 
+                                            ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400" 
+                                            : "bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400"
+                                        }`}>
+                                          {log.deposito}
+                                        </span>
+                                      </td>
+                                      <td className="py-3.5 px-4 text-center font-mono text-[11px]">
+                                        <div className="flex items-center justify-center gap-1.5">
+                                          <span className="text-zinc-400 font-bold">{log.stockAnterior}</span>
+                                          <span className="text-zinc-300">➔</span>
+                                          <span className="font-black text-slate-800 dark:text-white">{log.stockNuevo}</span>
+                                          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                                            diff > 0 
+                                              ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 font-black" 
+                                              : diff < 0 
+                                              ? "bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 font-black" 
+                                              : "bg-zinc-50 dark:bg-zinc-900 text-zinc-500"
+                                          }`}>
+                                            {diff > 0 ? `+${diff}` : diff}
+                                          </span>
+                                        </div>
+                                      </td>
+                                      <td className="py-3.5 px-4 font-semibold text-slate-700 dark:text-zinc-300">
+                                        {log.motivo}
+                                      </td>
+                                      <td className="py-3.5 px-4 text-zinc-500 font-mono text-[10px]">
+                                        {log.usuario || "Administrador"}
                                       </td>
                                     </tr>
                                   );
@@ -15872,6 +16115,164 @@ export default function App() {
               }}
               onClose={() => setCloudinarySelectorConfig(null)}
             />
+          </div>
+        </div>
+      )}
+
+      {showStockAdjustmentModal && pendingStockItem && (
+        <div className="fixed inset-0 bg-zinc-950/80 backdrop-blur-sm flex items-center justify-center z-[99999] p-4 animate-fade-in">
+          <div className="w-full max-w-md bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-xl overflow-hidden">
+            <div className="p-5 border-b border-slate-100 dark:border-zinc-800 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-amber-50 dark:bg-amber-950/50 flex items-center justify-center text-amber-500">
+                <Scale className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-slate-900 dark:text-zinc-100 uppercase tracking-wide">
+                  Confirmar Ajuste de Stock
+                </h3>
+                <p className="text-xs text-zinc-500">
+                  Verifique los cambios antes de actualizar las existencias.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Product Info Card */}
+              <div className="bg-slate-50 dark:bg-zinc-950 p-4 rounded-xl border border-slate-100 dark:border-zinc-900 space-y-1.5 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-zinc-400 font-bold">Artículo:</span>
+                  <span className="font-black text-slate-800 dark:text-zinc-200 text-right">
+                    {pendingStockItem.name}
+                  </span>
+                </div>
+                {pendingStockItem.variantName && (
+                  <div className="flex justify-between">
+                    <span className="text-zinc-400 font-bold">Variante:</span>
+                    <span className="font-bold text-slate-700 dark:text-zinc-300">
+                      {pendingStockItem.variantName}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-zinc-400 font-bold">Código SKU:</span>
+                  <span className="font-mono font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-1.5 py-0.5 rounded text-[11px]">
+                    {pendingStockItem.sku || "SIN SKU"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-400 font-bold">Depósito:</span>
+                  <span className="font-bold text-slate-800 dark:text-zinc-200">
+                    {pendingStockField === "stockMontevideo" ? "Montevideo" : "Pinamar"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Stock Comparison Grid */}
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="bg-slate-50 dark:bg-zinc-950/30 p-2.5 rounded-lg border border-slate-100 dark:border-zinc-800/60 flex flex-col justify-center items-center min-h-[76px]">
+                  <span className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">Actual</span>
+                  <span className="text-lg font-black text-slate-600 dark:text-zinc-400 font-mono leading-none">
+                    {pendingStockField === "stockMontevideo" ? (pendingStockItem.stockMontevideo || 0) : (pendingStockItem.stockPinamar || 0)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-center text-zinc-300 dark:text-zinc-700 font-bold">
+                  ➔
+                </div>
+                <div className="bg-indigo-50/50 dark:bg-indigo-950/20 p-2.5 rounded-lg border border-indigo-100 dark:border-indigo-950/40 flex flex-col justify-center items-center min-h-[76px]">
+                  <span className="block text-[10px] font-bold text-indigo-500 uppercase tracking-wider mb-1.5">Nuevo</span>
+                  <div className="flex items-center gap-1.5 justify-center">
+                    <button
+                      type="button"
+                      onClick={() => setPendingStockValue(prev => Math.max(0, prev - 1))}
+                      className="w-6 h-6 flex items-center justify-center rounded-md bg-white hover:bg-slate-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 hover:text-red-500 transition font-black shadow-xs cursor-pointer text-xs border border-slate-200 dark:border-zinc-700 select-none"
+                      title="Disminuir 1"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min="0"
+                      value={pendingStockValue}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value);
+                        setPendingStockValue(isNaN(val) ? 0 : Math.max(0, val));
+                      }}
+                      className="w-12 text-center font-black text-sm text-indigo-600 dark:text-indigo-400 bg-white dark:bg-zinc-950 border border-indigo-100 dark:border-indigo-900 rounded py-0.5 outline-hidden focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPendingStockValue(prev => prev + 1)}
+                      className="w-6 h-6 flex items-center justify-center rounded-md bg-white hover:bg-slate-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 hover:text-emerald-500 transition font-black shadow-xs cursor-pointer text-xs border border-slate-200 dark:border-zinc-700 select-none"
+                      title="Incrementar 1"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Reason for adjustment input */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700 dark:text-zinc-300">
+                  Motivo del Ajuste Directo
+                </label>
+                <select
+                  value={stockAdjustmentReason}
+                  onChange={(e) => setStockAdjustmentReason(e.target.value)}
+                  className="w-full bg-white dark:bg-zinc-950 text-slate-800 dark:text-zinc-200 text-xs font-semibold rounded-lg border border-slate-200 dark:border-zinc-800 focus:ring-1 focus:ring-indigo-500 outline-hidden p-2"
+                >
+                  <option value="Auditoría / Conteo Físico">Auditoría / Conteo Físico</option>
+                  <option value="Rotura / Daño de mercadería">Rotura / Daño de mercadería</option>
+                  <option value="Pérdida / Faltante">Pérdida / Faltante</option>
+                  <option value="Entrada de nuevo stock">Entrada de nuevo stock</option>
+                  <option value="Ajuste por venta directa">Ajuste por venta directa</option>
+                  <option value="Error de sistema / Corrección">Error de sistema / Corrección</option>
+                  <option value="Otro">Otro (Especificar)</option>
+                </select>
+              </div>
+
+              {stockAdjustmentReason === "Otro" && (
+                <div className="space-y-1 animate-fade-in">
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    Escriba el motivo personalizado
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej. Devolución de cliente o regalo empresarial"
+                    value={customStockAdjustmentReason}
+                    onChange={(e) => setCustomStockAdjustmentReason(e.target.value)}
+                    className="w-full bg-white dark:bg-zinc-950 text-slate-800 dark:text-zinc-200 text-xs font-semibold rounded-lg border border-slate-200 dark:border-zinc-800 focus:ring-1 focus:ring-indigo-500 outline-hidden p-2"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="p-5 bg-slate-50 dark:bg-zinc-950/40 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowStockAdjustmentModal(false);
+                  setPendingStockItem(null);
+                }}
+                className="px-4 py-2 text-xs font-bold bg-white hover:bg-slate-100 dark:bg-zinc-900 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-700 dark:text-zinc-300 rounded-xl transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const finalReason = stockAdjustmentReason === "Otro" ? (customStockAdjustmentReason || "Ajuste manual personalizado") : stockAdjustmentReason;
+                  await handleUpdateStockItem(pendingStockItem, pendingStockField, pendingStockValue, finalReason);
+                  showToast("¡Ajuste directo de stock guardado con éxito!", "success");
+                  setShowStockAdjustmentModal(false);
+                  setPendingStockItem(null);
+                }}
+                className="px-4 py-2 text-xs font-black bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>Confirmar Ajuste</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

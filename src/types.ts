@@ -315,6 +315,19 @@ export interface StockTransfer {
   createdAt: string;
 }
 
+export interface StockAdjustment {
+  id: string;
+  sku: string;
+  productName: string;
+  variantName?: string;
+  deposito: "Montevideo" | "Pinamar";
+  stockAnterior: number;
+  stockNuevo: number;
+  motivo: string;
+  usuario: string;
+  createdAt: string;
+}
+
 export interface ShopState {
   products: Product[];
   categories: string[]; // compatible fallback
@@ -328,6 +341,7 @@ export interface ShopState {
   shippings?: Shipping[];
   shippingOrigins?: ShippingOrigin[];
   stockTransfers?: StockTransfer[];
+  stockAdjustments?: StockAdjustment[];
 }
 
 export interface CartItem {

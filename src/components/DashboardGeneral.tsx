@@ -19,9 +19,11 @@ import {
   Percent,
   MessageSquare,
   Clock,
-  CreditCard
+  CreditCard,
+  Scale
 } from "lucide-react";
 import { ShopState, Product } from "../types";
+import { DashboardResumenGeneral } from "./DashboardResumenGeneral";
 
 // Helper for deterministic pseudo-random calculations to keep metrics stable
 function getSeedRandom(seedStr: string) {
@@ -67,6 +69,8 @@ export function DashboardGeneral({
   setEditingProduct
 }: DashboardGeneralProps) {
 
+  const [activeTab, setActiveTab] = useState<"sales" | "finances">("sales");
+
   const activeProducts = store.products.filter(p => p.active !== false);
   const pausedProducts = activeProducts.filter(p => p.paused === true);
   const liveProducts = activeProducts.filter(p => p.paused !== true);
@@ -81,144 +85,253 @@ export function DashboardGeneral({
   const couponsList = store.coupons || [];
   const activeCoupons = couponsList.filter(c => c.active !== false);
 
-  // Fixed reference date: June 1st, 2026 (local time metadata)
-  const today = useMemo(() => new Date(2026, 5, 1), []);
+  // Check if we have real approved orders to display genuine metrics
+  const usingRealData = useMemo(() => {
+    return (store.orders || []).some(o => o.status === "pago_aprobado");
+  }, [store.orders]);
 
-  // Dynamic Sales, Profits & Orders Simulation Engine
+  // Fixed reference date: June 1st, 2026 for simulation, or current date for real data
+  const today = useMemo(() => {
+    return usingRealData ? new Date() : new Date(2026, 5, 1);
+  }, [usingRealData]);
+
+  // Dynamic Sales, Profits & Orders Engine (Real Data-First with simulation fallback)
   const salesHistory = useMemo(() => {
-    if (activeProducts.length === 0) {
-      return { 
-        orders: [], 
-        totalSales: 0, 
-        totalOrders: 0, 
-        avgTicket: 0, 
-        totalProfit: 0, 
-        dailySales: [], 
-        productsSales: [] 
-      };
-    }
-
-    const rnd = getSeedRandom("VentasJuemDashboardSeed_2026_Rev2");
-    const orders: {
-      id: string;
-      date: string;
-      total: number;
-      cost: number;
-      profit: number;
-      items: { product: Product; quantity: number; price: number }[];
-    }[] = [];
-
-    // Construct a full 30-day chronological array ending June 1st, 2026 (local date metadata)
-    const days: string[] = [];
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(today.getTime() - i * 24 * 60 * 60 * 1000);
-      days.push(d.toISOString().split("T")[0]);
-    }
-
-    // Generate simulated orders per day
-    days.forEach((dateString) => {
-      const dayRnd = getSeedRandom(`DateSeed_${dateString}`);
+    if (usingRealData) {
+      const approvedOrders = (store.orders || []).filter(o => o.status === "pago_aprobado");
       
-      // Generate between 1 and 4 orders, with higher volume on weekends (as normal for B2C/B2B eCommerce)
-      const dayOfWeek = new Date(dateString).getDay(); 
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-      const numOrders = Math.floor(dayRnd() * (isWeekend ? 4 : 3)) + 1; 
-      
-      for (let o = 0; o < numOrders; o++) {
+      // Last 30 days ending today
+      const days: string[] = [];
+      const refDate = new Date();
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(refDate.getTime() - i * 24 * 60 * 60 * 1000);
+        days.push(d.toISOString().split("T")[0]);
+      }
+
+      const ordersList: {
+        id: string;
+        date: string;
+        total: number;
+        cost: number;
+        profit: number;
+        items: { product: Product; quantity: number; price: number }[];
+      }[] = [];
+
+      approvedOrders.forEach(o => {
+        const dateString = o.createdAt ? o.createdAt.split("T")[0] : "";
         const orderItems: { product: Product; quantity: number; price: number }[] = [];
-        let orderTotal = 0;
         let orderCost = 0;
 
-        // 1 to 3 items per order card
-        const numItems = Math.floor(dayRnd() * 3) + 1;
-        for (let i = 0; i < numItems; i++) {
-          const prodIdx = Math.floor(dayRnd() * activeProducts.length);
-          const p = activeProducts[prodIdx];
-          const qty = Math.floor(dayRnd() * 2) + 1;
-          
-          // Cost estimation: 3D printed objects have ~30% material cost, regular tech/decor accessories have ~45%.
+        (o.items || []).forEach(item => {
+          // Find or create product reference
+          const p = store.products.find(prod => prod.id === item.productId) || {
+            id: item.productId || "",
+            name: item.productName,
+            price: item.unitPrice,
+            category: "",
+            stock: 0,
+            imageUrl: ""
+          } as Product;
+
           const is3D = p.is3D || (p.name || "").toLowerCase().includes("impres") || (p.name || "").toLowerCase().includes("3d");
-          const costPercentage = is3D ? 0.30 : 0.45; 
-          const itemPrice = p.price;
-          const itemCost = itemPrice * costPercentage;
+          const costPercentage = is3D ? 0.30 : 0.45;
+          const calculatedCost = item.costPrice || (item.unitPrice * costPercentage);
+          orderCost += calculatedCost * item.quantity;
 
           orderItems.push({
             product: p,
-            quantity: qty,
-            price: itemPrice
+            quantity: item.quantity,
+            price: item.unitPrice
           });
-          orderTotal += itemPrice * qty;
-          orderCost += itemCost * qty;
-        }
+        });
 
-        // Apply 30-day realistic coupons reduction randomly in ~10% of orders
-        if (dayRnd() < 0.15 && activeCoupons.length > 0) {
-          const couponIdx = Math.floor(dayRnd() * activeCoupons.length);
-          const selectedCoupon = activeCoupons[couponIdx];
-          orderTotal = orderTotal * (1 - (selectedCoupon.discount_percent / 100));
-        }
-
-        const profit = orderTotal - orderCost;
-        orders.push({
-          id: `PED-${dateString.replace(/-/g, "")}-${Math.floor(dayRnd() * 900) + 100}`,
+        ordersList.push({
+          id: o.id,
           date: dateString,
-          total: Number(orderTotal.toFixed(2)),
-          cost: Number(orderCost.toFixed(2)),
-          profit: Number(profit.toFixed(2)),
+          total: o.total - o.discountAmount, // Net sale amount
+          cost: orderCost,
+          profit: (o.total - o.discountAmount) - orderCost,
           items: orderItems
         });
-      }
-    });
-
-    // Compute direct aggregates
-    const totalSales = orders.reduce((sum, o) => sum + o.total, 0);
-    const totalOrders = orders.length;
-    const avgTicket = totalOrders > 0 ? totalSales / totalOrders : 0;
-    const totalProfit = orders.reduce((sum, o) => sum + o.profit, 0);
-
-    // Group sales data by day
-    const dailyMap: Record<string, { date: string; sales: number; ordersCount: number }> = {};
-    days.forEach(d => {
-      dailyMap[d] = { date: d, sales: 0, ordersCount: 0 };
-    });
-    orders.forEach(o => {
-      if (dailyMap[o.date]) {
-        dailyMap[o.date].sales += o.total;
-        dailyMap[o.date].ordersCount += 1;
-      }
-    });
-    const dailySales = days.map(d => dailyMap[d]);
-
-    // Group rankings of top selling products
-    const productSalesMap: Record<string, { product: Product; quantity: number; revenue: number }> = {};
-    orders.forEach(o => {
-      o.items.forEach(item => {
-        if (!productSalesMap[item.product.id]) {
-          productSalesMap[item.product.id] = {
-            product: item.product,
-            quantity: 0,
-            revenue: 0
-          };
-        }
-        productSalesMap[item.product.id].quantity += item.quantity;
-        productSalesMap[item.product.id].revenue += item.price * item.quantity;
       });
-    });
 
-    const productsSales = Object.values(productSalesMap)
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 5);
+      const totalSales = ordersList.reduce((sum, o) => sum + o.total, 0);
+      const totalOrders = ordersList.length;
+      const avgTicket = totalOrders > 0 ? totalSales / totalOrders : 0;
+      const totalProfit = ordersList.reduce((sum, o) => sum + o.profit, 0);
 
-    return {
-      orders,
-      totalSales,
-      totalOrders,
-      avgTicket,
-      totalProfit,
-      dailySales,
-      productsSales
-    };
-  }, [activeProducts, activeCoupons]);
+      // Group sales data by day
+      const dailyMap: Record<string, { date: string; sales: number; ordersCount: number }> = {};
+      days.forEach(d => {
+        dailyMap[d] = { date: d, sales: 0, ordersCount: 0 };
+      });
+      ordersList.forEach(o => {
+        if (dailyMap[o.date]) {
+          dailyMap[o.date].sales += o.total;
+          dailyMap[o.date].ordersCount += 1;
+        }
+      });
+      const dailySales = days.map(d => dailyMap[d]);
+
+      // Top products sold from real orders
+      const productSalesMap: Record<string, { product: Product; quantity: number; revenue: number }> = {};
+      ordersList.forEach(o => {
+        o.items.forEach(item => {
+          if (!productSalesMap[item.product.id]) {
+            productSalesMap[item.product.id] = {
+              product: item.product,
+              quantity: 0,
+              revenue: 0
+            };
+          }
+          productSalesMap[item.product.id].quantity += item.quantity;
+          productSalesMap[item.product.id].revenue += item.price * item.quantity;
+        });
+      });
+
+      const productsSales = Object.values(productSalesMap)
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, 5);
+
+      return {
+        orders: ordersList,
+        totalSales,
+        totalOrders,
+        avgTicket,
+        totalProfit,
+        dailySales,
+        productsSales
+      };
+    } else {
+      // Fallback to simulation
+      if (activeProducts.length === 0) {
+        return { 
+          orders: [], 
+          totalSales: 0, 
+          totalOrders: 0, 
+          avgTicket: 0, 
+          totalProfit: 0, 
+          dailySales: [], 
+          productsSales: [] 
+        };
+      }
+
+      const rnd = getSeedRandom("VentasJuemDashboardSeed_2026_Rev2");
+      const orders: {
+        id: string;
+        date: string;
+        total: number;
+        cost: number;
+        profit: number;
+        items: { product: Product; quantity: number; price: number }[];
+      }[] = [];
+
+      // Construct a full 30-day chronological array ending June 1st, 2026
+      const days: string[] = [];
+      const refToday = new Date(2026, 5, 1);
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(refToday.getTime() - i * 24 * 60 * 60 * 1000);
+        days.push(d.toISOString().split("T")[0]);
+      }
+
+      // Generate simulated orders per day
+      days.forEach((dateString) => {
+        const dayRnd = getSeedRandom(`DateSeed_${dateString}`);
+        
+        const dayOfWeek = new Date(dateString).getDay(); 
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const numOrders = Math.floor(dayRnd() * (isWeekend ? 4 : 3)) + 1; 
+        
+        for (let o = 0; o < numOrders; o++) {
+          const orderItems: { product: Product; quantity: number; price: number }[] = [];
+          let orderTotal = 0;
+          let orderCost = 0;
+
+          const numItems = Math.floor(dayRnd() * 3) + 1;
+          for (let i = 0; i < numItems; i++) {
+            const prodIdx = Math.floor(dayRnd() * activeProducts.length);
+            const p = activeProducts[prodIdx];
+            const qty = Math.floor(dayRnd() * 2) + 1;
+            
+            const is3D = p.is3D || (p.name || "").toLowerCase().includes("impres") || (p.name || "").toLowerCase().includes("3d");
+            const costPercentage = is3D ? 0.30 : 0.45; 
+            const itemPrice = p.price;
+            const itemCost = itemPrice * costPercentage;
+
+            orderItems.push({
+              product: p,
+              quantity: qty,
+              price: itemPrice
+            });
+            orderTotal += itemPrice * qty;
+            orderCost += itemCost * qty;
+          }
+
+          if (dayRnd() < 0.15 && activeCoupons.length > 0) {
+            const couponIdx = Math.floor(dayRnd() * activeCoupons.length);
+            const selectedCoupon = activeCoupons[couponIdx];
+            orderTotal = orderTotal * (1 - (selectedCoupon.discount_percent / 100));
+          }
+
+          const profit = orderTotal - orderCost;
+          orders.push({
+            id: `PED-${dateString.replace(/-/g, "")}-${Math.floor(dayRnd() * 900) + 100}`,
+            date: dateString,
+            total: Number(orderTotal.toFixed(2)),
+            cost: Number(orderCost.toFixed(2)),
+            profit: Number(profit.toFixed(2)),
+            items: orderItems
+          });
+        }
+      });
+
+      const totalSales = orders.reduce((sum, o) => sum + o.total, 0);
+      const totalOrders = orders.length;
+      const avgTicket = totalOrders > 0 ? totalSales / totalOrders : 0;
+      const totalProfit = orders.reduce((sum, o) => sum + o.profit, 0);
+
+      const dailyMap: Record<string, { date: string; sales: number; ordersCount: number }> = {};
+      days.forEach(d => {
+        dailyMap[d] = { date: d, sales: 0, ordersCount: 0 };
+      });
+      orders.forEach(o => {
+        if (dailyMap[o.date]) {
+          dailyMap[o.date].sales += o.total;
+          dailyMap[o.date].ordersCount += 1;
+        }
+      });
+      const dailySales = days.map(d => dailyMap[d]);
+
+      const productSalesMap: Record<string, { product: Product; quantity: number; revenue: number }> = {};
+      orders.forEach(o => {
+        o.items.forEach(item => {
+          if (!productSalesMap[item.product.id]) {
+            productSalesMap[item.product.id] = {
+              product: item.product,
+              quantity: 0,
+              revenue: 0
+            };
+          }
+          productSalesMap[item.product.id].quantity += item.quantity;
+          productSalesMap[item.product.id].revenue += item.price * item.quantity;
+        });
+      });
+
+      const productsSales = Object.values(productSalesMap)
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, 5);
+
+      return {
+        orders,
+        totalSales,
+        totalOrders,
+        avgTicket,
+        totalProfit,
+        dailySales,
+        productsSales
+      };
+    }
+  }, [activeProducts, activeCoupons, store.orders, store.products, usingRealData]);
 
   // Track cursor interactive state for the Sales Evolution chart hover
   const defaultSelectedDay = salesHistory.dailySales.length > 0 
@@ -257,32 +370,52 @@ export function DashboardGeneral({
   return (
     <div className="w-full space-y-6 animate-fade-in relative">
       
-      {/* 1. Welcoming Context Ribbon - Glassmorphic high-end greeting with glowing light bloom */}
-      <div className="bg-zinc-900/40 backdrop-blur-md border border-zinc-800/80 rounded-2xl p-6 text-zinc-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.25)] hover:border-zinc-700/60 transition-all duration-300">
-        <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-[0.03] pointer-events-none">
-          <TrendingUp className="h-full w-full stroke-[1px] rotate-12 scale-110 text-indigo-500" />
+      {/* Tab Switcher and Status Indicators */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/80 pb-3">
+        <div className="flex bg-zinc-900/60 p-1 rounded-xl border border-zinc-800/60 self-start">
+          <button
+            onClick={() => setActiveTab("sales")}
+            className={`px-4 py-2 text-xs font-bold rounded-lg transition-all duration-300 flex items-center gap-2 cursor-pointer ${
+              activeTab === "sales"
+                ? "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 font-black shadow-[0_2px_12px_rgba(99,102,241,0.15)]"
+                : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <TrendingUp className="h-4 w-4" />
+            <span>Rendimiento Web y Ventas</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("finances")}
+            className={`px-4 py-2 text-xs font-bold rounded-lg transition-all duration-300 flex items-center gap-2 cursor-pointer ${
+              activeTab === "finances"
+                ? "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 font-black shadow-[0_2px_12px_rgba(99,102,241,0.15)]"
+                : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <Scale className="h-4 w-4" />
+            <span>Resumen Financiero y Gastos</span>
+          </button>
         </div>
-        {/* Subtle light accent under greeting */}
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-indigo-500/35 to-transparent" />
-        
-        <div className="space-y-1.5 relative z-10">
-          <h3 className="text-xl font-black tracking-tight text-white font-sans flex items-center gap-2">
-            <span>Panel de Control y Métricas de Juem</span>
-          </h3>
-          <p className="text-xs text-zinc-400 leading-relaxed max-w-3xl font-semibold">
-            Monitoreo integral de ventas, rendimiento de catálogo, cupones y niveles de stock. Toda la información comercial se encuentra optimizada para facilitar la lectura del administrador y agilizar la toma de decisiones.
-          </p>
-        </div>
-        <div className="flex gap-2 shrink-0 relative z-10">
-          <span className="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl text-[11px] font-black flex items-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
-            <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_#10b981]"></span>
-            <span>DATOS EN TIEMPO REAL</span>
-          </span>
+
+        <div>
+          {usingRealData ? (
+            <span className="px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl text-[11px] font-black flex items-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
+              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_#10b981]"></span>
+              <span>DATOS REALES DEL SISTEMA</span>
+            </span>
+          ) : (
+            <span className="px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl text-[11px] font-black flex items-center gap-2 shadow-[0_0_15px_rgba(245,158,11,0.1)]">
+              <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse shadow-[0_0_8px_#f59e0b]"></span>
+              <span>MODO DEMOSTRACIÓN (SIMULADO)</span>
+            </span>
+          )}
         </div>
       </div>
  
-      {/* 2. Top Tier Sales & Profitability Performance Cards (5-Sec KPI Matrix) - Premium cards with glow and hover animation */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      {activeTab === "sales" ? (
+        <>
+          {/* 2. Top Tier Sales & Profitability Performance Cards (5-Sec KPI Matrix) - Premium cards with glow and hover animation */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         
         {/* KPI Card 1: Month Sales / Ventas del Mes */}
         <div className="bg-zinc-900/50 backdrop-blur-md p-5 rounded-2xl border border-zinc-850/85 hover:border-indigo-500/40 shadow-[0_8px_30px_rgba(0,0,0,0.15)] hover:shadow-[0_8px_30px_rgba(99,102,241,0.06)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between space-y-4 group relative overflow-hidden">
@@ -708,7 +841,11 @@ export function DashboardGeneral({
  
         </div>
       </div>
- 
+      </>
+      ) : (
+        <DashboardResumenGeneral store={store} />
+      )}
+
     </div>
   );
 }

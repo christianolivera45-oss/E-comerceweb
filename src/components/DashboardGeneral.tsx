@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { 
   ShoppingBag, 
   TrendingUp, 
@@ -70,6 +70,7 @@ export function DashboardGeneral({
 }: DashboardGeneralProps) {
 
   const [activeTab, setActiveTab] = useState<"sales" | "finances">("sales");
+  const [timeRange, setTimeRange] = useState<"last30" | "current_month" | "prev_month">("current_month");
 
   const activeProducts = store.products.filter(p => p.active !== false);
   const pausedProducts = activeProducts.filter(p => p.paused === true);
@@ -95,18 +96,59 @@ export function DashboardGeneral({
     return usingRealData ? new Date() : new Date(2026, 5, 1);
   }, [usingRealData]);
 
+  const periodDates = useMemo(() => {
+    const year = today.getFullYear();
+    const month = today.getMonth(); // 0-indexed
+
+    if (timeRange === "current_month") {
+      const start = new Date(year, month, 1);
+      const end = new Date(year, month + 1, 0); // last day of current month
+      return { start, end };
+    } else if (timeRange === "prev_month") {
+      const start = new Date(year, month - 1, 1);
+      const end = new Date(year, month, 0); // last day of previous month
+      return { start, end };
+    } else {
+      // Last 30 days
+      const start = new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000);
+      const end = today;
+      return { start, end };
+    }
+  }, [timeRange, today]);
+
+  const daysList = useMemo(() => {
+    const arr: string[] = [];
+    const current = new Date(periodDates.start.getTime());
+    while (current <= periodDates.end) {
+      arr.push(current.toISOString().split("T")[0]);
+      current.setDate(current.getDate() + 1);
+    }
+    return arr;
+  }, [periodDates]);
+
+  const periodLabel = useMemo(() => {
+    const start = periodDates.start;
+    const end = periodDates.end;
+    const months = [
+      "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+      "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+    ];
+    
+    if (timeRange === "last30") {
+      return "Últimos 30 días";
+    }
+    const monthName = months[start.getMonth()];
+    const year = start.getFullYear();
+    return `Del 1 al ${end.getDate()} de ${monthName} de ${year}`;
+  }, [periodDates, timeRange]);
+
   // Dynamic Sales, Profits & Orders Engine (Real Data-First with simulation fallback)
   const salesHistory = useMemo(() => {
     if (usingRealData) {
       const approvedOrders = (store.orders || []).filter(o => o.status === "pago_aprobado");
       
       // Last 30 days ending today
-      const days: string[] = [];
-      const refDate = new Date();
-      for (let i = 29; i >= 0; i--) {
-        const d = new Date(refDate.getTime() - i * 24 * 60 * 60 * 1000);
-        days.push(d.toISOString().split("T")[0]);
-      }
+      const days = daysList;
 
       const ordersList: {
         id: string;
@@ -119,6 +161,7 @@ export function DashboardGeneral({
 
       approvedOrders.forEach(o => {
         const dateString = o.createdAt ? o.createdAt.split("T")[0] : "";
+        if (!days.includes(dateString)) return;
         const orderItems: { product: Product; quantity: number; price: number }[] = [];
         let orderCost = 0;
 
@@ -226,13 +269,8 @@ export function DashboardGeneral({
         items: { product: Product; quantity: number; price: number }[];
       }[] = [];
 
-      // Construct a full 30-day chronological array ending June 1st, 2026
-      const days: string[] = [];
-      const refToday = new Date(2026, 5, 1);
-      for (let i = 29; i >= 0; i--) {
-        const d = new Date(refToday.getTime() - i * 24 * 60 * 60 * 1000);
-        days.push(d.toISOString().split("T")[0]);
-      }
+      // Construct a chronological array based on daysList
+      const days = daysList;
 
       // Generate simulated orders per day
       days.forEach((dateString) => {
@@ -331,13 +369,17 @@ export function DashboardGeneral({
         productsSales
       };
     }
-  }, [activeProducts, activeCoupons, store.orders, store.products, usingRealData]);
+  }, [activeProducts, activeCoupons, store.orders, store.products, usingRealData, daysList, today]);
 
   // Track cursor interactive state for the Sales Evolution chart hover
   const defaultSelectedDay = salesHistory.dailySales.length > 0 
     ? salesHistory.dailySales[salesHistory.dailySales.length - 1] 
     : null;
   const [hoveredDay, setHoveredDay] = useState<{ date: string; sales: number; ordersCount: number } | null>(null);
+  
+  useEffect(() => {
+    setHoveredDay(null);
+  }, [timeRange]);
   
   const currentChartSelected = hoveredDay || defaultSelectedDay;
 
@@ -414,6 +456,55 @@ export function DashboardGeneral({
  
       {activeTab === "sales" ? (
         <>
+          {/* Period Selector Panel */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-900/30 backdrop-blur-md p-4 rounded-2xl border border-zinc-850/80 shadow-[0_4px_20px_rgba(0,0,0,0.1)] mb-5">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/10 shrink-0">
+                <Calendar className="h-4.5 w-4.5" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-350">Período de Análisis</h3>
+                <p className="text-[10px] font-bold text-zinc-500 mt-0.5">{periodLabel}</p>
+              </div>
+            </div>
+            
+            <div className="flex bg-zinc-950/40 p-1 rounded-xl border border-zinc-800/80 self-start sm:self-auto shadow-inner">
+              <button
+                type="button"
+                onClick={() => setTimeRange("last30")}
+                className={`px-3 py-1.5 text-[11px] font-extrabold rounded-lg transition-all duration-300 cursor-pointer ${
+                  timeRange === "last30"
+                    ? "bg-indigo-600/25 text-indigo-300 border border-indigo-550/20 font-black"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                Últimos 30 Días
+              </button>
+              <button
+                type="button"
+                onClick={() => setTimeRange("current_month")}
+                className={`px-3 py-1.5 text-[11px] font-extrabold rounded-lg transition-all duration-300 cursor-pointer ${
+                  timeRange === "current_month"
+                    ? "bg-indigo-600/25 text-indigo-300 border border-indigo-550/20 font-black"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                Mes Actual
+              </button>
+              <button
+                type="button"
+                onClick={() => setTimeRange("prev_month")}
+                className={`px-3 py-1.5 text-[11px] font-extrabold rounded-lg transition-all duration-300 cursor-pointer ${
+                  timeRange === "prev_month"
+                    ? "bg-indigo-600/25 text-indigo-300 border border-indigo-550/20 font-black"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                Mes Anterior
+              </button>
+            </div>
+          </div>
+
           {/* 2. Top Tier Sales & Profitability Performance Cards (5-Sec KPI Matrix) - Premium cards with glow and hover animation */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         
@@ -421,7 +512,13 @@ export function DashboardGeneral({
         <div className="bg-zinc-900/50 backdrop-blur-md p-5 rounded-2xl border border-zinc-850/85 hover:border-indigo-500/40 shadow-[0_8px_30px_rgba(0,0,0,0.15)] hover:shadow-[0_8px_30px_rgba(99,102,241,0.06)] hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between space-y-4 group relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-[2px] bg-indigo-500/20 group-hover:bg-indigo-500/50 transition-colors duration-300" />
           <div className="flex items-center justify-between">
-            <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Ventas de Últimos 30 Días</span>
+            <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">
+              {timeRange === "last30" 
+                ? "Ventas de Últimos 30 Días" 
+                : timeRange === "current_month" 
+                  ? "Ventas del Mes Actual" 
+                  : "Ventas del Mes Anterior"}
+            </span>
             <div className="h-9 w-9 rounded-xl bg-indigo-950/40 text-indigo-400 flex items-center justify-center border border-indigo-900/30 group-hover:scale-110 transition-transform duration-300">
               <DollarSign className="h-5 w-5" />
             </div>
@@ -513,7 +610,13 @@ export function DashboardGeneral({
             <div className="space-y-0.5">
               <h4 className="font-bold text-xs uppercase text-zinc-200 tracking-wide flex items-center gap-2">
                 <BarChart3 className="h-4.5 w-4.5 text-indigo-400" />
-                <span>Evolución de Ventas (Últimos 30 días)</span>
+                <span>
+                  {timeRange === "last30" 
+                    ? "Evolución de Ventas (Últimos 30 días)" 
+                    : timeRange === "current_month" 
+                      ? "Evolución de Ventas (Mes Actual)" 
+                      : "Evolución de Ventas (Mes Anterior)"}
+                </span>
               </h4>
               <p className="text-[10px] text-zinc-500 font-bold">Mueve el cursor por encima de las barras para ver información detallada del día.</p>
             </div>
@@ -582,9 +685,17 @@ export function DashboardGeneral({
  
                 {/* Day-by-day label helper at the bottom */}
                 <div className="flex justify-between items-center text-[9px] font-mono text-zinc-500 pt-3.5 border-t border-zinc-900">
-                  <span>Hace 30 días</span>
+                  <span>
+                    {timeRange === "last30" 
+                      ? "Hace 30 días" 
+                      : `Día 1 (${formatSpanishDate(salesHistory.dailySales[0]?.date || "")})`}
+                  </span>
                   <span className="font-extrabold text-indigo-400 tracking-wider">HISTORIAL DE VENTAS INTERACTIVO</span>
-                  <span>Hoy ({formatSpanishDate(today.toISOString().split("T")[0])})</span>
+                  <span>
+                    {timeRange === "last30" 
+                      ? `Hoy (${formatSpanishDate(today.toISOString().split("T")[0])})` 
+                      : `Día ${salesHistory.dailySales.length} (${formatSpanishDate(salesHistory.dailySales[salesHistory.dailySales.length - 1]?.date || "")})`}
+                  </span>
                 </div>
  
               </div>

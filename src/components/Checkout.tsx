@@ -3106,7 +3106,7 @@ export default function Checkout({
       )}
 
       {/* Dynamic Floating Sticky Bottom Bar for Mobile */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0B1730]/95 backdrop-blur-md border-t border-[#D4A55A]/25 p-4 flex items-center justify-between gap-4 pb-5 shadow-[0_-12px_30px_rgba(0,0,0,0.65)] hover:border-t-[#D4A55A]/50 transition-all duration-300">
+      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0B1730] border-t border-[#D4A55A]/25 p-4 flex items-center justify-between gap-4 pb-5 shadow-[0_-12px_30px_rgba(0,0,0,0.65)] hover:border-t-[#D4A55A]/50 transition-all duration-300">
         <div className="flex flex-col">
           <span className="text-[9px] uppercase tracking-wider text-[#E6BF76] font-extrabold font-sans">Total UYU</span>
           <span className="text-base font-black text-emerald-400 font-mono leading-none">$ {totalUYU}</span>

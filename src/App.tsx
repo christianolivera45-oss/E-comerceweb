@@ -3481,6 +3481,10 @@ export default function App() {
   };
 
   const requestStockAdjustment = (item: any, field: string, newValue: number) => {
+    if (item.productObj?.isCombo) {
+      showToast("No se puede ajustar directamente el stock de un artículo compuesto (combo).", "error");
+      return;
+    }
     const currentVal = field === "stockMontevideo" ? (item.stockMontevideo || 0) : (item.stockPinamar || 0);
     if (Math.round(newValue) === Math.round(currentVal)) {
       return;
@@ -4049,7 +4053,7 @@ export default function App() {
       {/* Fixed Top Navigation Container */}
       <div className={`fixed top-0 left-0 right-0 w-full z-50 transition-all duration-300 ${
         scrolled 
-          ? "bg-[#050B1A]/95 border-b border-[#D4A55A]/20 backdrop-blur-md shadow-lg shadow-black/30" 
+          ? "bg-[#050B1A] md:bg-[#050B1A]/95 border-b border-[#D4A55A]/20 md:backdrop-blur-md shadow-lg shadow-black/30" 
           : "bg-[#050B1A] border-b border-[#D4A55A]/15 shadow-md shadow-black/10"
       }`}>
         {/* Top Banner Message for Promotions & Free Shipping Slider */}
@@ -11812,9 +11816,16 @@ export default function App() {
                                       {/* PRODUCTO */}
                                       <td className="py-3 px-4 min-w-[200px]">
                                         <div className="flex flex-col">
-                                          <span className="font-bold text-slate-800 dark:text-zinc-200 line-clamp-1 leading-snug">
-                                            {item.name}
-                                          </span>
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className="font-bold text-slate-800 dark:text-zinc-200 line-clamp-1 leading-snug">
+                                              {item.name}
+                                            </span>
+                                            {item.productObj?.isCombo && (
+                                              <span className="inline-flex items-center gap-1 text-[9px] font-extrabold uppercase tracking-wide bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 py-0.5 px-1.5 rounded" title="Artículo Compuesto (Combo)">
+                                                📦 Compuesto
+                                              </span>
+                                            )}
+                                          </div>
                                           {item.isVariant && (
                                             <span className="text-[10px] font-extrabold font-mono mt-0.5 tracking-wide bg-indigo-550/5 dark:bg-indigo-450/5 text-indigo-500 py-0.5 px-1.5 rounded-sm self-start">
                                               Variante: {item.variantName}
@@ -11926,97 +11937,116 @@ export default function App() {
 
                                       {/* STOCK MVD */}
                                       <td className="py-3 px-4 text-center">
-                                        <div className="flex items-center justify-center gap-1.5 font-mono">
-                                          <button
-                                            onClick={() => {
-                                              const nextVal = Math.max(0, item.stockMontevideo - 1);
-                                              requestStockAdjustment(item, "stockMontevideo", nextVal);
-                                            }}
-                                            className="w-5 h-5 flex items-center justify-center rounded-md bg-slate-100 dark:bg-zinc-800 text-zinc-500 hover:bg-red-500 hover:text-white transition opacity-0 group-hover:opacity-100 cursor-pointer"
-                                            title="Descontar 1 unidad"
-                                          >
-                                            -
-                                          </button>
-                                          <input
-                                            type="number"
-                                            key={`${item.sku}-mvd-${item.stockMontevideo}`}
-                                            defaultValue={Math.round(item.stockMontevideo || 0)}
-                                            onBlur={(e) => {
-                                              const val = Math.max(0, parseInt(e.target.value) || 0);
-                                              requestStockAdjustment(item, "stockMontevideo", val);
-                                            }}
-                                            onKeyDown={(e) => {
-                                              if (e.key === "Enter") {
-                                                (e.target as HTMLInputElement).blur();
-                                              }
-                                            }}
-                                            className={`w-12 text-center bg-transparent focus:bg-white dark:focus:bg-zinc-950 rounded-md border-0 focus:ring-1 focus:ring-indigo-500 font-extrabold p-0 focus:p-1 outline-hidden transition ${
-                                              item.stockMontevideo <= 0
-                                                ? "text-zinc-400 dark:text-zinc-600"
-                                                : "text-slate-800 dark:text-zinc-100"
-                                            }`}
-                                          />
-                                          <button
-                                            onClick={() => {
-                                              const nextVal = item.stockMontevideo + 1;
-                                              requestStockAdjustment(item, "stockMontevideo", nextVal);
-                                            }}
-                                            className="w-5 h-5 flex items-center justify-center rounded-md bg-slate-100 dark:bg-zinc-800 text-zinc-500 hover:bg-emerald-500 hover:text-white transition opacity-0 group-hover:opacity-100 cursor-pointer"
-                                            title="Sumar 1 unidad"
-                                          >
-                                            +
-                                          </button>
-                                        </div>
+                                        {item.productObj?.isCombo ? (
+                                          <div className="flex items-center justify-center gap-1 text-slate-500 dark:text-zinc-400 font-bold font-mono" title="El stock del combo es calculado de forma dinámica basado en sus componentes">
+                                            <span className="text-slate-800 dark:text-zinc-100 font-extrabold text-sm">
+                                              {Math.round(item.stockMontevideo || 0)}
+                                            </span>
+                                            <Lock className="h-3 w-3 text-slate-400 dark:text-zinc-500 shrink-0" />
+                                          </div>
+                                        ) : (
+                                          <div className="flex items-center justify-center gap-1.5 font-mono">
+                                            <button
+                                              onClick={() => {
+                                                const nextVal = Math.max(0, item.stockMontevideo - 1);
+                                                requestStockAdjustment(item, "stockMontevideo", nextVal);
+                                              }}
+                                              className="w-5 h-5 flex items-center justify-center rounded-md bg-slate-100 dark:bg-zinc-800 text-zinc-500 hover:bg-red-500 hover:text-white transition opacity-0 group-hover:opacity-100 cursor-pointer"
+                                              title="Descontar 1 unidad"
+                                            >
+                                              -
+                                            </button>
+                                            <input
+                                              type="number"
+                                              key={`${item.sku}-mvd-${item.stockMontevideo}`}
+                                              defaultValue={Math.round(item.stockMontevideo || 0)}
+                                              onBlur={(e) => {
+                                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                                requestStockAdjustment(item, "stockMontevideo", val);
+                                              }}
+                                              onKeyDown={(e) => {
+                                                if (e.key === "Enter") {
+                                                  (e.target as HTMLInputElement).blur();
+                                                }
+                                              }}
+                                              className={`w-12 text-center bg-transparent focus:bg-white dark:focus:bg-zinc-950 rounded-md border-0 focus:ring-1 focus:ring-indigo-500 font-extrabold p-0 focus:p-1 outline-hidden transition ${
+                                                item.stockMontevideo <= 0
+                                                  ? "text-zinc-400 dark:text-zinc-600"
+                                                  : "text-slate-800 dark:text-zinc-100"
+                                              }`}
+                                            />
+                                            <button
+                                              onClick={() => {
+                                                const nextVal = item.stockMontevideo + 1;
+                                                requestStockAdjustment(item, "stockMontevideo", nextVal);
+                                              }}
+                                              className="w-5 h-5 flex items-center justify-center rounded-md bg-slate-100 dark:bg-zinc-800 text-zinc-500 hover:bg-emerald-500 hover:text-white transition opacity-0 group-hover:opacity-100 cursor-pointer"
+                                              title="Sumar 1 unidad"
+                                            >
+                                              +
+                                            </button>
+                                          </div>
+                                        )}
                                       </td>
 
                                       {/* STOCK PIN */}
                                       <td className="py-3 px-4 text-center">
-                                        <div className="flex items-center justify-center gap-1.5 font-mono">
-                                          <button
-                                            onClick={() => {
-                                              const nextVal = Math.max(0, item.stockPinamar - 1);
-                                              requestStockAdjustment(item, "stockPinamar", nextVal);
-                                            }}
-                                            className="w-5 h-5 flex items-center justify-center rounded-md bg-slate-100 dark:bg-zinc-800 text-zinc-500 hover:bg-red-500 hover:text-white transition opacity-0 group-hover:opacity-100 cursor-pointer"
-                                            title="Descontar 1 unidad"
-                                          >
-                                            -
-                                          </button>
-                                          <input
-                                            type="number"
-                                            key={`${item.sku}-pin-${item.stockPinamar}`}
-                                            defaultValue={Math.round(item.stockPinamar || 0)}
-                                            onBlur={(e) => {
-                                              const val = Math.max(0, parseInt(e.target.value) || 0);
-                                              requestStockAdjustment(item, "stockPinamar", val);
-                                            }}
-                                            onKeyDown={(e) => {
-                                              if (e.key === "Enter") {
-                                                (e.target as HTMLInputElement).blur();
-                                              }
-                                            }}
-                                            className={`w-12 text-center bg-transparent focus:bg-white dark:focus:bg-zinc-950 rounded-md border-0 focus:ring-1 focus:ring-indigo-500 font-extrabold p-0 focus:p-1 outline-hidden transition ${
-                                              item.stockPinamar <= 0
-                                                ? "text-zinc-400 dark:text-zinc-600"
-                                                : "text-slate-800 dark:text-zinc-100"
-                                            }`}
-                                          />
-                                          <button
-                                            onClick={() => {
-                                              const nextVal = item.stockPinamar + 1;
-                                              requestStockAdjustment(item, "stockPinamar", nextVal);
-                                            }}
-                                            className="w-5 h-5 flex items-center justify-center rounded-md bg-slate-100 dark:bg-zinc-800 text-zinc-500 hover:bg-emerald-500 hover:text-white transition opacity-0 group-hover:opacity-100 cursor-pointer"
-                                            title="Sumar 1 unidad"
-                                          >
-                                            +
-                                          </button>
-                                        </div>
+                                        {item.productObj?.isCombo ? (
+                                          <div className="flex items-center justify-center gap-1 text-slate-500 dark:text-zinc-400 font-bold font-mono" title="El stock del combo es calculado de forma dinámica basado en sus componentes">
+                                            <span className="text-slate-800 dark:text-zinc-100 font-extrabold text-sm">
+                                              {Math.round(item.stockPinamar || 0)}
+                                            </span>
+                                            <Lock className="h-3 w-3 text-slate-400 dark:text-zinc-500 shrink-0" />
+                                          </div>
+                                        ) : (
+                                          <div className="flex items-center justify-center gap-1.5 font-mono">
+                                            <button
+                                              onClick={() => {
+                                                const nextVal = Math.max(0, item.stockPinamar - 1);
+                                                requestStockAdjustment(item, "stockPinamar", nextVal);
+                                              }}
+                                              className="w-5 h-5 flex items-center justify-center rounded-md bg-slate-100 dark:bg-zinc-800 text-zinc-500 hover:bg-red-500 hover:text-white transition opacity-0 group-hover:opacity-100 cursor-pointer"
+                                              title="Descontar 1 unidad"
+                                            >
+                                              -
+                                            </button>
+                                            <input
+                                              type="number"
+                                              key={`${item.sku}-pin-${item.stockPinamar}`}
+                                              defaultValue={Math.round(item.stockPinamar || 0)}
+                                              onBlur={(e) => {
+                                                const val = Math.max(0, parseInt(e.target.value) || 0);
+                                                requestStockAdjustment(item, "stockPinamar", val);
+                                              }}
+                                              onKeyDown={(e) => {
+                                                if (e.key === "Enter") {
+                                                  (e.target as HTMLInputElement).blur();
+                                                }
+                                              }}
+                                              className={`w-12 text-center bg-transparent focus:bg-white dark:focus:bg-zinc-950 rounded-md border-0 focus:ring-1 focus:ring-indigo-500 font-extrabold p-0 focus:p-1 outline-hidden transition ${
+                                                item.stockPinamar <= 0
+                                                  ? "text-zinc-400 dark:text-zinc-600"
+                                                  : "text-slate-800 dark:text-zinc-100"
+                                              }`}
+                                            />
+                                            <button
+                                              onClick={() => {
+                                                const nextVal = item.stockPinamar + 1;
+                                                requestStockAdjustment(item, "stockPinamar", nextVal);
+                                              }}
+                                              className="w-5 h-5 flex items-center justify-center rounded-md bg-slate-100 dark:bg-zinc-800 text-zinc-500 hover:bg-emerald-500 hover:text-white transition opacity-0 group-hover:opacity-100 cursor-pointer"
+                                              title="Sumar 1 unidad"
+                                            >
+                                              +
+                                            </button>
+                                          </div>
+                                        )}
                                       </td>
 
                                       {/* ACCIONES */}
                                       <td className="py-3 px-4 text-center">
                                         <button
+                                          disabled={item.productObj?.isCombo}
                                           onClick={() => {
                                             setTransferProductId(String(item.productId));
                                             setTransferVariantId(item.variantId ? String(item.variantId) : "");
@@ -12030,8 +12060,16 @@ export default function App() {
                                             }
                                             setStockSubSection("transfer");
                                           }}
-                                          className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] rounded-lg shadow-xs cursor-pointer transition inline-flex items-center gap-1.5 mx-auto"
-                                          title="Transferir stock de este artículo"
+                                          className={`px-2.5 py-1 text-white font-bold text-[10px] rounded-lg shadow-xs transition inline-flex items-center gap-1.5 mx-auto ${
+                                            item.productObj?.isCombo
+                                              ? "bg-slate-200 dark:bg-zinc-800 text-slate-400 dark:text-zinc-500 cursor-not-allowed opacity-60"
+                                              : "bg-indigo-600 hover:bg-indigo-700 cursor-pointer"
+                                          }`}
+                                          title={
+                                            item.productObj?.isCombo
+                                              ? "Los combos no se transfieren directamente, se transfieren sus componentes"
+                                              : "Transferir stock de este artículo"
+                                          }
                                         >
                                           <ArrowLeftRight className="h-3 w-3" />
                                           <span>Transferir</span>
@@ -16027,7 +16065,7 @@ export default function App() {
 
       {/* Barra de Navegación Inferior Flotante - Ultra Optimizada para Celulares */}
       {activeTab === "storefront" && (
-        <div id="mobile-bottom-nav" className="fixed bottom-0 left-0 right-0 z-40 bg-[#050B1A]/95 border-t border-[#D4A55A]/30 backdrop-blur-md py-2 px-3 flex items-center justify-between lg:hidden shadow-[0_-8px_30px_rgba(0,0,0,0.6)]">
+        <div id="mobile-bottom-nav" className="fixed bottom-0 left-0 right-0 z-40 bg-[#050B1A] border-t border-[#D4A55A]/30 py-2 px-3 flex items-center justify-between lg:hidden shadow-[0_-8px_30px_rgba(0,0,0,0.6)]">
           {/* Volver a la Web Principal */}
           <button
             onClick={() => {

@@ -117,16 +117,16 @@ Precio: $${Math.round(product.price)}
     setFailedImages(new Set());
   }, [product.id, product.imageUrl]);
 
-  // Interval timer for automatic image rotation
+  // Interval timer for automatic image rotation (only active on desktop hover to save massive mobile battery, performance, and eliminate scroll lag)
   useEffect(() => {
-    if (validImages.length <= 1) return;
+    if (validImages.length <= 1 || !isHovered) return;
 
     const interval = setInterval(() => {
       setImageIndex((prev) => (prev + 1) % validImages.length);
-    }, 4500); // Rotates every 4.5 seconds
+    }, 3500); // Rotates slightly faster when hovered for a dynamic, interactive experience
 
     return () => clearInterval(interval);
-  }, [validImages]);
+  }, [validImages, isHovered]);
 
   const activeIndex = imageIndex >= validImages.length ? 0 : imageIndex;
   const currentImage = validImages[activeIndex];
